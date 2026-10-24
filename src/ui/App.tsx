@@ -430,20 +430,6 @@ function MainApp() {
           <div className="local-badge">
             <span>◉</span> Dados locais neste dispositivo
           </div>
-          <button
-            className="user-row"
-            onClick={() => {
-              setSection('settings');
-              setChatMode(false);
-            }}
-          >
-            <span className="user-avatar">O</span>
-            <span>
-              <strong>Seu perfil</strong>
-              <small>Espaço pessoal</small>
-            </span>
-            <span className="more">•••</span>
-          </button>
         </div>
       </aside>
 
@@ -452,7 +438,9 @@ function MainApp() {
           <div className="breadcrumbs">
             <span>OdeKrai</span>
             <b>/</b>
-            <strong>{chatMode ? 'Nova conversa' : currentNav?.label}</strong>
+            <strong>
+              {chatMode ? 'Nova conversa' : section === 'profile' ? 'Perfil' : currentNav?.label}
+            </strong>
           </div>
           <div className="top-actions">
             <span className="connection">
