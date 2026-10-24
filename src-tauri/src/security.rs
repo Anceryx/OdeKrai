@@ -1634,6 +1634,8 @@ pub fn get_pending_approval(
         )?;
     }
     let Some(item) = pending.front() else {
+        drop(pending);
+        close_approval_if_empty(&app, &state);
         return Ok(None);
     };
     Ok(Some(PendingView {

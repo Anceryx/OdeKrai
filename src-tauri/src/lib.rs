@@ -1,4 +1,6 @@
-use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+    Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+};
 
 mod agent_home;
 mod history;
@@ -50,6 +52,40 @@ mod window_config_tests {
         assert_eq!(main["minWidth"], 1000);
         assert_eq!(main["minHeight"], 600);
         assert_eq!(main["center"], true);
+    }
+}
+
+#[cfg(test)]
+mod feature_window_lifecycle_tests {
+    use super::{visibility_action, VisibilityAction};
+
+    #[test]
+    fn disabled_feature_windows_are_closed_and_absent_windows_are_not_created() {
+        assert_eq!(visibility_action(false, false), VisibilityAction::Noop);
+        assert_eq!(visibility_action(false, true), VisibilityAction::Close);
+        assert_eq!(
+            visibility_action(true, false),
+            VisibilityAction::CreateOrShow
+        );
+        assert_eq!(
+            visibility_action(true, true),
+            VisibilityAction::CreateOrShow
+        );
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum VisibilityAction {
+    CreateOrShow,
+    Close,
+    Noop,
+}
+
+fn visibility_action(visible: bool, exists: bool) -> VisibilityAction {
+    match (visible, exists) {
+        (true, _) => VisibilityAction::CreateOrShow,
+        (false, true) => VisibilityAction::Close,
+        (false, false) => VisibilityAction::Noop,
     }
 }
 
@@ -106,6 +142,88 @@ fn apply_click_region(
     Ok(())
 }
 
+fn ensure_island_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
+    if let Some(window) = app.get_webview_window("island") {
+        return Ok(window);
+    }
+    let window = WebviewWindowBuilder::new(app, "island", WebviewUrl::App("index.html".into()))
+        .title("Ilha do OdeKrai")
+        .inner_size(280.0, 150.0)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .focusable(false)
+        .focused(false)
+        .resizable(false)
+        .skip_taskbar(true)
+        .visible(false)
+        .build()
+        .map_err(|_| "Não foi possível preparar a ilha do assistente.".to_string())?;
+    if let Err(error) = apply_click_region(&window, 5.0, 34.0) {
+        let _ = window.close();
+        return Err(error);
+    }
+    let handle = app.clone();
+    let moved_window = window.clone();
+    window.on_window_event(move |event| {
+        if matches!(
+            event,
+            tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
+        ) {
+            let _ = apply_click_region(&moved_window, 5.0, 34.0);
+        }
+        if let tauri::WindowEvent::Moved(position) = event {
+            let scale = moved_window.scale_factor().unwrap_or(1.0);
+            let _ = handle.emit(
+                "companion-moved",
+                (position.x as f64 / scale, position.y as f64 / scale),
+            );
+        }
+    });
+    Ok(window)
+}
+
+fn ensure_mascot_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
+    if let Some(window) = app.get_webview_window("mascot") {
+        return Ok(window);
+    }
+    let window = WebviewWindowBuilder::new(app, "mascot", WebviewUrl::App("index.html".into()))
+        .title("OdeKrai")
+        .inner_size(104.0, 104.0)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .focusable(false)
+        .focused(false)
+        .resizable(false)
+        .skip_taskbar(true)
+        .visible(false)
+        .build()
+        .map_err(|_| "Não foi possível preparar a janela do mascote.".to_string())?;
+    if let Err(error) = apply_click_region(&window, 8.0, 26.0) {
+        let _ = window.close();
+        return Err(error);
+    }
+    let handle = app.clone();
+    let moved_window = window.clone();
+    window.on_window_event(move |event| {
+        if matches!(
+            event,
+            tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
+        ) {
+            let _ = apply_click_region(&moved_window, 8.0, 26.0);
+        }
+        if let tauri::WindowEvent::Moved(position) = event {
+            let scale = moved_window.scale_factor().unwrap_or(1.0);
+            let _ = handle.emit(
+                "character-moved",
+                (position.x as f64 / scale, position.y as f64 / scale),
+            );
+        }
+    });
+    Ok(window)
+}
+
 #[cfg(not(windows))]
 fn apply_click_region(
     _window: &tauri::WebviewWindow,
@@ -122,13 +240,11 @@ fn set_island_visible(
     visible: bool,
 ) -> Result<(), String> {
     require_caller(&caller, &["main", "island", "mascot"])?;
-    let window = app
-        .get_webview_window("island")
-        .ok_or("Janela do assistente indisponível")?;
-    if visible {
-        window.show()
-    } else {
-        window.hide()
+    let existing = app.get_webview_window("island");
+    match visibility_action(visible, existing.is_some()) {
+        VisibilityAction::CreateOrShow => ensure_island_window(&app)?.show(),
+        VisibilityAction::Close => existing.expect("window exists").close(),
+        VisibilityAction::Noop => Ok(()),
     }
     .map_err(|error| error.to_string())
 }
@@ -150,9 +266,7 @@ fn set_island_position(
     {
         return Err("Posição ou escala inválida".into());
     }
-    let window = app
-        .get_webview_window("island")
-        .ok_or("Janela do assistente indisponível")?;
+    let window = ensure_island_window(&app)?;
     let factor = window.scale_factor().map_err(|e| e.to_string())?;
     let current_size = window.inner_size().map_err(|e| e.to_string())?;
     let height = current_size.height as f64 / factor;
@@ -172,10 +286,11 @@ fn set_island_topmost(
     enabled: bool,
 ) -> Result<(), String> {
     require_caller(&caller, &["main", "mascot"])?;
-    app.get_webview_window("island")
-        .ok_or("Janela do assistente indisponível")?
-        .set_always_on_top(enabled)
-        .map_err(|e| e.to_string())
+    if let Some(window) = app.get_webview_window("island") {
+        window.set_always_on_top(enabled).map_err(|e| e.to_string())
+    } else {
+        Ok(())
+    }
 }
 
 #[tauri::command]
@@ -205,13 +320,11 @@ fn set_character_visible(
     visible: bool,
 ) -> Result<(), String> {
     require_caller(&caller, &["main", "island", "mascot"])?;
-    let window = app
-        .get_webview_window("mascot")
-        .ok_or("Janela do marcador indisponível")?;
-    if visible {
-        window.show()
-    } else {
-        window.hide()
+    let existing = app.get_webview_window("mascot");
+    match visibility_action(visible, existing.is_some()) {
+        VisibilityAction::CreateOrShow => ensure_mascot_window(&app)?.show(),
+        VisibilityAction::Close => existing.expect("window exists").close(),
+        VisibilityAction::Noop => Ok(()),
     }
     .map_err(|error| error.to_string())
 }
@@ -233,9 +346,7 @@ fn set_character_position(
     {
         return Err("Posição ou escala inválida".into());
     }
-    let window = app
-        .get_webview_window("mascot")
-        .ok_or("Janela do marcador indisponível")?;
+    let window = ensure_mascot_window(&app)?;
     window
         .set_size(LogicalSize::new(104.0 * size, 104.0 * size))
         .map_err(|e| e.to_string())?;
@@ -271,68 +382,6 @@ pub fn run() {
                 state.set_initial_halted(halted);
             }
             security::init_shortcut(app.handle());
-            let island =
-                WebviewWindowBuilder::new(app, "island", WebviewUrl::App("index.html".into()))
-                    .title("Ilha do OdeKrai")
-                    .inner_size(280.0, 150.0)
-                    .decorations(false)
-                    .transparent(true)
-                    .always_on_top(true)
-                    .focusable(false)
-                    .focused(false)
-                    .resizable(false)
-                    .skip_taskbar(true)
-                    .visible(false)
-                    .build()?;
-            apply_click_region(&island, 5.0, 34.0).map_err(std::io::Error::other)?;
-            let handle = app.handle().clone();
-            let moved_window = island.clone();
-            island.on_window_event(move |event| {
-                if matches!(
-                    event,
-                    tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
-                ) {
-                    let _ = apply_click_region(&moved_window, 5.0, 34.0);
-                }
-                if let tauri::WindowEvent::Moved(position) = event {
-                    let scale = moved_window.scale_factor().unwrap_or(1.0);
-                    let _ = handle.emit(
-                        "companion-moved",
-                        (position.x as f64 / scale, position.y as f64 / scale),
-                    );
-                }
-            });
-            let mascot =
-                WebviewWindowBuilder::new(app, "mascot", WebviewUrl::App("index.html".into()))
-                    .title("OdeKrai")
-                    .inner_size(104.0, 104.0)
-                    .decorations(false)
-                    .transparent(true)
-                    .always_on_top(true)
-                    .focusable(false)
-                    .focused(false)
-                    .resizable(false)
-                    .skip_taskbar(true)
-                    .visible(false)
-                    .build()?;
-            apply_click_region(&mascot, 8.0, 26.0).map_err(std::io::Error::other)?;
-            let handle = app.handle().clone();
-            let moved_window = mascot.clone();
-            mascot.on_window_event(move |event| {
-                if matches!(
-                    event,
-                    tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
-                ) {
-                    let _ = apply_click_region(&moved_window, 8.0, 26.0);
-                }
-                if let tauri::WindowEvent::Moved(position) = event {
-                    let scale = moved_window.scale_factor().unwrap_or(1.0);
-                    let _ = handle.emit(
-                        "character-moved",
-                        (position.x as f64 / scale, position.y as f64 / scale),
-                    );
-                }
-            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

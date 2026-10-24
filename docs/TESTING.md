@@ -36,6 +36,7 @@ island/mascote.
 - `policy.rs`: tabela completa de modos × riscos × origens normal/tainted × dentro/fora do workspace, incluindo exceções permissivas e bloqueios fixos.
 - `security.rs`: schema tipado com campos desconhecidos recusados; validação de traversal, UNC, nomes reservados, reparse point e hard link; bloqueio de pagamento, caminhos comuns de credenciais e marcadores conhecidos de segredo; limite de frequência; escrita com backup e lixeira sem exclusão definitiva; hash de parâmetros, fila limitada e cadeia de auditoria com adulteração detectada.
 - `lib.rs`: teste de isolamento do chamador da aprovação (`approval` somente).
+- `lib.rs`: teste das transições de criação/fechamento das janelas opcionais (`feature_window_lifecycle_tests`).
 - Todas as ferramentas desta fase são simuladas e os testes não fazem chamadas de rede reais.
 - A confirmação de modo e exceção usa caixa nativa Win32 em execução interativa; não é exercitada por teste automatizado.
 
@@ -71,6 +72,7 @@ Execute em uma sessão Windows com a janela visível. Registre sistema, escala D
 18. Troque entre provedores e confirme que endpoint/modelo não se misturam. Informe endpoint de outro provedor e confirme a recusa antes do salvamento da credencial. Carregue modelos somente nos provedores com endpoint documentado; confirme o estado parcial nos demais.
 19. Em Configurações → Permissões, troque cada modo e confirme a caixa nativa antes de salvar. Confira que o modo exibido em `ODEKRAI.md` não altera o modo efetivo do SQLite.
 20. Em build de desenvolvimento, teste leitura, gravação com backup, mover para `.trash`, envio simulado e bloqueio financeiro. Confirme que só a janela `approval` pode aprovar, que Negar e fechar negam, que parâmetros adulterados/replay/expiração/fila cheia falham fechados e que conteúdo externo pede aprovação.
+21. Confirme que a inicialização abre apenas `main`; habilite e desabilite island/mascote e resolva/expire aprovações, observando que as janelas correspondentes são criadas sob demanda e fechadas no fim do uso.
 21. Ao mudar modo ou habilitar override, confirme que a caixa Win32 aparece sem congelar a janela principal enquanto permanece aberta; confirme Cancelar e Sim retornando à interface.
 22. Execute `npm run build` e confirme que o mascote fica em chunk lazy separado. O chunk Three.js ainda pode superar 500 kB bruto; registre o tamanho e gzip, sem elevar o limite de aviso para ocultá-lo.
 23. Teste `npm run check:release-assets` com um `dist/` de fixture limpo (passa) e com o GLB/uma referência oficial (falha com os caminhos detectados). Não publique artefatos locais que contenham o GLB.

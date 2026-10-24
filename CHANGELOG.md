@@ -5,6 +5,7 @@
 ### UI-1
 
 - Ajustadas as dimensões iniciais e mínimas da janela principal; teste Rust protege a configuração.
+- Janelas auxiliares de ilha, mascote e aprovação são criadas sob demanda e fechadas quando deixam de ser necessárias.
 
 ### Revisão de fechamento da Fase 3.1
 

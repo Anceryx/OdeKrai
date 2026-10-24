@@ -35,7 +35,7 @@ injeção de instrução, e a proteção depende do taint e da política para ef
 
 ## Aplicativo
 
-O frontend usa React + TypeScript + Vite. `src/core/` mantém regras sem dependência da apresentação; `src/ui/` contém o Hub e as janelas do Companion. O shell Tauri cria `island` e `mascot`; comandos Rust controlam posição, tamanho, visibilidade e prioridade. Eventos Tauri conectam o chat às janelas do Companion e sincronizam as preferências locais.
+O frontend usa React + TypeScript + Vite. `src/core/` mantém regras sem dependência da apresentação; `src/ui/` contém o Hub e as janelas do Companion. Na abertura, o Tauri cria somente `main`. Rust cria `island` e `mascot` quando ativadas e fecha cada uma quando desativada; cria `approval` quando há uma aprovação pendente e fecha a janela após resolver ou expirar a fila. Comandos Rust controlam posição, tamanho, visibilidade e prioridade. Eventos Tauri conectam o chat às janelas do Companion e sincronizam as preferências locais.
 
 ## Mascote 3D
 
