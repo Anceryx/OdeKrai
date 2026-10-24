@@ -10,6 +10,7 @@
 - Removido o cartão de perfil duplicado no rodapé da barra lateral; o caminho superior abre o Perfil, identificado no breadcrumb.
 - Conversas anteriores exibem título e data do SQLite e permanecem selecionáveis.
 - A primeira execução permite escolher uma pasta pelo diálogo nativo; idioma e tom usam opções estruturadas com tom personalizado.
+- O aplicativo mantém a rolagem principal na área de conteúdo, com barra lateral e rodapé estáveis.
 
 ### Revisão de fechamento da Fase 3.1
 

@@ -261,9 +261,7 @@ export function AgentHome({
                 </p>
                 <details>
                   <summary>Ver diferenças</summary>
-                  <pre style={{ whiteSpace: 'pre-wrap', maxHeight: 300, overflow: 'auto' }}>
-                    {core.diff}
-                  </pre>
+                  <pre style={{ whiteSpace: 'pre-wrap' }}>{core.diff}</pre>
                 </details>
               </>
             )}

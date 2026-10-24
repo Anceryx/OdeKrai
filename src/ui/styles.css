@@ -25,6 +25,14 @@ body {
   margin: 0;
   min-width: 760px;
   min-height: 100vh;
+  height: 100%;
+  overflow: hidden;
+}
+html,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 button,
 input,
@@ -45,13 +53,17 @@ select:focus-visible {
 }
 .app-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
   background:
     radial-gradient(ellipse at 64% 4%, rgba(130, 27, 30, 0.075), transparent 34%), var(--bg);
 }
 .sidebar {
   width: 254px;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  position: sticky;
+  top: 0;
   background: rgba(13, 13, 16, 0.96);
   border-right: 1px solid var(--line);
   padding: 23px 15px 14px;
@@ -356,6 +368,7 @@ select:focus-visible {
   flex: 1;
   display: flex;
   flex-direction: column;
+  height: 100vh;
   max-height: 100vh;
 }
 .topbar {
@@ -427,7 +440,9 @@ select:focus-visible {
 }
 .content-scroll {
   flex: 1;
-  overflow: auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .page {
   max-width: 1030px;
@@ -1343,6 +1358,8 @@ select:focus-visible {
   width: 100%;
   margin: 0 auto;
   padding: 28px 53px 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .chat-header {
   display: flex;
@@ -1365,7 +1382,7 @@ select:focus-visible {
 }
 .messages-area {
   flex: 1;
-  overflow: auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -2424,8 +2441,9 @@ html.island-window-html {
 }
 .chat-history {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
-  overflow-x: auto;
+  overflow: visible;
   padding: 0.5rem 1rem;
 }
 
@@ -2633,8 +2651,6 @@ html.island-window-html {
 .audit-list {
   display: grid;
   gap: 10px;
-  max-height: 55vh;
-  overflow: auto;
 }
 .audit-entry {
   display: grid;
@@ -2655,8 +2671,6 @@ html.island-window-html {
 }
 .audit-entry pre,
 .approval-preview pre {
-  max-height: 220px;
-  overflow: auto;
   padding: 11px;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.25);
