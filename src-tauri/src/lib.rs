@@ -36,6 +36,23 @@ mod security_caller_tests {
     }
 }
 
+#[cfg(test)]
+mod window_config_tests {
+    use serde_json::Value;
+
+    #[test]
+    fn main_window_uses_requested_default_and_minimum_size() {
+        let config: Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let main = &config["app"]["windows"][0];
+
+        assert_eq!(main["width"], 1250);
+        assert_eq!(main["height"], 700);
+        assert_eq!(main["minWidth"], 1000);
+        assert_eq!(main["minHeight"], 600);
+        assert_eq!(main["center"], true);
+    }
+}
+
 #[cfg(windows)]
 fn apply_click_region(
     window: &tauri::WebviewWindow,

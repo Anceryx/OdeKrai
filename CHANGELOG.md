@@ -2,6 +2,10 @@
 
 ## Não lançado
 
+### UI-1
+
+- Ajustadas as dimensões iniciais e mínimas da janela principal; teste Rust protege a configuração.
+
 ### Revisão de fechamento da Fase 3.1
 
 - Bloqueadas operações simuladas sobre `ODEKRAI.md`, `logs/`, configurações, bancos locais e conteúdo reconhecido como segredo.
