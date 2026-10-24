@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { sendChatMessage, type ChatMessage } from '../core/chat';
 import { defaultSettings, loadSettings, saveSettings, type AppSettings } from '../core/settings';
+import { emit } from '@tauri-apps/api/event';
+import { invoke, isTauri } from '@tauri-apps/api/core';
+import {
+  normalizeSoundPreferences,
+  playSound,
+  SOUND_EVENTS,
+  type SoundEvent,
+} from '../core/sounds';
 
 type Section = 'overview' | 'chat' | 'providers' | 'companion' | 'settings';
 
@@ -29,6 +37,41 @@ export function App() {
     saveSettings(settings);
   }, [settings]);
   useEffect(() => {
+    const refreshSettings = () => setSettings(loadSettings());
+    window.addEventListener('storage', refreshSettings);
+    return () => window.removeEventListener('storage', refreshSettings);
+  }, []);
+  useEffect(() => {
+    const companion = settings.companion;
+    if (!isTauri() || !companion.enabled) return;
+    const width = 280 * companion.size;
+    const height = 150 * companion.size;
+    const right = companion.position.endsWith('right');
+    const bottom = companion.position.startsWith('bottom');
+    const x =
+      companion.coordinates?.x ?? (right ? Math.max(0, screen.availWidth - width - 28) : 28);
+    const y =
+      companion.coordinates?.y ?? (bottom ? Math.max(0, screen.availHeight - height - 58) : 28);
+    void invoke('set_island_position', { x, y, size: companion.size })
+      .then(() => invoke('set_island_topmost', { enabled: companion.alwaysOnTop }))
+      .then(() => invoke('set_island_visible', { visible: true }))
+      .then(() => emit('companion-state', { type: 'reveal' }))
+      .catch(() => setToast('Não foi possível restaurar a ilha do Companion.'));
+  }, []);
+  useEffect(() => {
+    const companion = settings.companion;
+    if (!isTauri() || !companion.freeMode) return;
+    const x =
+      companion.desktopCoordinates?.x ??
+      Math.max(0, (screen.availWidth - 104 * companion.size) / 2);
+    const y =
+      companion.desktopCoordinates?.y ??
+      Math.max(0, (screen.availHeight - 104 * companion.size) / 2);
+    void invoke('set_character_position', { x, y, size: companion.size })
+      .then(() => invoke('set_character_visible', { visible: true }))
+      .catch(() => setToast('Não foi possível restaurar o marcador no desktop.'));
+  }, []);
+  useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(''), 2600);
     return () => window.clearTimeout(timer);
@@ -55,6 +98,12 @@ export function App() {
     setDraft('');
     setError('');
     setBusy(true);
+    if (isTauri())
+      void emit('companion-state', {
+        type: 'activity',
+        state: 'thinking',
+        message: 'Aguardando resposta do provedor',
+      });
     request.current = new AbortController();
     try {
       const answer = await sendChatMessage(
@@ -65,12 +114,26 @@ export function App() {
         request.current.signal,
       );
       setMessages([...next, { role: 'assistant', content: answer }]);
+      void playSound('success', normalizeSoundPreferences(settings.companion.sounds));
+      if (isTauri())
+        void emit('companion-state', {
+          type: 'activity',
+          state: 'completed',
+          message: 'Resposta recebida',
+        });
     } catch (cause) {
       if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
         setMessages(next);
         setError(
           cause instanceof Error ? cause.message : 'Não foi possível concluir a solicitação.',
         );
+        void playSound('error', normalizeSoundPreferences(settings.companion.sounds));
+        if (isTauri())
+          void emit('companion-state', {
+            type: 'activity',
+            state: 'error',
+            message: 'Não foi possível concluir a solicitação',
+          });
       }
     } finally {
       setBusy(false);
@@ -223,7 +286,9 @@ export function App() {
                 onChat={() => setChatMode(true)}
               />
             )}
-            {section === 'companion' && <Companion />}
+            {section === 'companion' && (
+              <Companion settings={settings} update={setSettings} onError={setToast} />
+            )}
             {section === 'settings' && (
               <Settings settings={settings} update={(next) => setSettings(next)} />
             )}
@@ -475,7 +540,73 @@ function Providers({
   );
 }
 
-function Companion() {
+function Companion({
+  settings,
+  update,
+  onError,
+}: {
+  settings: AppSettings;
+  update: (settings: AppSettings) => void;
+  onError: (message: string) => void;
+}) {
+  const [soundEvent, setSoundEvent] = useState<SoundEvent>('notification');
+  async function applyPosition(next: AppSettings['companion']) {
+    if (!isTauri() || !next.enabled) return;
+    const width = 280 * next.size;
+    const height = 150 * next.size;
+    const right = next.position.endsWith('right');
+    const bottom = next.position.startsWith('bottom');
+    const x = next.coordinates?.x ?? (right ? Math.max(0, screen.availWidth - width - 28) : 28);
+    const y = next.coordinates?.y ?? (bottom ? Math.max(0, screen.availHeight - height - 58) : 28);
+    try {
+      await invoke('set_island_position', { x, y, size: next.size });
+    } catch {
+      throw new Error('Não foi possível atualizar a posição da ilha.');
+    }
+  }
+  async function setEnabled(enabled: boolean) {
+    update({ ...settings, companion: { ...settings.companion, enabled } });
+    if (!isTauri()) return;
+    try {
+      if (enabled) {
+        await applyPosition({ ...settings.companion, enabled: true });
+        await invoke('set_island_topmost', { enabled: settings.companion.alwaysOnTop });
+        await invoke('set_island_visible', { visible: true });
+        await emit('companion-state', { type: 'reveal' });
+        void playSound('wake', normalizeSoundPreferences(settings.companion.sounds));
+      } else {
+        await invoke('set_island_visible', { visible: false });
+        void playSound('sleep', normalizeSoundPreferences(settings.companion.sounds));
+      }
+    } catch {
+      update({ ...settings, companion: { ...settings.companion, enabled: !enabled } });
+      onError('Não foi possível alterar a janela do Companion.');
+    }
+  }
+  async function setFreeMode(freeMode: boolean) {
+    const companion = { ...settings.companion, freeMode };
+    update({ ...settings, companion });
+    if (!isTauri()) return;
+    try {
+      if (freeMode) {
+        const x =
+          companion.desktopCoordinates?.x ??
+          Math.max(0, (screen.availWidth - 104 * companion.size) / 2);
+        const y =
+          companion.desktopCoordinates?.y ??
+          Math.max(0, (screen.availHeight - 104 * companion.size) / 2);
+        await invoke('set_character_position', { x, y, size: companion.size });
+        await invoke('set_character_visible', { visible: true });
+        void playSound('drag_start', normalizeSoundPreferences(companion.sounds));
+      } else {
+        await invoke('set_character_visible', { visible: false });
+        void playSound('return_home', normalizeSoundPreferences(companion.sounds));
+      }
+    } catch {
+      update({ ...settings, companion: { ...settings.companion, freeMode: !freeMode } });
+      onError('Não foi possível mover o marcador entre as janelas.');
+    }
+  }
   return (
     <div className="page subpage">
       <div className="page-heading">
@@ -504,6 +635,236 @@ function Companion() {
           </p>
         </div>
       </div>
+      <section className="settings-panel compact-panel">
+        <div className="panel-heading">
+          <div>
+            <h3>Ilha na área de trabalho</h3>
+            <p>
+              Abre uma janela transparente do Companion. Posição expressa em um dos cantos da tela
+              principal.
+            </p>
+          </div>
+          <button
+            role="switch"
+            aria-checked={settings.companion.enabled}
+            className={`toggle ${settings.companion.enabled ? 'on' : ''}`}
+            onClick={() => void setEnabled(!settings.companion.enabled)}
+            aria-label="Ativar ilha do Companion"
+            disabled={!isTauri()}
+          >
+            <span />
+          </button>
+        </div>
+        <div className="preference-row">
+          <div>
+            <strong>Posição</strong>
+            <span>Arraste a janela para personalizar; a posição é salva.</span>
+          </div>
+          <select
+            value={settings.companion.position}
+            onChange={(event) => {
+              const companion = {
+                ...settings.companion,
+                position: event.target.value as AppSettings['companion']['position'],
+                coordinates: null,
+              };
+              update({ ...settings, companion });
+              void applyPosition(companion).catch(() =>
+                onError('Não foi possível atualizar a posição da ilha.'),
+              );
+            }}
+          >
+            <option value="bottom-right">Inferior direita</option>
+            <option value="bottom-left">Inferior esquerda</option>
+            <option value="top-right">Superior direita</option>
+            <option value="top-left">Superior esquerda</option>
+          </select>
+        </div>
+        <div className="preference-row">
+          <div>
+            <strong>Modo livre do marcador</strong>
+            <span>Permite arrastar o marcador geométrico em uma janela separada.</span>
+          </div>
+          <button
+            role="switch"
+            aria-checked={settings.companion.freeMode}
+            className={`toggle ${settings.companion.freeMode ? 'on' : ''}`}
+            onClick={() => void setFreeMode(!settings.companion.freeMode)}
+            disabled={!isTauri()}
+          >
+            <span />
+          </button>
+        </div>
+        <div className="preference-row">
+          <div>
+            <strong>Tamanho</strong>
+            <span>{Math.round(settings.companion.size * 100)}% da escala-base.</span>
+          </div>
+          <input
+            aria-label="Tamanho da ilha"
+            type="range"
+            min="0.75"
+            max="1.5"
+            step="0.05"
+            value={settings.companion.size}
+            onChange={(event) => {
+              const companion = { ...settings.companion, size: Number(event.target.value) };
+              update({ ...settings, companion });
+              void applyPosition(companion).catch(() =>
+                onError('Não foi possível atualizar o tamanho da ilha.'),
+              );
+            }}
+          />
+        </div>
+        <div className="preference-row">
+          <div>
+            <strong>Manter sobre outras janelas</strong>
+            <span>Define a prioridade de exibição da ilha.</span>
+          </div>
+          <button
+            role="switch"
+            aria-checked={settings.companion.alwaysOnTop}
+            className={`toggle ${settings.companion.alwaysOnTop ? 'on' : ''}`}
+            onClick={() => {
+              const enabled = !settings.companion.alwaysOnTop;
+              update({ ...settings, companion: { ...settings.companion, alwaysOnTop: enabled } });
+              if (isTauri()) void invoke('set_island_topmost', { enabled });
+            }}
+            disabled={!isTauri()}
+          >
+            <span />
+          </button>
+        </div>
+        <div className="preference-row">
+          <div>
+            <strong>Abrir ao passar o mouse</strong>
+            <span>Expande a ilha quando o ponteiro entra nela.</span>
+          </div>
+          <button
+            role="switch"
+            aria-checked={settings.companion.openOnHover}
+            className={`toggle ${settings.companion.openOnHover ? 'on' : ''}`}
+            onClick={() =>
+              update({
+                ...settings,
+                companion: { ...settings.companion, openOnHover: !settings.companion.openOnHover },
+              })
+            }
+            disabled={!isTauri()}
+          >
+            <span />
+          </button>
+        </div>
+        <div className="preference-row">
+          <div>
+            <strong>Recolher após</strong>
+            <span>Tempo sem interação enquanto expandida.</span>
+          </div>
+          <select
+            value={settings.companion.collapseSeconds}
+            onChange={(event) =>
+              update({
+                ...settings,
+                companion: { ...settings.companion, collapseSeconds: Number(event.target.value) },
+              })
+            }
+            disabled={!isTauri()}
+          >
+            <option value={8}>8 segundos</option>
+            <option value={15}>15 segundos</option>
+            <option value={30}>30 segundos</option>
+            <option value={60}>1 minuto</option>
+          </select>
+        </div>
+        <div className="preference-row">
+          <div>
+            <strong>Efeitos sonoros</strong>
+            <span>Sem arquivos de áudio, a interface permanece silenciosa.</span>
+          </div>
+          <button
+            role="switch"
+            aria-checked={settings.companion.sounds.enabled}
+            className={`toggle ${settings.companion.sounds.enabled ? 'on' : ''}`}
+            onClick={() =>
+              update({
+                ...settings,
+                companion: {
+                  ...settings.companion,
+                  sounds: {
+                    ...settings.companion.sounds,
+                    enabled: !settings.companion.sounds.enabled,
+                  },
+                },
+              })
+            }
+          >
+            <span />
+          </button>
+        </div>
+        <div className="preference-row">
+          <div>
+            <strong>Volume</strong>
+            <span>{Math.round(settings.companion.sounds.volume * 100)}%</span>
+          </div>
+          <input
+            aria-label="Volume dos efeitos sonoros"
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={settings.companion.sounds.volume}
+            onChange={(event) =>
+              update({
+                ...settings,
+                companion: {
+                  ...settings.companion,
+                  sounds: { ...settings.companion.sounds, volume: Number(event.target.value) },
+                },
+              })
+            }
+          />
+        </div>
+        <div className="preference-row">
+          <div>
+            <strong>Substituir um efeito</strong>
+            <span>Informe um arquivo local empacotado em public/sounds/.</span>
+          </div>
+          <div className="sound-replacement">
+            <select
+              aria-label="Efeito a substituir"
+              value={soundEvent}
+              onChange={(event) => setSoundEvent(event.target.value as SoundEvent)}
+            >
+              {SOUND_EVENTS.map((event) => (
+                <option key={event} value={event}>
+                  {event}
+                </option>
+              ))}
+            </select>
+            <input
+              aria-label="Caminho do arquivo de áudio"
+              value={settings.companion.sounds.replacements[soundEvent] ?? ''}
+              placeholder={`/sounds/${soundEvent}.wav`}
+              onChange={(event) => {
+                const path = event.target.value;
+                update({
+                  ...settings,
+                  companion: {
+                    ...settings.companion,
+                    sounds: {
+                      ...settings.companion.sounds,
+                      replacements: {
+                        ...settings.companion.sounds.replacements,
+                        [soundEvent]: path,
+                      },
+                    },
+                  },
+                });
+              }}
+            />
+          </div>
+        </div>
+      </section>
       <section className="settings-panel compact-panel">
         <div className="panel-heading">
           <div>

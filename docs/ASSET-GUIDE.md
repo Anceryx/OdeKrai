@@ -1,25 +1,18 @@
 # Guia de assets do Odekrai
 
-As artes definitivas serão fornecidas pelo proprietário. Não use o personagem, som, ícone ou ilustração do Coucou.
+As artes definitivas serão fornecidas pelo proprietário. A ilha atual usa CSS e um glifo geométrico temporário; não usa imagens de personagem de terceiros.
 
-## Entrega recomendada
+## Personagem futuro
 
-- PNG RGBA transparente para poses estáticas e sequências, em sRGB.
-- WebP para imagens raster compactas quando a transparência/qualidade for adequada.
-- SVG apenas para ícones vetoriais simples, sem scripts, fontes externas, filtros perigosos, referências externas ou entidades; será validado e sanitizado antes de renderizar.
-- Spritesheet PNG/WebP com frames de dimensões iguais; forneça largura, altura, número de colunas/linhas e taxa de quadros no manifesto.
-- GIF/APNG somente se o pipeline preservar transparência e oferecer controle confiável de duração; prefira sequências de frames para o personagem.
+- PNG RGBA transparente em sRGB para poses estáticas e sequências; WebP quando transparência e qualidade forem adequadas.
+- GLB poderá ser integrado quando o mascote e a necessidade de renderização 3D forem aprovados. Não adicionar dependência 3D antes dessa etapa.
+- Sprite sheets devem informar dimensões, grade, taxa de quadros, âncora e licença no manifesto.
+- Não copiar arte, animação, ícones ou sons do Coucou/Mochi.
 
-## Dimensões iniciais sugeridas
+## Áudio
 
-Produza cada pose em 512×512 px como referência principal, com personagem centralizado, transparência real e margem de 8–12%. Para a ilha, entregue uma versão 2× da escala visual pretendida. Não estique assets; use `contain` e dimensões físicas consistentes em diferentes DPI. Essas medidas são orientações iniciais e poderão ser ajustadas após teste visual no Companion.
+Os efeitos configuráveis ficam em `public/sounds/`; use arquivos curtos e licenciados. `docs/AUDIO-ASSETS.md` lista eventos, formatos e processo de substituição. Nenhum som foi integrado ainda.
 
-## Nomes e manifesto
+## Pastas reservadas
 
-Os nomes são livres. Agrupe por estado em `assets/odekrai/character/<estado>/` e registre caminhos relativos, dimensões, escala, ponto de ancoragem, duração, repetição, fallback e licença em manifesto versionado. Não aceite caminhos absolutos, `..`, URLs remotas ou symlinks que escapem da pasta de assets. A validação ainda será implementada.
-
-## Estados a produzir
-
-Idle, walking, running, jumping, sleeping, happy, sad, angry, surprised, thinking, talking, listening, loading, celebrating, dragging, interações, transições, sazonal, roupas e expressões. Entregue pose neutra estática como fallback por estado. O motor não deve depender de nomes de arquivo específicos.
-
-Pastas reservadas incluem `character/`, `island/`, `icons/`, `backgrounds/`, `sounds/`, `animations/` e `previews/`. Cada subpasta contém um README com sua finalidade. Não envie materiais oficiais até que sua distribuição no repositório esteja autorizada.
+`character/`, `island/`, `icons/`, `backgrounds/`, `sounds/`, `animations/` e `previews/`. Inclua origem e licença para cada material externo e não aceite caminhos absolutos, travessia `..` ou URL remota em manifestos.

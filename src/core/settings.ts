@@ -1,3 +1,5 @@
+import { normalizeSoundPreferences } from './sounds';
+
 export type ProviderSettings = {
   name: string;
   baseUrl: string;
@@ -8,6 +10,22 @@ export type AppSettings = {
   language: 'pt-BR' | 'en';
   reduceMotion: boolean;
   provider: ProviderSettings;
+  companion: {
+    enabled: boolean;
+    position: 'top-right' | 'bottom-right' | 'top-left' | 'bottom-left';
+    size: number;
+    alwaysOnTop: boolean;
+    openOnHover: boolean;
+    collapseSeconds: number;
+    coordinates: { x: number; y: number } | null;
+    freeMode: boolean;
+    desktopCoordinates: { x: number; y: number } | null;
+    sounds: {
+      enabled: boolean;
+      volume: number;
+      replacements: Partial<Record<import('./sounds').SoundEvent, string>>;
+    };
+  };
 };
 
 const STORAGE_KEY = 'odekrai.settings.v1';
@@ -20,6 +38,18 @@ export const defaultSettings: AppSettings = {
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-4o-mini',
   },
+  companion: {
+    enabled: false,
+    position: 'bottom-right',
+    size: 1,
+    alwaysOnTop: true,
+    openOnHover: false,
+    collapseSeconds: 15,
+    coordinates: null,
+    freeMode: false,
+    desktopCoordinates: null,
+    sounds: { enabled: true, volume: 0.2, replacements: {} },
+  },
 };
 
 export function loadSettings(): AppSettings {
@@ -28,10 +58,51 @@ export function loadSettings(): AppSettings {
     if (!raw) return defaultSettings;
     const value: unknown = JSON.parse(raw);
     if (!isAppSettings(value)) return defaultSettings;
+    const companion =
+      value.companion && typeof value.companion === 'object'
+        ? (value.companion as Partial<AppSettings['companion']>)
+        : {};
+    const position = ['top-right', 'bottom-right', 'top-left', 'bottom-left'].includes(
+      String(companion.position),
+    )
+      ? companion.position!
+      : defaultSettings.companion.position;
+    const coordinates =
+      companion.coordinates &&
+      Number.isFinite(companion.coordinates.x) &&
+      Number.isFinite(companion.coordinates.y) &&
+      Math.abs(companion.coordinates.x) <= 100_000 &&
+      Math.abs(companion.coordinates.y) <= 100_000
+        ? { x: companion.coordinates.x, y: companion.coordinates.y }
+        : null;
+    const desktopCoordinates =
+      companion.desktopCoordinates &&
+      Number.isFinite(companion.desktopCoordinates.x) &&
+      Number.isFinite(companion.desktopCoordinates.y) &&
+      Math.abs(companion.desktopCoordinates.x) <= 100_000 &&
+      Math.abs(companion.desktopCoordinates.y) <= 100_000
+        ? { x: companion.desktopCoordinates.x, y: companion.desktopCoordinates.y }
+        : null;
     return {
       ...defaultSettings,
       ...value,
       provider: { ...defaultSettings.provider, ...value.provider },
+      companion: {
+        ...defaultSettings.companion,
+        ...value.companion,
+        enabled: typeof companion.enabled === 'boolean' ? companion.enabled : false,
+        position,
+        size: Number.isFinite(companion.size) ? Math.max(0.75, Math.min(1.5, companion.size!)) : 1,
+        alwaysOnTop: typeof companion.alwaysOnTop === 'boolean' ? companion.alwaysOnTop : true,
+        openOnHover: typeof companion.openOnHover === 'boolean' ? companion.openOnHover : false,
+        collapseSeconds: [8, 15, 30, 60].includes(Number(companion.collapseSeconds))
+          ? Number(companion.collapseSeconds)
+          : 15,
+        coordinates,
+        freeMode: typeof companion.freeMode === 'boolean' ? companion.freeMode : false,
+        desktopCoordinates,
+        sounds: normalizeSoundPreferences(companion.sounds),
+      },
     };
   } catch {
     return defaultSettings;
