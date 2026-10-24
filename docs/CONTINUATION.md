@@ -22,5 +22,5 @@ Estado local: branch `codex/odekrai-foundation`, baseada no HEAD `1243a27`. Pres
 
 Nenhum commit, push, release ou publicação foi feito. Verificar o remoto antes de qualquer publicação futura.
 
-- O build release agora passou após remover os artefatos antigos: executável `src-tauri/target/release/odekrai.exe` (13.324.800 bytes) e instalador NSIS `src-tauri/target/release/bundle/nsis/OdeKrai_0.1.0_x64-setup.exe` (3.693.545 bytes), ambos `NotSigned`.
-- `cargo run --release` manteve o processo responsivo. A tentativa com `Start-Process` encerrou com código 101, sem causa confirmada. A sessão gráfica inacessível impede confirmar a janela; abrir visualmente e testar as interações segue pendente.
+- O build release agora passou após remover os artefatos antigos: executável `src-tauri/target/release/odekrai.exe` (13.324.800 bytes) e instalador NSIS `src-tauri/target/release/bundle/nsis/OdeKrai_0.1.0_x64-setup.exe` (3.692.149 bytes), ambos `NotSigned`.
+- `cargo run --release` manteve o processo responsivo. A abertura direta com `Start-Process` encerrou com código 101; o stderr registrou `0x800700AA` (recurso solicitado em uso) na criação do WebView2. O processo que mantém o recurso ocupado não foi identificado. A sessão gráfica inacessível impede confirmar a janela; abrir visualmente e testar as interações segue pendente.

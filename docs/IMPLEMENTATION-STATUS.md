@@ -36,7 +36,7 @@ Windows 10.0.19045 x64; Node 24.12.0; npm 11.6.2; Rust/Cargo 1.99.1; Tauri CLI 2
 
 ### Resultado de build local e teste de abertura (24/10/2026)
 
-- `npm run tauri:build` passou e gerou `src-tauri/target/release/odekrai.exe` (13.324.800 bytes) e `src-tauri/target/release/bundle/nsis/OdeKrai_0.1.0_x64-setup.exe` (3.693.545 bytes). Ambos sem assinatura Authenticode (`NotSigned`).
-- O processo foi iniciado por `cargo run --release` e permaneceu responsivo. Uma tentativa separada com `Start-Process` terminou com código 101; a causa não foi identificada.
+- `npm run tauri:build` passou e gerou `src-tauri/target/release/odekrai.exe` (13.324.800 bytes) e `src-tauri/target/release/bundle/nsis/OdeKrai_0.1.0_x64-setup.exe` (3.692.149 bytes). Ambos sem assinatura Authenticode (`NotSigned`).
+- O processo foi iniciado por `cargo run --release` e permaneceu responsivo. A abertura direta com `Start-Process` terminou com código 101. O stderr capturado identificou `0x800700AA` (recurso solicitado em uso) ao criar o WebView2; não foi possível identificar o processo que mantém o recurso ocupado.
 - A sessão gráfica não está disponível para automação (`cua.getState()` retornou apps e browsers vazios). Não foi possível confirmar a janela visível, pixels ou interações. A validação visual segue pendente.
 - Os binários e instalador estão no diretório ignorado `src-tauri/target/`; confirme `git ls-files '*.exe'` vazio antes de publicar.
