@@ -30,6 +30,7 @@ import { ProviderCatalog } from './ProviderCatalog';
 import { AgentHome } from './AgentHome';
 import { Profile, initials, type ProfileData } from './Profile';
 import { ApprovalWindow, isApprovalWindow, SecurityCenter } from './SecurityCenter';
+import { Button, PageHeader, Toggle } from './DesignSystem';
 
 type Section =
   | 'overview'
@@ -172,7 +173,7 @@ function MainApp() {
       .then(() => invoke('set_island_topmost', { enabled: companion.alwaysOnTop }))
       .then(() => invoke('set_island_visible', { visible: true }))
       .then(() => emit('companion-state', { type: 'reveal' }))
-      .catch(() => setToast('Não foi possível restaurar a ilha do assistente.'));
+      .catch(() => setToast('Não foi possível restaurar o pet do assistente.'));
   }, []);
   useEffect(() => {
     const companion = settings.companion;
@@ -591,8 +592,9 @@ function Overview({
         <div>
           <span className="eyebrow">{today}</span>
           <h1>
-            {profile.displayName ? `Olá, ${profile.displayName}.` : 'Seu espaço,'}{' '}
-            <em>suas ideias.</em>
+            {profile.displayName
+              ? `Olá, ${profile.displayName}. Vamos dar forma às suas ideias.`
+              : 'Um espaço para dar forma às suas ideias.'}
           </h1>
           <p>Um lugar para pensar, criar e conversar com a IA que você escolher.</p>
         </div>
@@ -606,8 +608,7 @@ function Overview({
         </div>
       </div>
       <section className="hero-card">
-        <div className="hero-orbit orbit-one" />
-        <div className="hero-orbit orbit-two" />
+        <div className="hero-pet-space" aria-hidden="true" />
         <div className="hero-content">
           <span className="pill-label">
             <i /> OdeKrai
@@ -624,13 +625,6 @@ function Overview({
           <button className="primary-button" onClick={onChat}>
             Iniciar conversa <span>↗</span>
           </button>
-        </div>
-        <div className="hero-glyph">
-          <div className="glyph-halo" />
-          <div className="glyph-core">O</div>
-          <span className="spark spark-a">✦</span>
-          <span className="spark spark-b">✧</span>
-          <span className="spark spark-c">·</span>
         </div>
         <div className="hero-footer">
           <span>
@@ -665,12 +659,11 @@ function Overview({
         <button className="feature-card companion-card" onClick={() => onOpen('companion')}>
           <div className="card-icon neutral-icon">◇</div>
           <div className="feature-copy">
-            <span className="eyebrow">COMPANION</span>
+            <span className="eyebrow">PERSONALIZAÇÃO</span>
             <h4>Seu espaço de presença</h4>
-            <p>Conheça o OdeKrai e configure sua ilha.</p>
+            <p>Conheça o OdeKrai e configure seu pet.</p>
           </div>
           <span className="card-arrow">↗</span>
-          <div className="companion-doodle">O</div>
         </button>
       </div>
       <div className="privacy-note">
@@ -730,7 +723,7 @@ function Companion({
     try {
       await invoke('set_island_position', { x, y, size: next.size });
     } catch {
-      throw new Error('Não foi possível atualizar a posição da ilha.');
+      throw new Error('Não foi possível atualizar a posição do pet.');
     }
   }
   async function setEnabled(enabled: boolean) {
@@ -778,14 +771,11 @@ function Companion({
   }
   return (
     <div className="page subpage">
-      <div className="page-heading">
-        <div>
-          <span className="eyebrow">PERSONALIZAÇÃO</span>
-          <h1>Assistente do OdeKrai</h1>
-          <p>Uma presença leve para acompanhar você na área de trabalho.</p>
-        </div>
-        <span className="heading-symbol">◇</span>
-      </div>
+      <PageHeader
+        eyebrow="PERSONALIZAÇÃO"
+        title="Assistente do OdeKrai"
+        subtitle="Uma presença leve para acompanhar você na área de trabalho."
+      />
       <div className="companion-preview">
         <div className="preview-grid" />
         <div className="preview-island">
@@ -805,11 +795,11 @@ function Companion({
             onMetrics={setPreviewMetrics}
           />
           <span className="island-label">
-            ILHA OdeKrai <i />
+            PET OdeKrai <i />
           </span>
         </div>
         <div className="preview-caption">
-          <span className="eyebrow">ILHA DO OdeKrai</span>
+          <span className="eyebrow">PET DO OdeKrai</span>
           <strong>{MASCOT_EXPRESSION_LABELS[previewExpression]}</strong>
           <p>OdeKrai pronto para acompanhar sua área de trabalho.</p>
         </div>
@@ -817,7 +807,7 @@ function Companion({
       <details className="mascot-preview-tools">
         <summary>Ajustes avançados da prévia</summary>
         <div className="mascot-preview-notice">
-          Estes ajustes afetam somente a prévia desta tela. As configurações da ilha ficam abaixo.
+          Estes ajustes afetam somente a prévia desta tela. As configurações do pet ficam abaixo.
         </div>
         <div className="mascot-preview-controls">
           <label className="mascot-expression-control">
@@ -949,22 +939,18 @@ function Companion({
       <section className="settings-panel compact-panel">
         <div className="panel-heading">
           <div>
-            <h3>Ilha na área de trabalho</h3>
+            <h3>Pet na área de trabalho</h3>
             <p>
               Abre uma janela transparente do assistente. A posição pode ficar em qualquer canto da
               tela principal.
             </p>
           </div>
-          <button
-            role="switch"
-            aria-checked={settings.companion.enabled}
-            className={`toggle ${settings.companion.enabled ? 'on' : ''}`}
+          <Toggle
+            checked={settings.companion.enabled}
+            label="Ativar pet do assistente"
             onClick={() => void setEnabled(!settings.companion.enabled)}
-            aria-label="Ativar ilha do assistente"
             disabled={!isTauri()}
-          >
-            <span />
-          </button>
+          />
         </div>
         <div className="preference-row">
           <div>
@@ -981,7 +967,7 @@ function Companion({
               };
               update({ ...settings, companion });
               void applyPosition(companion).catch(() =>
-                onError('Não foi possível atualizar a posição da ilha.'),
+                onError('Não foi possível atualizar a posição do pet.'),
               );
             }}
           >
@@ -996,15 +982,12 @@ function Companion({
             <strong>Modo livre do OdeKrai</strong>
             <span>Permite mover o OdeKrai em uma janela separada.</span>
           </div>
-          <button
-            role="switch"
-            aria-checked={settings.companion.freeMode}
-            className={`toggle ${settings.companion.freeMode ? 'on' : ''}`}
+          <Toggle
+            checked={settings.companion.freeMode}
+            label="Ativar modo livre do pet"
             onClick={() => void setFreeMode(!settings.companion.freeMode)}
             disabled={!isTauri()}
-          >
-            <span />
-          </button>
+          />
         </div>
         <div className="preference-row">
           <div>
@@ -1012,7 +995,7 @@ function Companion({
             <span>{Math.round(settings.companion.size * 100)}% da escala-base.</span>
           </div>
           <input
-            aria-label="Tamanho da ilha"
+            aria-label="Tamanho do pet"
             type="range"
             min="0.75"
             max="1.5"
@@ -1022,7 +1005,7 @@ function Companion({
               const companion = { ...settings.companion, size: Number(event.target.value) };
               update({ ...settings, companion });
               void applyPosition(companion).catch(() =>
-                onError('Não foi possível atualizar o tamanho da ilha.'),
+                onError('Não foi possível atualizar o tamanho do pet.'),
               );
             }}
           />
@@ -1030,31 +1013,27 @@ function Companion({
         <div className="preference-row">
           <div>
             <strong>Manter sobre outras janelas</strong>
-            <span>Define a prioridade de exibição da ilha.</span>
+            <span>Define a prioridade de exibição do pet.</span>
           </div>
-          <button
-            role="switch"
-            aria-checked={settings.companion.alwaysOnTop}
-            className={`toggle ${settings.companion.alwaysOnTop ? 'on' : ''}`}
+          <Toggle
+            checked={settings.companion.alwaysOnTop}
+            label="Manter o pet sobre outras janelas"
             onClick={() => {
               const enabled = !settings.companion.alwaysOnTop;
               update({ ...settings, companion: { ...settings.companion, alwaysOnTop: enabled } });
               if (isTauri()) void invoke('set_island_topmost', { enabled });
             }}
             disabled={!isTauri()}
-          >
-            <span />
-          </button>
+          />
         </div>
         <div className="preference-row">
           <div>
             <strong>Abrir ao passar o mouse</strong>
-            <span>Expande a ilha quando o ponteiro entra nela.</span>
+            <span>Expande o pet quando o ponteiro passa sobre ele.</span>
           </div>
-          <button
-            role="switch"
-            aria-checked={settings.companion.openOnHover}
-            className={`toggle ${settings.companion.openOnHover ? 'on' : ''}`}
+          <Toggle
+            checked={settings.companion.openOnHover}
+            label="Expandir o pet ao passar o mouse"
             onClick={() =>
               update({
                 ...settings,
@@ -1062,9 +1041,7 @@ function Companion({
               })
             }
             disabled={!isTauri()}
-          >
-            <span />
-          </button>
+          />
         </div>
         <div className="preference-row">
           <div>
@@ -1092,10 +1069,9 @@ function Companion({
             <strong>Efeitos sonoros</strong>
             <span>Sem arquivos de áudio, a interface permanece silenciosa.</span>
           </div>
-          <button
-            role="switch"
-            aria-checked={settings.companion.sounds.enabled}
-            className={`toggle ${settings.companion.sounds.enabled ? 'on' : ''}`}
+          <Toggle
+            checked={settings.companion.sounds.enabled}
+            label="Ativar sons do pet"
             onClick={() =>
               update({
                 ...settings,
@@ -1108,9 +1084,7 @@ function Companion({
                 },
               })
             }
-          >
-            <span />
-          </button>
+          />
         </div>
         <div className="preference-row">
           <div>
@@ -1204,21 +1178,18 @@ function Settings({
 }) {
   return (
     <div className="page subpage">
-      <div className="page-heading">
-        <div>
-          <span className="eyebrow">PERSONALIZAÇÃO</span>
-          <h1>Configurações</h1>
-          <p>Ajuste a experiência do OdeKrai neste dispositivo.</p>
-        </div>
-        <span className="heading-symbol">⚙</span>
-      </div>
+      <PageHeader
+        eyebrow="PERSONALIZAÇÃO"
+        title="Configurações"
+        subtitle="Ajuste a experiência do OdeKrai neste dispositivo."
+      />
       <section className="settings-panel">
         <div className="panel-heading">
           <div>
             <h3>Preferências gerais</h3>
             <p>
               Preferências de aparência ficam no armazenamento local do aplicativo. Perfil e
-              histórico são salvos no banco SQLite local; credenciais ficam no Gerenciador do
+              histórico são salvos no banco de dados local; credenciais ficam no Gerenciador do
               Windows.
             </p>
           </div>
@@ -1240,14 +1211,11 @@ function Settings({
             <strong>Reduzir animações</strong>
             <span>Respeita a preferência de movimento reduzido.</span>
           </div>
-          <button
-            role="switch"
-            aria-checked={settings.reduceMotion}
-            className={`toggle ${settings.reduceMotion ? 'on' : ''}`}
+          <Toggle
+            checked={settings.reduceMotion}
+            label="Reduzir animações"
             onClick={() => update({ ...settings, reduceMotion: !settings.reduceMotion })}
-          >
-            <span />
-          </button>
+          />
         </div>
         <div className="preference-row">
           <div>
@@ -1315,34 +1283,38 @@ function ChatView({
         </span>
       </div>
       <div className="chat-history" aria-label="Histórico de conversas">
-        <button type="button" onClick={onNewConversation} disabled={busy}>
+        <Button type="button" variant="primary" onClick={onNewConversation} disabled={busy}>
           Nova conversa
-        </button>
+        </Button>
         {conversations.map((item) => (
           <span className="chat-history-entry" key={item.id}>
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              className={conversationId === item.id ? 'selected' : ''}
               onClick={() => onConversation(item.id)}
               disabled={busy}
               aria-current={conversationId === item.id ? 'page' : undefined}
             >
               <span>{item.title}</span>
               <small>{new Date(item.created_at * 1000).toLocaleDateString()}</small>
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="ghost"
+              className="delete-conversation"
               onClick={() => onDeleteConversation(item.id)}
               disabled={busy}
               aria-label={`Apagar conversa ${item.title}`}
             >
               Apagar
-            </button>
+            </Button>
           </span>
         ))}
         {conversations.length > 0 && (
-          <button type="button" onClick={onDeleteAll} disabled={busy}>
+          <Button type="button" variant="danger" onClick={onDeleteAll} disabled={busy}>
             Apagar todo o histórico
-          </button>
+          </Button>
         )}
       </div>
       <div className="messages-area">

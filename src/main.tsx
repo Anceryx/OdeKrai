@@ -7,6 +7,7 @@ import { IslandWindow } from './ui/IslandWindow';
 import { DesktopCharacter } from './ui/DesktopCharacter';
 import '@fontsource-variable/manrope';
 import '@fontsource/dm-mono/400.css';
+import './ui/design-tokens.css';
 import './ui/styles.css';
 
 const label = isTauri() ? getCurrentWindow().label : 'main';

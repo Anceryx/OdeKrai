@@ -31,6 +31,13 @@ island/mascote.
 - `npm run tauri:build`: valida o build e as guardas de distribuição antes de compilar/gerar o NSIS; falhar por GLB ou referência proprietária é o resultado esperado neste checkout.
 - `git diff --check`: whitespace e marcadores de conflito.
 
+### UI-2 — sistema visual e cópia
+
+- `DesignSystem.test.tsx`: variantes de botão, nome e estado acessíveis de alternância e cartão selecionável, estrutura de cabeçalho, aviso, selo, cartão, campo e seletor.
+- `npm run build`: verifica TypeScript e bundle após a adoção dos componentes e tokens.
+- Validação visual pendente no Windows: Visão geral, Conversas, Identidade e memória, Conectores, Assistente, Configurações, Permissões, Atividade e Perfil em 1250 × 700 e 1000 × 600; conferir foco, contraste e escala de texto.
+- `assets-src/iconly/` não foi fornecida neste checkout. A substituição de glifos por ícones Iconly e a atribuição/licença associada dependem dos SVGs e da licença exportados pelo usuário.
+
 ### Fase 3 — permissões
 
 - `policy.rs`: tabela completa de modos × riscos × origens normal/tainted × dentro/fora do workspace, incluindo exceções permissivas e bloqueios fixos.

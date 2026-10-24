@@ -1,5 +1,6 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { Button, PageHeader } from './DesignSystem';
 
 export type ProfileData = { displayName: string; nickname: string; avatarDataUrl: string | null };
 export const initials = (name: string) =>
@@ -142,13 +143,11 @@ export function Profile({
     );
   return (
     <div className="page profile-page">
-      <div className="page-heading">
-        <div>
-          <span className="eyebrow">PREFERÊNCIAS PESSOAIS</span>
-          <h1>Seu perfil</h1>
-          <p>O perfil fica no dispositivo. A imagem nunca é enviada ao provedor de IA.</p>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="PREFERÊNCIAS PESSOAIS"
+        title="Seu perfil"
+        subtitle="O perfil fica no dispositivo. A imagem nunca é enviada ao provedor de IA."
+      />
       <section className="settings-panel profile-panel">
         <div className="profile-avatar-preview">
           {draft.avatarDataUrl ? (
@@ -193,13 +192,13 @@ export function Profile({
             onChange={(event) => setDraft({ ...draft, nickname: event.target.value })}
           />
         </label>
-        <button
-          className="primary-button"
+        <Button
+          variant="primary"
           onClick={() => void save()}
           disabled={busy || !draft.displayName.trim()}
         >
           Salvar perfil
-        </button>
+        </Button>
         {homeConfigured && (
           <button
             className="secondary-button"

@@ -11,6 +11,7 @@ import {
   type SimpleIcon,
 } from 'simple-icons';
 import { AI_PROVIDERS, providerCatalogEntry, type AiProvider } from '../core/providers';
+import { PageHeader } from './DesignSystem';
 import {
   activeProviderSettings,
   defaultProviderSettings,
@@ -211,14 +212,15 @@ export function ProviderCatalog({
         lastTest: {
           status: 'passed' as const,
           at: new Date().toISOString(),
-          message: 'Ping de um token aceito.',
+          message: 'O teste rápido foi aceito.',
         },
       };
       setDraft(saved);
       onSave(saved);
-      setNotice('Ping de um token aceito pelo provedor. Esta solicitação pode gerar cobrança.');
+      setNotice('O teste rápido foi aceito pelo provedor. Esta solicitação pode gerar cobrança.');
     } catch (error) {
-      const message = typeof error === 'string' ? error : 'Não foi possível concluir o ping.';
+      const message =
+        typeof error === 'string' ? error : 'Não foi possível concluir o teste rápido.';
       const failed = {
         ...draft,
         baseUrl: endpointForDraft(),
@@ -234,20 +236,17 @@ export function ProviderCatalog({
   }
   return (
     <div className="page provider-page">
-      <div className="page-heading provider-page-heading">
-        <div>
-          <span className="eyebrow">CONECTORES</span>
-          <h1>Conecte IAs ao OdeKrai</h1>
-          <p>
-            14 conectores possuem adaptador. Vertex AI permanece como guia até a integração de
-            autenticação ADC.
-          </p>
-        </div>
-        <span className="provider-count">
-          <strong>15</strong>
-          <span>provedores</span>
-        </span>
-      </div>
+      <PageHeader
+        eyebrow="CONECTORES"
+        title="Conecte IAs ao OdeKrai"
+        subtitle="14 provedores têm integração disponível. O Vertex AI está disponível como guia."
+        actions={
+          <span className="provider-count" aria-label="15 provedores">
+            <strong>15</strong>
+            <span>provedores</span>
+          </span>
+        }
+      />
       <div className="provider-summary" role="status">
         <span className={`connection-orb ${keySaved ? 'ready' : ''}`} />
         <div>
@@ -313,8 +312,8 @@ export function ProviderCatalog({
             ))}
           </div>
           <p className="provider-compat-note">
-            O teste sem geração consulta a lista de modelos da conta quando o provedor oferece esse
-            endpoint. O ping de um token é opcional e pode gerar cobrança.
+            A consulta sem enviar mensagem carrega os modelos da conta quando o provedor oferece
+            esse recurso. O teste de conexão é opcional e pode gerar cobrança.
           </p>
         </section>
         <aside className="provider-detail" aria-label={`Detalhes de ${selected.name}`}>
@@ -324,7 +323,7 @@ export function ProviderCatalog({
               <span
                 className={`provider-status ${selected.integration === 'guide' ? 'guide' : ''}`}
               >
-                {selected.integration === 'guide' ? 'GUIA DISPONÍVEL' : 'ADAPTADOR IMPLEMENTADO'}
+                {selected.integration === 'guide' ? 'GUIA DISPONÍVEL' : 'INTEGRAÇÃO DISPONÍVEL'}
               </span>
               <h2>{selected.name}</h2>
             </div>
@@ -360,10 +359,10 @@ export function ProviderCatalog({
               )}
               <label className="field-label">
                 {selected.region
-                  ? 'Endpoint'
+                  ? 'Endereço'
                   : selected.id === 'azure-openai'
-                    ? 'Endpoint do recurso'
-                    : 'Endpoint da API'}
+                    ? 'Endereço do recurso'
+                    : 'Endereço da API'}
                 <input
                   value={
                     selected.region
@@ -387,7 +386,7 @@ export function ProviderCatalog({
                   };
                   setDraft(restored);
                   onSave(restored);
-                  setNotice('Endpoint e modelo restaurados ao padrão do provedor.');
+                  setNotice('Endereço e modelo restaurados ao padrão do provedor.');
                 }}
               >
                 Restaurar padrão do provedor
@@ -457,7 +456,7 @@ export function ProviderCatalog({
                 </span>
               </label>
               <p className="provider-key-note">
-                A credencial fica no Gerenciador de Credenciais do Windows. O endpoint é restrito a
+                A credencial fica no Gerenciador de Credenciais do Windows. O endereço é restrito a
                 domínios HTTPS oficiais do provedor.
               </p>
               <button
@@ -479,9 +478,9 @@ export function ProviderCatalog({
                   className="text-button"
                   disabled={!credentialAvailable || !draft.model.trim() || busy}
                   onClick={() => void ping()}
-                  title="Envia um ping com limite de uma saída. Pode gerar cobrança."
+                  title="Envia um teste curto ao provedor. Pode gerar cobrança."
                 >
-                  Ping de 1 token (pode gerar cobrança)
+                  Teste rápido (pode gerar cobrança)
                 </button>
               )}
               {credentialAvailable && (

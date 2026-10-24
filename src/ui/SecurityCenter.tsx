@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { Button, PageHeader, SelectableCard } from './DesignSystem';
 
 type Mode = 'sempre_perguntar' | 'aprovar_por_mim' | 'controle_total';
 type Risk = 'leitura' | 'escrita_reversivel' | 'comunicacao_externa' | 'destrutivo_financeiro';
@@ -48,42 +49,50 @@ const modes: { id: Mode; title: string; description: string }[] = [
     id: 'aprovar_por_mim',
     title: 'Aprovar por mim',
     description:
-      'Leituras e gravações reversíveis no workspace seguem automaticamente. Comunicação externa e ações destrutivas pedem aprovação.',
+      'Leituras e alterações reversíveis na pasta de trabalho seguem automaticamente. Mensagens e ações destrutivas pedem aprovação.',
   },
   {
     id: 'sempre_perguntar',
     title: 'Sempre perguntar',
     description:
-      'Toda ação com efeito colateral pede aprovação. Leituras dentro do workspace são permitidas.',
+      'Toda alteração ou envio de mensagem pede aprovação. Leituras na pasta de trabalho são permitidas.',
   },
   {
     id: 'controle_total',
     title: 'Controle total',
     description:
-      'Executa ações permitidas sem perguntar. Pagamentos, segredos e ações destrutivas fora do workspace continuam bloqueados ou exigem aprovação.',
+      'Executa ações permitidas sem perguntar. Pagamentos, segredos e ações destrutivas fora da pasta de trabalho continuam bloqueados ou exigem aprovação.',
   },
 ];
 const risks: { id: Risk; title: string }[] = [
-  { id: 'leitura', title: 'Leitura no workspace' },
+  { id: 'leitura', title: 'Leitura de arquivos' },
   { id: 'escrita_reversivel', title: 'Escrita reversível' },
   { id: 'comunicacao_externa', title: 'Comunicação externa' },
   { id: 'destrutivo_financeiro', title: 'Destrutivo ou financeiro' },
 ];
 const tools = [
-  ['workspace.read_file', 'Ler arquivo do workspace'],
-  ['workspace.write_file', 'Salvar arquivo no workspace'],
-  ['workspace.delete_file', 'Mover arquivo para a lixeira do workspace'],
+  ['workspace.read_file', 'Ler arquivo na pasta de trabalho'],
+  ['workspace.write_file', 'Salvar arquivo na pasta de trabalho'],
+  ['workspace.delete_file', 'Mover arquivo para a lixeira da pasta de trabalho'],
   ['simulated.send_message', 'Simular envio de mensagem'],
   ['simulated.payment', 'Pagamento (bloqueado)'],
 ] as const;
 
+function toolLabel(tool: string): string {
+  return tools.find(([id]) => id === tool)?.[1] ?? 'Ação do OdeKrai';
+}
+
+function riskLabel(risk: Risk): string {
+  return risks.find(({ id }) => id === risk)?.title ?? 'Risco não identificado';
+}
+
 function decision(mode: Mode, risk: Risk): string {
-  if (risk === 'leitura') return 'Permitir dentro do workspace';
+  if (risk === 'leitura') return 'Permitir na pasta de trabalho';
   if (mode === 'sempre_perguntar') return 'Pedir aprovação';
   if (mode === 'aprovar_por_mim')
-    return risk === 'escrita_reversivel' ? 'Permitir no workspace' : 'Pedir aprovação';
+    return risk === 'escrita_reversivel' ? 'Permitir na pasta de trabalho' : 'Pedir aprovação';
   if (risk === 'destrutivo_financeiro')
-    return 'Na lixeira: permitir no workspace; fora: pedir aprovação';
+    return 'Na lixeira: permitir na pasta de trabalho; fora dela: pedir aprovação';
   return 'Permitir (origem externa sempre pede aprovação)';
 }
 
@@ -191,18 +200,18 @@ export function SecurityCenter({ page }: { page: 'permissions' | 'activity' }) {
 
   return (
     <div className="page subpage security-page">
-      <div className="page-heading">
-        <div>
-          <span className="eyebrow">SEGURANÇA LOCAL</span>
-          <h1>{page === 'permissions' ? 'Permissões' : 'Atividade'}</h1>
-          <p>As regras são avaliadas e aplicadas pelo processo Rust.</p>
-        </div>
-        {settings && (
-          <span className={`state-chip ${settings.halted ? 'warning' : 'connected'}`}>
-            {settings.halted ? 'PARADO' : `MODO ${settings.mode.toUpperCase()}`}
-          </span>
-        )}
-      </div>
+      <PageHeader
+        eyebrow="SEGURANÇA LOCAL"
+        title={page === 'permissions' ? 'Permissões' : 'Atividade'}
+        subtitle="Acompanhe as confirmações e os registros de segurança do OdeKrai."
+        actions={
+          settings && (
+            <span className={`state-chip ${settings.halted ? 'warning' : 'connected'}`}>
+              {settings.halted ? 'PARADO' : `MODO ${settings.mode.toUpperCase()}`}
+            </span>
+          )
+        }
+      />
       {error && (
         <div className="security-notice" role="status">
           {error}
@@ -219,20 +228,20 @@ export function SecurityCenter({ page }: { page: 'permissions' | 'activity' }) {
             <div className="panel-heading">
               <div>
                 <h3>Modo global</h3>
-                <p>Escolha como o OdeKrai trata ações simuladas e futuras ferramentas.</p>
+                <p>Defina quando o OdeKrai precisa pedir sua confirmação.</p>
               </div>
             </div>
             <div className="permission-mode-grid">
               {modes.map((mode) => (
-                <button
+                <SelectableCard
                   key={mode.id}
                   className={`permission-mode ${settings.mode === mode.id ? 'selected' : ''}`}
+                  selected={settings.mode === mode.id}
                   onClick={() => void changeMode(mode.id)}
-                  aria-pressed={settings.mode === mode.id}
                 >
                   <strong>{mode.title}</strong>
                   <span>{mode.description}</span>
-                </button>
+                </SelectableCard>
               ))}
             </div>
             <div className="permission-matrix">
@@ -261,7 +270,7 @@ export function SecurityCenter({ page }: { page: 'permissions' | 'activity' }) {
           <section className="settings-panel">
             <div className="panel-heading">
               <div>
-                <h3>Exceções por ferramenta</h3>
+                <h3>Exceções por ação</h3>
                 <p>
                   Uma exceção permissiva pede confirmação nativa do Windows. Bloqueios fixos e
                   conteúdo externo não podem ser ignorados.
@@ -282,7 +291,7 @@ export function SecurityCenter({ page }: { page: 'permissions' | 'activity' }) {
                         ? tool === 'workspace.read_file'
                           ? 'Leitura local já é permitida pela política.'
                           : 'Bloqueio fixo: nenhuma exceção é aceita.'
-                        : tool}
+                        : label}
                     </span>
                   </div>
                   <button
@@ -301,10 +310,10 @@ export function SecurityCenter({ page }: { page: 'permissions' | 'activity' }) {
           <section className="settings-panel">
             <div className="panel-heading">
               <div>
-                <h3>Kill switch</h3>
+                <h3>Parada de emergência</h3>
                 <p>
-                  O atalho global para solicitações de parada é registrado no Rust. Conflitos
-                  aparecem abaixo.
+                  Use um atalho global para parar solicitações em andamento. Conflitos aparecem
+                  abaixo.
                 </p>
               </div>
             </div>
@@ -317,7 +326,7 @@ export function SecurityCenter({ page }: { page: 'permissions' | 'activity' }) {
                 <input
                   value={shortcut}
                   onChange={(event) => setShortcut(event.target.value)}
-                  aria-label="Atalho global do kill switch"
+                  aria-label="Atalho global para parar solicitações"
                   maxLength={80}
                 />
                 <button
@@ -352,26 +361,25 @@ export function SecurityCenter({ page }: { page: 'permissions' | 'activity' }) {
                 </strong>
                 <span>
                   {settings.halted
-                    ? 'Novas ações são recusadas; streams foram cancelados.'
+                    ? 'Novas ações são recusadas e as respostas em andamento foram canceladas.'
                     : 'Parar cancela solicitações em andamento e nega aprovações pendentes.'}
                 </span>
               </div>
-              <button
-                className={settings.halted ? 'primary-button' : 'danger-button'}
+              <Button
+                variant={settings.halted ? 'primary' : 'danger'}
                 onClick={() => void stopOrResume()}
               >
                 {settings.halted ? 'Retomar' : 'Parar tudo'}
-              </button>
+              </Button>
             </div>
           </section>
           {import.meta.env.DEV && (
             <section className="settings-panel">
               <div className="panel-heading">
                 <div>
-                  <h3>Exercitar ferramentas simuladas</h3>
+                  <h3>Testar pedidos de confirmação</h3>
                   <p>
-                    Aparece somente em builds de desenvolvimento. O envio é simulado e pagamentos
-                    são bloqueados.
+                    Área de teste. As mensagens não são enviadas e pagamentos permanecem bloqueados.
                   </p>
                 </div>
               </div>
@@ -390,7 +398,7 @@ export function SecurityCenter({ page }: { page: 'permissions' | 'activity' }) {
                     void runSample({
                       tool: 'workspace.write_file',
                       path: 'fase3-teste.txt',
-                      content: 'Arquivo criado pela ferramenta simulada.',
+                      content: 'Arquivo de teste do OdeKrai.',
                     })
                   }
                 >
@@ -451,7 +459,7 @@ export function SecurityCenter({ page }: { page: 'permissions' | 'activity' }) {
             <input
               value={filter}
               onChange={(event) => setFilter(event.target.value)}
-              placeholder="Filtrar ferramenta, origem ou status"
+              placeholder="Filtrar ação, origem ou situação"
             />
             <button className="secondary-button small-button" onClick={() => void refresh()}>
               Atualizar
@@ -481,9 +489,9 @@ export function SecurityCenter({ page }: { page: 'permissions' | 'activity' }) {
                 key={`${entry.id}-${entry.timestamp}-${entry.status}`}
               >
                 <div>
-                  <strong>{entry.tool}</strong>
+                  <strong>{toolLabel(entry.tool)}</strong>
                   <span>
-                    {new Date(entry.timestamp * 1000).toLocaleString()} · {entry.risk} ·{' '}
+                    {new Date(entry.timestamp * 1000).toLocaleString()} · {riskLabel(entry.risk)} ·{' '}
                     {entry.origin}
                   </span>
                 </div>
@@ -492,7 +500,7 @@ export function SecurityCenter({ page }: { page: 'permissions' | 'activity' }) {
                 </span>
                 <pre>{entry.paramsSummary}</pre>
                 {entry.error && <p>{entry.error}</p>}
-                <small>SHA-256: {entry.hash}</small>
+                <small>Código de integridade: {entry.hash}</small>
               </article>
             ))}
             {!visibleEntries.length && (
@@ -595,12 +603,12 @@ export function ApprovalWindow() {
         <>
           <section className="approval-facts">
             <div>
-              <small>Ferramenta</small>
-              <strong>{pending.tool}</strong>
+              <small>Ação</small>
+              <strong>{toolLabel(pending.tool)}</strong>
             </div>
             <div>
               <small>Risco</small>
-              <strong>{pending.risk}</strong>
+              <strong>{riskLabel(pending.risk)}</strong>
             </div>
             <div>
               <small>Origem</small>

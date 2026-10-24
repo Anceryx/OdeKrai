@@ -78,7 +78,7 @@ export const initialIslandSnapshot: IslandSnapshot = {
 
 export const islandLabels: Record<IslandState, string> = {
   compact: 'Disponível',
-  expanded: 'Companion aberto',
+  expanded: 'Pet aberto',
   retracted: 'Recolhido',
   hidden: 'Oculto',
   listening: 'Ouvindo',

@@ -79,7 +79,7 @@ export function DesktopCharacter() {
       setReturning(false);
     } catch {
       setReturning(false);
-      setError('Não foi possível retornar à ilha. Tente novamente.');
+      setError('Não foi possível retornar o pet à posição inicial. Tente novamente.');
     }
   }
 
@@ -109,11 +109,11 @@ export function DesktopCharacter() {
       <button
         className="desktop-return"
         onClick={() => void returnHome()}
-        aria-label="Retornar o OdeKrai à ilha"
+        aria-label="Retornar o OdeKrai à posição inicial"
       >
         ↩
       </button>
-      <span className="desktop-tooltip">Voltar à ilha</span>
+      <span className="desktop-tooltip">Voltar à posição inicial</span>
       {error && (
         <span className="desktop-error" role="alert">
           {error}

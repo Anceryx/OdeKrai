@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState, type FormEvent } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import { Banner, Button, Card, PageHeader, SelectInput, TextInput } from './DesignSystem';
 
 const TONE_PRESETS = ['direto e cordial', 'acolhedor', 'formal'];
 
@@ -90,7 +91,7 @@ export function AgentHome({
     await run(async () => {
       await invoke('agent_home_init', { path, profile });
       await refresh();
-      setNotice('Pasta criada. O modo escolhido ainda não controla ações nesta fase.');
+      setNotice('Pasta pessoal criada. Ajuste as permissões ativas na tela Permissões.');
     });
   }
   async function saveCore() {
@@ -135,24 +136,32 @@ export function AgentHome({
   }
   if (!isTauri()) return <p>A pasta pessoal está disponível no aplicativo Windows.</p>;
   return (
-    <div className="page settings-page" style={{ maxWidth: 900 }}>
-      <span className="eyebrow">IDENTIDADE LOCAL</span>
-      <h1>Pasta do agente</h1>
-      <p>
-        Configure sua identidade e suas notas locais. O agente ainda não executa ações nem aprende
-        automaticamente.
-      </p>
-      {error && <p role="alert">{error}</p>}
-      {notice && <p role="status">{notice}</p>}
-      {status?.warning && <p role="alert">{status.warning}</p>}
+    <div className="page settings-page">
+      <PageHeader
+        eyebrow="IDENTIDADE LOCAL"
+        title="Identidade e memória"
+        subtitle="Defina como o OdeKrai conversa com você e edite suas notas locais."
+      />
+      {error && (
+        <Banner tone="danger" role="alert">
+          {error}
+        </Banner>
+      )}
+      {notice && <Banner>{notice}</Banner>}
+      {status?.warning && (
+        <Banner tone="warning" role="alert">
+          {status.warning}
+        </Banner>
+      )}
       {!status?.configured ? (
         <form onSubmit={initialize} className="settings-card" style={{ display: 'grid', gap: 12 }}>
           <h2>Primeira execução</h2>
           <label>
             Pasta local
-            <input value={path} onChange={(e) => setPath(e.target.value)} required />
+            <TextInput value={path} onChange={(e) => setPath(e.target.value)} required />
           </label>
-          <button
+          <Button
+            variant="secondary"
             type="button"
             className="secondary-button"
             onClick={async () => {
@@ -161,10 +170,10 @@ export function AgentHome({
             }}
           >
             Escolher pasta
-          </button>
+          </Button>
           <label>
             Seu nome
-            <input
+            <TextInput
               value={profile.name}
               onChange={(e) => setProfile({ ...profile, name: e.target.value })}
               maxLength={60}
@@ -173,7 +182,7 @@ export function AgentHome({
           </label>
           <label>
             Como quer ser chamado
-            <input
+            <TextInput
               value={profile.nickname}
               onChange={(e) => setProfile({ ...profile, nickname: e.target.value })}
               maxLength={60}
@@ -182,17 +191,17 @@ export function AgentHome({
           </label>
           <label>
             Idioma
-            <select
+            <SelectInput
               value={profile.language}
               onChange={(e) => setProfile({ ...profile, language: e.target.value })}
             >
               <option value="pt-BR">Português (Brasil)</option>
               <option value="en">English</option>
-            </select>
+            </SelectInput>
           </label>
           <label>
             Tom
-            <select
+            <SelectInput
               value={customTone ? 'personalizado' : profile.tone}
               onChange={(e) => {
                 setCustomTone(e.target.value === 'personalizado');
@@ -206,12 +215,12 @@ export function AgentHome({
                 </option>
               ))}
               <option value="personalizado">Personalizado</option>
-            </select>
+            </SelectInput>
           </label>
           {customTone && (
             <label>
               Tom personalizado
-              <input
+              <TextInput
                 value={profile.tone}
                 onChange={(e) => setProfile({ ...profile, tone: e.target.value })}
                 maxLength={80}
@@ -220,27 +229,30 @@ export function AgentHome({
             </label>
           )}
           <label>
-            Modo preferido para a fase futura
-            <select
+            Modo de permissão preferido
+            <SelectInput
               value={profile.mode}
               onChange={(e) => setProfile({ ...profile, mode: e.target.value })}
             >
               <option value="sempre_perguntar">Sempre perguntar</option>
               <option value="aprovar_por_mim">Aprovar por mim</option>
               <option value="controle_total">Controle total</option>
-            </select>
+            </SelectInput>
           </label>
-          <p>Os modos serão implementados na Fase 3. Nenhum deles autoriza ações agora.</p>
-          <button type="submit" className="primary-button" disabled={busy}>
+          <p>
+            Esta preferência fica registrada na identidade. Para mudar as permissões ativas, use a
+            tela Permissões.
+          </p>
+          <Button type="submit" variant="primary" disabled={busy}>
             Criar e aprovar identidade
-          </button>
+          </Button>
         </form>
       ) : (
         <>
           <p>
             Pasta: <code>{status.path}</code>
           </p>
-          <section className="settings-card" style={{ display: 'grid', gap: 12 }}>
+          <Card className="settings-card" style={{ display: 'grid', gap: 12 }}>
             <h2>ODEKRAI.md</h2>
             <p>
               Não coloque senhas, tokens ou outros segredos neste arquivo. A versão aprovada é
@@ -279,8 +291,8 @@ export function AgentHome({
             >
               Aprovar e salvar
             </button>
-          </section>
-          <section className="settings-card" style={{ display: 'grid', gap: 12 }}>
+          </Card>
+          <Card className="settings-card" style={{ display: 'grid', gap: 12 }}>
             <h2>Memória</h2>
             <p>
               Somente notas manuais. Não coloque senhas, tokens, documentos ou dados bancários na
@@ -351,7 +363,7 @@ export function AgentHome({
                 Apagar toda a memória
               </button>
             </div>
-          </section>
+          </Card>
         </>
       )}
     </div>

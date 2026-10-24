@@ -65,7 +65,7 @@ export const MASCOT_MOTIONS: { id: MascotMotion; label: string }[] = [
   { id: 'hover', label: 'Seguir o ponteiro' },
   { id: 'dragging', label: 'Arrastar' },
   { id: 'nod', label: 'Confirmar' },
-  { id: 'returning-home', label: 'Retornar à ilha' },
+  { id: 'returning-home', label: 'Retornar à posição inicial' },
   { id: 'sleep', label: 'Dormir' },
   { id: 'wake', label: 'Acordar' },
   { id: 'happy', label: 'Pular de alegria' },
