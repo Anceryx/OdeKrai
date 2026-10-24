@@ -2,6 +2,16 @@
 
 Atualizado em 24/10/2026 após a verificação de fechamento da Fase 3. Requisitos e limites estão detalhados em [`TRACEABILITY.md`](TRACEABILITY.md).
 
+## Fase 4
+
+**Pendente.** O modelo ainda não pode solicitar tools. O chat existente é textual e usa um único
+provedor por vez. Não há `LlmProvider`, schemas de tools, roteador, fallback, orçamento de tokens,
+loop de agente, ferramentas de workspace expostas ao modelo, persistência de tool calls, modo agente
+na conversa, painel de uso ou eventos de execução. A matriz de evidências e os testes realmente
+existentes estão em [`TRACEABILITY.md`](TRACEABILITY.md). Anthropic e OpenAI têm documentação
+oficial de tool use/function calling consultada; isso não equivale a integração local. Todos os
+demais provedores permanecem `unverified` para tools.
+
 ## Implementado
 
 - Catálogo de 15 provedores; Vertex AI permanece como guia. O chat usa um provedor configurado por vez, identificado por `providerId` persistido nas preferências. Preferências antigas são migradas pelo nome conhecido.

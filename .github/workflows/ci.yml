@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   windows-validation:
-    name: Validação e pacote Windows
+    name: Validação Windows
     runs-on: windows-latest
     timeout-minutes: 45
     env:
@@ -45,14 +45,3 @@ jobs:
 
       - name: Compilar a interface
         run: npm run build
-
-      - name: Gerar instalador NSIS
-        run: npm run tauri:build
-
-      - name: Armazenar instalador como artefato
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: odekrai-windows-x64-nsis
-          path: src-tauri/target/release/bundle/nsis/*.exe
-          if-no-files-found: error
-          retention-days: 14

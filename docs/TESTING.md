@@ -1,5 +1,19 @@
 # Testes e validação
 
+## Fase 4 — lacuna de cobertura
+
+Os testes atuais não implementam nem validam um loop de agente. O mock de provedores existente
+verifica o chat de texto; ele não verifica tool calls parciais/completas, multi-turno com resultado,
+usage, capabilities, failover, orçamento diário, nem que um failover jamais repete uma tool. Os
+testes de política cobrem a decisão isolada da Fase 3, mas não a propagação tainted de ToolResult.
+Não há teste de limite de voltas/tempo/tokens, cancelamento de execução, concorrência por conversa,
+schema deny-unknown-fields para ferramentas do modelo, persistência de mensagens de tool ou UI do
+modo agente. A matriz detalhada está em [`TRACEABILITY.md`](TRACEABILITY.md).
+
+Após implementação, todos esses testes devem usar servidor/mock local e zero chamadas a APIs reais.
+Validação visual no Windows deverá cobrir estados do chat, aprovação, parada e integração com
+island/mascote.
+
 ## Verificações automatizadas
 
 - `npm test`: chat, estados da ilha, persistência, carregador de sons, registro das 16 expressões, mapeamento de eventos, interpolação facial, piscadas e movimento reduzido.
@@ -7,6 +21,7 @@
 - `npm run format:check`: estilo Prettier.
 - `npm run check:debug-command`: confirma que declaração e registro do disparo manual estão limitados a `debug_assertions`.
 - `npm run check:release-assets`: verifica `dist/` e falha se encontrar o GLB proprietário ou referências oficiais. O comando de build Tauri executa essa verificação antes do empacotamento.
+- O workflow `CI` valida testes, formatação e build frontend no push/PR, mas não gera nem armazena instaladores Windows como artefatos do GitHub Actions.
 - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`: formatação Rust.
 - `cargo check --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc`: compilação Rust para Windows.
 - `cargo test --manifest-path src-tauri/Cargo.toml --lib`: testes Rust, incluindo cabeçalhos de autenticação com servidor local simulado.

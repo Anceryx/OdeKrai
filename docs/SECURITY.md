@@ -1,5 +1,20 @@
 # Segurança
 
+## Estado de segurança do agente
+
+No HEAD atual não há loop de agente, chamadas de tools por modelo, roteador ou failover. Portanto,
+os riscos de execução automática por ToolResult, repetição de tools, duplicação após failover e
+runaway de custo ainda não têm mitigação de produto. Os requisitos planejados são: resultados
+Untrusted delimitados como dados e propagando `ExternalContent`, limites conservadores por execução,
+truncamento sinalizado, orçamento diário de tokens, e failover somente antes da execução de tools.
+Essas proteções só serão consideradas implementadas quando existirem código Rust e testes mock
+associados. Veja [`TRACEABILITY.md`](TRACEABILITY.md).
+
+O conteúdo lido do workspace pode conter instruções maliciosas mesmo quando o arquivo é local. A
+validação de caminho, `.history` e `.trash` não removem esse risco de injeção; no desenho futuro,
+esse conteúdo deverá ser `Untrusted` e qualquer efeito colateral subsequente deverá atravessar o
+motor de políticas como origem externa.
+
 - Chaves de provedor são salvas pelo backend Tauri via `keyring` no Gerenciador de Credenciais do Windows. O frontend mantém o texto digitado apenas durante a configuração e não recupera segredos já salvos.
 - O chat chama comandos Tauri; não envia chaves diretamente do WebView. Preview web não oferece conexão com provedores.
 - O backend limita provedores conhecidos, HTTPS, hosts por provedor, URLs sem credenciais/parâmetros, redirecionamentos, tamanho de mensagens e tempo de resposta. Erros de transporte não incluem conteúdo da chave.

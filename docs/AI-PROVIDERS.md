@@ -1,5 +1,20 @@
 # Conectores de IA
 
+## Capacidades para modo agente
+
+O modo agente da Fase 4 não está implementado. Logo, nenhum provedor está atualmente habilitado
+para tools pelo aplicativo. Anthropic Messages documenta tool use e streaming; OpenAI documenta
+function calling e streaming em suas APIs oficiais. Isso confirma os contratos de referência, não
+a compatibilidade de terceiros que usam endpoints Chat Completions semelhantes. Até existir
+verificação específica e teste mock por adaptador/modelo, `tools` deve ser tratado como
+`unverified` e falso. Visão, geração de imagens, custo e streaming também não são capacidades de
+roteamento no estado atual.
+
+Referências oficiais: [Anthropic tool use](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview),
+[Anthropic streaming](https://platform.claude.com/docs/en/build-with-claude/streaming),
+[OpenAI function calling](https://developers.openai.com/api/docs/guides/function-calling) e
+[OpenAI streaming](https://developers.openai.com/api/docs/guides/streaming-responses).
+
 ## Adaptadores no código
 
 O catálogo tem 15 itens: 12 usam o formato Chat Completions; Anthropic usa Messages API; Perplexity usa Agent API; Vertex AI permanece sem autenticação ADC/OAuth e aparece como guia. A presença de um adaptador não comprova chave, modelo, conta ou serviço.

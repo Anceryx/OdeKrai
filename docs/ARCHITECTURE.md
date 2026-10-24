@@ -1,6 +1,37 @@
 # Arquitetura
 
+> **Estado da Fase 4:** o loop de agente e a abstração de tools ainda não estão implementados. O
+> diagrama futuro está descrito aqui para delimitar a fronteira de segurança; não representa fluxo
+> executável no HEAD atual.
+
 O catálogo de provedores em `src-tauri/resources/provider-catalog.json` alimenta os metadados do frontend e do Rust. O Rust valida host e caminho, acessa credenciais e implementa listagem documentada de modelos. As preferências guardam configurações por `providerId`; perfil e histórico usam SQLite local. Avatar é processado no Rust e servido como data URL apenas para a interface principal.
+
+## Fluxo de agente planejado — não implementado
+
+```mermaid
+sequenceDiagram
+    participant UI as Interface
+    participant Rust as Loop Rust
+    participant LLM as Provedor LLM
+    participant Policy as Motor da Fase 3
+    participant Approval as Janela de aprovação
+    participant Tool as Tool local
+    UI->>Rust: pedido + conversa
+    Rust->>LLM: mensagens + schemas de tools
+    LLM-->>Rust: texto ou chamada completa
+    Rust->>Policy: ActionRequest com origem e argumentos validados
+    Policy-->>Approval: aprovação necessária
+    Approval-->>Policy: decisão do usuário
+    Policy->>Tool: executar somente após permitir
+    Tool-->>Rust: resultado rotulado Local/Untrusted
+    Rust->>LLM: resultado como dado; próxima volta
+    LLM-->>UI: resposta final via evento
+```
+
+O fluxo acima só poderá ser ativado quando cada chamada passar pelo motor de políticas e auditoria
+Rust. Tool calls parciais não podem executar. Conteúdo Untrusted deve propagar taint até a origem
+da próxima ação. O workspace usa `.history` e `.trash`; arquivos locais baixados ainda podem conter
+injeção de instrução, e a proteção depende do taint e da política para efeitos colaterais.
 
 ## Aplicativo
 
