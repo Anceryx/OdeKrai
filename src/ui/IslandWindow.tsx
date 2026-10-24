@@ -10,6 +10,8 @@ import {
 } from '../core/island';
 import { loadSettings, saveSettings } from '../core/settings';
 import { normalizeSoundPreferences, playSound } from '../core/sounds';
+import { expressionForIslandState } from '../core/mascot';
+import { OdekraiMascot } from './OdekraiMascot';
 
 export function IslandWindow() {
   const [snapshot, setSnapshot] = useState<IslandSnapshot>(initialIslandSnapshot);
@@ -102,9 +104,11 @@ export function IslandWindow() {
               )
             }
           >
-            <span className="mascot-glyph" aria-hidden="true">
-              O
-            </span>
+            <OdekraiMascot
+              className="island-mascot-renderer"
+              expression={expressionForIslandState(state)}
+              reduceMotion={settings.reduceMotion}
+            />
           </button>
         )}
         <div className="island-copy">
@@ -165,7 +169,7 @@ export function IslandWindow() {
                       void emit('companion-state', {
                         type: 'activity',
                         state: 'error',
-                        message: 'Não foi possível mover o marcador para o desktop',
+                        message: 'Não foi possível mover o mascote para o desktop',
                       });
                     });
                 }}

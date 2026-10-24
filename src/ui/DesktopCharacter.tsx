@@ -3,12 +3,18 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { loadSettings, saveSettings } from '../core/settings';
 import { normalizeSoundPreferences, playSound } from '../core/sounds';
-import type { IslandEvent } from '../core/island';
+import { initialIslandSnapshot, transitionIsland, type IslandEvent } from '../core/island';
+import { expressionForIslandState, type MascotExpression } from '../core/mascot';
+import { OdekraiMascot, type MascotMotionRequest } from './OdekraiMascot';
 
 export function DesktopCharacter() {
   const [settings, setSettings] = useState(loadSettings);
   const [error, setError] = useState('');
-  const [activity, setActivity] = useState('idle');
+  const [expression, setExpression] = useState<MascotExpression>('idle');
+  const [motionRequest, setMotionRequest] = useState<MascotMotionRequest>();
+  const motionId = useRef(0);
+  const [returning, setReturning] = useState(false);
+  const activitySnapshot = useRef(initialIslandSnapshot);
   const moveTimer = useRef<number | undefined>(undefined);
   useEffect(() => {
     document.body.classList.add('island-window-body');
@@ -28,7 +34,8 @@ export function DesktopCharacter() {
         }, 180);
       }),
       listen<IslandEvent>('companion-state', ({ payload }) => {
-        if (payload.type === 'activity') setActivity(payload.state);
+        activitySnapshot.current = transitionIsland(activitySnapshot.current, payload);
+        setExpression(expressionForIslandState(activitySnapshot.current.state));
       }),
     ]).then((off) => {
       unlisten = off;
@@ -54,33 +61,55 @@ export function DesktopCharacter() {
     const y =
       companion.coordinates?.y ?? (bottom ? Math.max(0, screen.availHeight - height - 58) : 28);
     try {
+      setReturning(true);
+      setMotionRequest({
+        type: 'returning-home',
+        startedAt: performance.now(),
+        id: ++motionId.current,
+      });
       await invoke('set_island_position', { x, y, size: companion.size });
       await invoke('set_island_topmost', { enabled: companion.alwaysOnTop });
       await invoke('set_island_visible', { visible: true });
+      await new Promise((resolve) => window.setTimeout(resolve, 280));
       await invoke('set_character_visible', { visible: false });
       saveSettings({ ...current, companion });
       await emit('companion-state', { type: 'reveal' });
       void playSound('return_home', normalizeSoundPreferences(companion.sounds));
       setError('');
+      setReturning(false);
     } catch {
+      setReturning(false);
       setError('Não foi possível retornar à ilha. Tente novamente.');
     }
   }
 
   return (
-    <main className="desktop-character">
+    <main
+      className={`desktop-character ${returning ? 'desktop-returning' : ''} ${settings.reduceMotion ? 'reduce-motion' : ''}`}
+      onPointerDown={() => {
+        setMotionRequest({
+          type: 'dragging',
+          startedAt: performance.now(),
+          id: ++motionId.current,
+        });
+      }}
+      onPointerUp={() => {
+        window.setTimeout(() => {
+          setMotionRequest({ type: 'idle', startedAt: performance.now(), id: ++motionId.current });
+        }, 300);
+      }}
+    >
       <div className="desktop-drag-handle" data-tauri-drag-region aria-hidden="true" />
-      <button
-        className={`desktop-mascot desktop-${activity}`}
-        aria-label={`Marcador geométrico temporário do Odekrai. Estado: ${activity}`}
-        title="ODEKRAI"
-      >
-        <span>O</span>
-      </button>
+      <OdekraiMascot
+        className={`desktop-model desktop-${expression}`}
+        expression={expression}
+        reduceMotion={settings.reduceMotion}
+        motionRequest={motionRequest}
+      />
       <button
         className="desktop-return"
         onClick={() => void returnHome()}
-        aria-label="Retornar o marcador à ilha"
+        aria-label="Retornar o mascote à ilha"
       >
         ↩
       </button>

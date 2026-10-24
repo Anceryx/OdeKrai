@@ -9,6 +9,14 @@ import {
   SOUND_EVENTS,
   type SoundEvent,
 } from '../core/sounds';
+import {
+  MASCOT_EXPRESSIONS,
+  MASCOT_EXPRESSION_LABELS,
+  MASCOT_MOTIONS,
+  type MascotExpression,
+  type MascotMotion,
+} from '../core/mascot';
+import { OdekraiMascot, type MascotMetrics, type MascotMotionRequest } from './OdekraiMascot';
 
 type Section = 'overview' | 'chat' | 'providers' | 'companion' | 'settings';
 
@@ -32,6 +40,7 @@ export function App() {
   const [toast, setToast] = useState('');
   const [chatMode, setChatMode] = useState(false);
   const request = useRef<AbortController | null>(null);
+  const companionStateTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     saveSettings(settings);
@@ -69,14 +78,20 @@ export function App() {
       Math.max(0, (screen.availHeight - 104 * companion.size) / 2);
     void invoke('set_character_position', { x, y, size: companion.size })
       .then(() => invoke('set_character_visible', { visible: true }))
-      .catch(() => setToast('Não foi possível restaurar o marcador no desktop.'));
+      .catch(() => setToast('Não foi possível restaurar o mascote no desktop.'));
   }, []);
   useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(''), 2600);
     return () => window.clearTimeout(timer);
   }, [toast]);
-  useEffect(() => () => request.current?.abort(), []);
+  useEffect(
+    () => () => {
+      request.current?.abort();
+      window.clearTimeout(companionStateTimer.current);
+    },
+    [],
+  );
 
   const currentNav = useMemo(() => nav.find((item) => item.id === section), [section]);
 
@@ -115,12 +130,23 @@ export function App() {
       );
       setMessages([...next, { role: 'assistant', content: answer }]);
       void playSound('success', normalizeSoundPreferences(settings.companion.sounds));
-      if (isTauri())
+      window.clearTimeout(companionStateTimer.current);
+      if (isTauri()) {
         void emit('companion-state', {
           type: 'activity',
-          state: 'completed',
-          message: 'Resposta recebida',
+          state: 'responding',
+          message: 'Resposta pronta',
         });
+        companionStateTimer.current = window.setTimeout(
+          () =>
+            void emit('companion-state', {
+              type: 'activity',
+              state: 'completed',
+              message: 'Resposta recebida',
+            }),
+          1100,
+        );
+      }
     } catch (cause) {
       if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
         setMessages(next);
@@ -550,6 +576,22 @@ function Companion({
   onError: (message: string) => void;
 }) {
   const [soundEvent, setSoundEvent] = useState<SoundEvent>('notification');
+  const [previewExpression, setPreviewExpression] = useState<MascotExpression>('happy');
+  const [previewMotion, setPreviewMotion] = useState<MascotMotionRequest>();
+  const [previewMetrics, setPreviewMetrics] = useState<MascotMetrics>({
+    fps: 0,
+    triangles: 0,
+    drawCalls: 0,
+  });
+  const [previewAnimations, setPreviewAnimations] = useState(true);
+  const [previewLight, setPreviewLight] = useState(1);
+  const [previewScale, setPreviewScale] = useState(1);
+  const [previewOffset, setPreviewOffset] = useState({ x: 0, y: 0 });
+  const [previewCamera, setPreviewCamera] = useState({ yaw: 0, pitch: 0, zoom: 1 });
+  const previewMotionId = useRef(0);
+  function triggerPreviewMotion(type: MascotMotion) {
+    setPreviewMotion({ type, startedAt: performance.now(), id: ++previewMotionId.current });
+  }
   async function applyPosition(next: AppSettings['companion']) {
     if (!isTauri() || !next.enabled) return;
     const width = 280 * next.size;
@@ -604,7 +646,7 @@ function Companion({
       }
     } catch {
       update({ ...settings, companion: { ...settings.companion, freeMode: !freeMode } });
-      onError('Não foi possível mover o marcador entre as janelas.');
+      onError('Não foi possível mover o mascote entre as janelas.');
     }
   }
   return (
@@ -621,20 +663,163 @@ function Companion({
         <div className="preview-grid" />
         <div className="preview-island">
           <span className="island-light" />
-          <div className="placeholder-mascot">O</div>
+          <OdekraiMascot
+            className="preview-mascot"
+            expression={previewExpression}
+            reduceMotion={settings.reduceMotion}
+            motionRequest={previewMotion}
+            animationsEnabled={previewAnimations}
+            lightIntensity={previewLight}
+            modelScale={previewScale}
+            modelOffset={previewOffset}
+            cameraYaw={previewCamera.yaw}
+            cameraPitch={previewCamera.pitch}
+            cameraZoom={previewCamera.zoom}
+            onMetrics={setPreviewMetrics}
+          />
           <span className="island-label">
             ILHA ODEKRAI <i />
           </span>
         </div>
         <div className="preview-caption">
-          <span className="eyebrow">PRÉVIA DO COMPANION</span>
-          <strong>Um espaço próprio para estar por perto.</strong>
-          <p>
-            O personagem definitivo será criado pelo proprietário. Esta forma geométrica é apenas um
-            marcador técnico.
-          </p>
+          <span className="eyebrow">MASCOTE 3D OFICIAL</span>
+          <strong>{MASCOT_EXPRESSION_LABELS[previewExpression]}</strong>
+          <p>Expressões programáticas aplicadas à malha facial do GLB local.</p>
         </div>
       </div>
+      <details className="mascot-preview-tools">
+        <summary>Pré-visualização e ferramentas de diagnóstico</summary>
+        <div className="mascot-preview-notice">
+          Simulação local de desenvolvimento. Os controles deste painel não emitem eventos reais do
+          Companion.
+        </div>
+        <div className="mascot-preview-controls">
+          <label className="mascot-expression-control">
+            <span>Expressão facial</span>
+            <select
+              value={previewExpression}
+              onChange={(event) => setPreviewExpression(event.target.value as MascotExpression)}
+            >
+              {MASCOT_EXPRESSIONS.map((expression) => (
+                <option key={expression} value={expression}>
+                  {MASCOT_EXPRESSION_LABELS[expression]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="mascot-animation-toggle">
+            <input
+              type="checkbox"
+              checked={previewAnimations}
+              onChange={(event) => setPreviewAnimations(event.target.checked)}
+            />
+            Ativar movimentos
+          </label>
+          <div className="mascot-motion-tools">
+            <strong>Testar movimento</strong>
+            <div>
+              {MASCOT_MOTIONS.map((motion) => (
+                <button key={motion.id} onClick={() => triggerPreviewMotion(motion.id)}>
+                  {motion.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label>
+            <span>Iluminação: {previewLight.toFixed(1)}×</span>
+            <input
+              type="range"
+              min="0.4"
+              max="1.6"
+              step="0.05"
+              value={previewLight}
+              onChange={(event) => setPreviewLight(Number(event.target.value))}
+            />
+          </label>
+          <label>
+            <span>Escala: {Math.round(previewScale * 100)}%</span>
+            <input
+              type="range"
+              min="0.75"
+              max="1.25"
+              step="0.05"
+              value={previewScale}
+              onChange={(event) => setPreviewScale(Number(event.target.value))}
+            />
+          </label>
+          <label>
+            <span>Posição horizontal: {previewOffset.x.toFixed(2)}</span>
+            <input
+              type="range"
+              min="-0.45"
+              max="0.45"
+              step="0.03"
+              value={previewOffset.x}
+              onChange={(event) =>
+                setPreviewOffset((current) => ({ ...current, x: Number(event.target.value) }))
+              }
+            />
+          </label>
+          <label>
+            <span>Posição vertical: {previewOffset.y.toFixed(2)}</span>
+            <input
+              type="range"
+              min="-0.45"
+              max="0.45"
+              step="0.03"
+              value={previewOffset.y}
+              onChange={(event) =>
+                setPreviewOffset((current) => ({ ...current, y: Number(event.target.value) }))
+              }
+            />
+          </label>
+          <label>
+            <span>Órbita horizontal: {previewCamera.yaw}°</span>
+            <input
+              type="range"
+              min="-35"
+              max="35"
+              step="1"
+              value={previewCamera.yaw}
+              onChange={(event) =>
+                setPreviewCamera((current) => ({ ...current, yaw: Number(event.target.value) }))
+              }
+            />
+          </label>
+          <label>
+            <span>Órbita vertical: {previewCamera.pitch}°</span>
+            <input
+              type="range"
+              min="-18"
+              max="18"
+              step="1"
+              value={previewCamera.pitch}
+              onChange={(event) =>
+                setPreviewCamera((current) => ({ ...current, pitch: Number(event.target.value) }))
+              }
+            />
+          </label>
+          <label>
+            <span>Zoom: {previewCamera.zoom.toFixed(2)}×</span>
+            <input
+              type="range"
+              min="0.8"
+              max="1.3"
+              step="0.05"
+              value={previewCamera.zoom}
+              onChange={(event) =>
+                setPreviewCamera((current) => ({ ...current, zoom: Number(event.target.value) }))
+              }
+            />
+          </label>
+          <div className="mascot-preview-metrics" aria-live="polite">
+            <strong>Renderização</strong>
+            <span>{previewMetrics.fps} FPS</span>
+            <span>{previewMetrics.triangles.toLocaleString('pt-BR')} triângulos</span>
+            <span>{previewMetrics.drawCalls} chamadas</span>
+          </div>
+        </div>
+      </details>
       <section className="settings-panel compact-panel">
         <div className="panel-heading">
           <div>
@@ -682,8 +867,8 @@ function Companion({
         </div>
         <div className="preference-row">
           <div>
-            <strong>Modo livre do marcador</strong>
-            <span>Permite arrastar o marcador geométrico em uma janela separada.</span>
+            <strong>Modo livre do mascote</strong>
+            <span>Permite mover o mascote 3D em uma janela separada.</span>
           </div>
           <button
             role="switch"
@@ -868,16 +1053,16 @@ function Companion({
       <section className="settings-panel compact-panel">
         <div className="panel-heading">
           <div>
-            <h3>Imagens e animações</h3>
+            <h3>Modelo 3D e expressões</h3>
             <p>
-              A arquitetura está preparada para receber os assets oficiais quando estiverem
-              disponíveis.
+              O modelo oficial é um asset local e não é incluído automaticamente em publicações do
+              código-fonte.
             </p>
           </div>
-          <span className="state-chip">EM PREPARAÇÃO</span>
+          <span className="state-chip connected">ATIVO NESTE CHECKOUT</span>
         </div>
         <div className="inline-link">
-          Leia o guia de assets <span>↗</span>
+          Leia o guia de assets e direitos <span>↗</span>
         </div>
       </section>
     </div>

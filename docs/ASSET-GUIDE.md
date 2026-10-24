@@ -1,12 +1,16 @@
 # Guia de assets do Odekrai
 
-As artes definitivas serão fornecidas pelo proprietário. A ilha atual usa CSS e um glifo geométrico temporário; não usa imagens de personagem de terceiros.
+O proprietário forneceu o modelo oficial `odekrai-head.glb` e seis referências visuais no pacote local `ODEKRAI_Referencias_Codex.zip`. O modelo e as referências foram extraídos para `assets/odekrai/character/` e `assets/odekrai/previews/official-references/`, respectivamente. `.gitignore` mantém esses arquivos fora do Git.
 
-## Personagem futuro
+O ícone do aplicativo em `src-tauri/icons/icon.ico` é um recurso provisório gerado a partir do glifo circular “O” usado na interface. A versão PNG de origem fica ao lado. Ele não contém a arte oficial do mascote e deve ser substituído quando o proprietário fornecer o ícone final.
 
-- PNG RGBA transparente em sRGB para poses estáticas e sequências; WebP quando transparência e qualidade forem adequadas.
-- GLB poderá ser integrado quando o mascote e a necessidade de renderização 3D forem aprovados. Não adicionar dependência 3D antes dessa etapa.
-- Sprite sheets devem informar dimensões, grade, taxa de quadros, âncora e licença no manifesto.
+## Mascote oficial
+
+- O renderer usa o GLB com Three.js e `GLTFLoader`; as 16 expressões são desenhadas em Canvas 2D e aplicadas por `CanvasTexture` à malha facial.
+- O asset fornecido é proprietário. A presença no checkout não concede licença MIT nem autorização para distribuição. Builds locais com o modelo incorporam o GLB ao diretório `dist`; não publicar esses builds nem commitar o arquivo sem autorização expressa.
+- Um checkout sem o GLB mantém o marcador de fallback, permitindo builds públicos do código sem incluir os arquivos oficiais.
+- As imagens de referência são exclusivamente para revisão visual; não são sprites e não entram no bundle do aplicativo.
+- Preservar os nomes internos `ADA_` do modelo. O código cria o alias `odekraiRoot` e valida `ADA_Face_Display` e `ADA_Eyes_Emissive_ReplaceTexture`.
 - Não copiar arte, animação, ícones ou sons do Coucou/Mochi.
 
 ## Áudio
