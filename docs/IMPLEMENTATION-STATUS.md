@@ -15,4 +15,4 @@ Atualizado em 24/10/2026 para a Fase 1 na branch `main`. Resultados anteriores n
 - Histórico SQLite não é criptografado pelo aplicativo. Proteção em repouso depende do dispositivo.
 - Ainda são necessários testes com contas e chaves reais dos provedores, Credential Manager do Windows, streaming com respostas reais, reinício do aplicativo e inspeção visual do Hub, ilha e mascote.
 - DPI, múltiplos monitores, fullscreen, foco, click-through, WebGL, instalador e atualização não são comprovados pelos testes automatizados.
-- Agent loop, tools, modos de permissão, memória do agente, pasta do agente, `ODEKRAI.md` gerado pelo aplicativo, roteador e sons integrados continuam fora do escopo implementado. O arquivo `ODEKRAI.md` local não rastreado não é parte da implementação.
+- Agent loop, tools, modos de permissão, memória do agente, pasta do agente, geração e carregamento de `ODEKRAI.md` pelo aplicativo, roteador e sons integrados continuam fora do escopo implementado. O `ODEKRAI.md` versionado é apenas um modelo com campos a preencher.
