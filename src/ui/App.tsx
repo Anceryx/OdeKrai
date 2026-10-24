@@ -8,7 +8,7 @@ import {
   type AppSettings,
   type ProviderSettings,
 } from '../core/settings';
-import { emit } from '@tauri-apps/api/event';
+import { emit, listen } from '@tauri-apps/api/event';
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
 import {
   normalizeSoundPreferences,
@@ -28,8 +28,18 @@ import { AI_PROVIDERS, type AiProvider } from '../core/providers';
 import { ProviderCatalog } from './ProviderCatalog';
 import { AgentHome } from './AgentHome';
 import { Profile, initials, type ProfileData } from './Profile';
+import { ApprovalWindow, isApprovalWindow, SecurityCenter } from './SecurityCenter';
 
-type Section = 'overview' | 'chat' | 'providers' | 'companion' | 'settings' | 'agent' | 'profile';
+type Section =
+  | 'overview'
+  | 'chat'
+  | 'providers'
+  | 'companion'
+  | 'settings'
+  | 'permissions'
+  | 'activity'
+  | 'agent'
+  | 'profile';
 type Conversation = { id: string; title: string };
 
 const nav: { id: Section; label: string; icon: string; group: string }[] = [
@@ -39,11 +49,21 @@ const nav: { id: Section; label: string; icon: string; group: string }[] = [
   { id: 'providers', label: 'Conectores de IA', icon: '✳', group: 'INTELIGÊNCIA' },
   { id: 'companion', label: 'Assistente do OdeKrai', icon: '◇', group: 'PERSONALIZAÇÃO' },
   { id: 'settings', label: 'Configurações', icon: '⚙', group: 'PERSONALIZAÇÃO' },
+  { id: 'permissions', label: 'Permissões', icon: '⛨', group: 'PERSONALIZAÇÃO' },
+  { id: 'activity', label: 'Atividade', icon: '≡', group: 'PERSONALIZAÇÃO' },
 ];
 
 export function App() {
+  return isApprovalWindow() ? <ApprovalWindow /> : <MainApp />;
+}
+
+function MainApp() {
   const [section, setSection] = useState<Section>('overview');
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
+  const [permissionIndicator, setPermissionIndicator] = useState<{
+    mode: string;
+    halted: boolean;
+  } | null>(null);
   const [profile, setProfile] = useState<ProfileData>({
     displayName: '',
     nickname: '',
@@ -62,6 +82,32 @@ export function App() {
   const [chatMode, setChatMode] = useState(false);
   const request = useRef<string | null>(null);
   const companionStateTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    const refreshPermissionIndicator = () => {
+      void invoke<{ mode: string; halted: boolean }>('get_permission_settings')
+        .then(setPermissionIndicator)
+        .catch(() => setPermissionIndicator(null));
+    };
+    refreshPermissionIndicator();
+    let unlisten: (() => void)[] = [];
+    void Promise.all([
+      listen('security-halted', () => {
+        setToast('O OdeKrai foi parado. Ações e respostas em andamento foram canceladas.');
+        refreshPermissionIndicator();
+      }),
+      listen('security-resumed', () => {
+        setToast('O OdeKrai foi retomado.');
+        refreshPermissionIndicator();
+      }),
+      listen('permission-settings-updated', refreshPermissionIndicator),
+      listen<string>('security-error', ({ payload }) => setToast(payload)),
+    ]).then((off) => {
+      unlisten = off;
+    });
+    return () => unlisten.forEach((off) => off());
+  }, []);
 
   useEffect(() => {
     saveSettings(settings);
@@ -410,6 +456,28 @@ export function App() {
             <span className="connection">
               <i /> LOCAL
             </span>
+            {permissionIndicator?.halted && (
+              <button
+                className="security-state halted"
+                onClick={() => {
+                  setSection('permissions');
+                  setChatMode(false);
+                }}
+              >
+                PARADO · PERMISSÕES
+              </button>
+            )}
+            {!permissionIndicator?.halted && permissionIndicator?.mode === 'controle_total' && (
+              <button
+                className="security-state total"
+                onClick={() => {
+                  setSection('permissions');
+                  setChatMode(false);
+                }}
+              >
+                CONTROLE TOTAL
+              </button>
+            )}
             <button
               className="icon-button"
               aria-label="Ajuda"
@@ -490,6 +558,8 @@ export function App() {
             {section === 'settings' && (
               <Settings settings={settings} update={(next) => setSettings(next)} />
             )}
+            {section === 'permissions' && <SecurityCenter page="permissions" />}
+            {section === 'activity' && <SecurityCenter page="activity" />}
             {section === 'agent' && (
               <AgentHome initialName={profile.displayName} initialNickname={profile.nickname} />
             )}

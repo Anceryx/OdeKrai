@@ -8,8 +8,8 @@ Leia este arquivo inteiro antes de alterar qualquer coisa.
 OdeKrai é um "pet" de IA para Windows que age como assistente pessoal do usuário ("o eu" dele),
 usando até 15 provedores de IA configuráveis. Stack: Tauri 2 (Rust) + React 19 + TypeScript + Vite + Three.js.
 
-Estado atual: chat com um provedor por vez, mascote 3D, pasta pessoal e memória manual.
-Ainda NÃO existem: agent loop, tools, motor de permissões, aprendizado automático e roteador.
+Estado atual: chat com um provedor por vez, mascote 3D, pasta pessoal, memória manual e motor de permissões em Rust exercitado por ferramentas simuladas.
+Ainda NÃO existem: agent loop, ferramentas reais, aprendizado automático e roteador.
 Consulte `docs/IMPLEMENTATION-STATUS.md` e `docs/ROADMAP.md` antes de planejar.
 
 ## Mapa do código
@@ -17,6 +17,8 @@ Consulte `docs/IMPLEMENTATION-STATUS.md` e `docs/ROADMAP.md` antes de planejar.
 - `src-tauri/src/lib.rs` — janelas `main`, `island`, `mascot`, regiões Win32, comandos de janela.
 - `src-tauri/src/providers.rs` — credenciais (keyring), chamadas HTTP (reqwest), allowlist de hosts.
 - `src-tauri/src/agent_home.rs` — pasta pessoal, identidade aprovada e memória manual.
+- `src-tauri/src/policy.rs` — matriz pura de modo, risco, origem e workspace.
+- `src-tauri/src/security.rs` — ferramentas simuladas, aprovações, auditoria e kill switch.
 - `src/core/` — lógica sem UI: `providers`, `settings`, `island` (FSM), `sounds`, `mascot`, `mascot-face`.
 - `src/ui/` — React: `App.tsx` (Hub + chat), `OdekraiCompanion.tsx` (3D), `IslandWindow.tsx`.
 - `docs/` — arquitetura, segurança, privacidade, provedores, testes, status.

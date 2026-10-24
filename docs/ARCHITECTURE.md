@@ -24,7 +24,15 @@ No Windows, as janelas auxiliares recebem regiões Win32 arredondadas para hit-t
 
 `src-tauri/src/agent_home.rs` valida a pasta escolhida na primeira execução (sugestão: `%USERPROFILE%\OdeKrai`) e cria `ODEKRAI.md`, `memory/`, `workspace/`, `skills/` e `logs/`. O template está embutido no Rust; o repositório não contém o arquivo pessoal gerado. A última versão aprovada e seu SHA-256 ficam nos dados locais do aplicativo. Uma alteração externa suspende o prompt até revisão e aprovação.
 
-O Rust compõe o prompt na ordem: regras fixas, identidade aprovada e até 1.024 caracteres de `memory/estilo.md`. Anthropic recebe `system`, APIs Chat Completions recebem uma mensagem `system` e a [Perplexity Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart) recebe `instructions`. Sem pasta configurada, o chat funciona sem prompt pessoal. Os modos ainda são preferências registradas, sem motor de permissões.
+O Rust compõe o prompt na ordem: regras fixas, identidade aprovada, até 1.024 caracteres de `memory/estilo.md` e o modo efetivo lido do SQLite local. Anthropic recebe `system`, APIs Chat Completions recebem uma mensagem `system` e a [Perplexity Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart) recebe `instructions`. Sem pasta configurada, o chat funciona sem prompt pessoal.
+
+## Motor de permissões
+
+`src-tauri/src/policy.rs` contém a política pura e tabelada de modo, risco, origem e localização no workspace. `src-tauri/src/security.rs` guarda o estado de segurança em SQLite, valida os parâmetros tipados de `SimulatedAction`, decide e registra auditoria antes da execução. Só as ações de arquivo dentro de `workspace/` têm efeito local; comunicação é apenas simulada e pagamento é sempre bloqueado.
+
+Pedidos `AskUser` entram numa fila Rust limitada e abrem a janela Tauri `approval`. A capability `src-tauri/capabilities/approval.json` dá somente os eventos e o fechamento de janela necessários. A confirmação, expiração, hash dos parâmetros e execução de uso único são verificados no Rust. A janela principal configura modo/atalho e consulta a tela de atividade; não pode responder aprovações.
+
+O plugin Tauri `global-shortcut` registra o atalho no processo nativo. O kill switch persiste a parada, cancela tokens dos streams, nega a fila e bloqueia novos envios a provedores. Retomar só funciona depois de gravar a entrada de auditoria. As decisões no WebView servem somente para exibição e entrada do usuário.
 
 ## Limites conhecidos
 

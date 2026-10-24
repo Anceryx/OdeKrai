@@ -8,6 +8,7 @@ A personal AI assistant for Windows, built with React, TypeScript, and Tauri 2. 
 - Native Tauri windows for the floating island and free mascot mode.
 - Local preferences without API keys.
 - Credential storage through Windows Credential Manager and message requests through the Rust process.
+- A Rust permission engine with native, one-time approvals, chained local audit logs, and a global kill switch. Only simulated tools are available in this phase.
 - Adapters for 12 Chat Completions APIs, Anthropic Messages, and Perplexity Agent API. Vertex AI remains a guide pending ADC/OAuth integration.
 - Official 3D model is local and Git-ignored; checkouts without the asset use a fallback.
 

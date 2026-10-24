@@ -2,13 +2,22 @@ use keyring::Entry;
 use reqwest::{header, redirect::Policy, Client, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{collections::HashMap, sync::Mutex, time::Duration};
-use tauri::{ipc::Channel, State};
+use std::{
+    collections::HashMap,
+    future::Future,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Mutex,
+    },
+    time::Duration,
+};
+use tauri::{ipc::Channel, Manager, State};
 use tokio_util::sync::CancellationToken;
 
 const KEYRING_SERVICE: &str = "site.anceryx.odekrai.provider";
 const MAX_CREDENTIAL_BYTES: usize = 4096;
 const MAX_MESSAGE_BYTES: usize = 1_000_000;
+static INTERNAL_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -71,6 +80,20 @@ pub struct ProviderReply {
 
 #[derive(Default)]
 pub struct ProviderRequests(Mutex<HashMap<String, CancellationToken>>);
+
+pub fn cancel_all(app: &tauri::AppHandle) {
+    if let Some(state) = app.try_state::<ProviderRequests>() {
+        cancel_requests(&state);
+    }
+}
+
+fn cancel_requests(state: &ProviderRequests) {
+    if let Ok(requests) = state.0.lock() {
+        for token in requests.values() {
+            token.cancel();
+        }
+    }
+}
 
 fn supports_credentials(provider_id: &str) -> bool {
     matches!(
@@ -175,11 +198,57 @@ pub fn validate_provider_endpoint(
 #[tauri::command]
 pub async fn list_provider_models(
     caller: tauri::WebviewWindow,
+    state: State<'_, ProviderRequests>,
+    security: State<'_, crate::security::SecurityState>,
     provider_id: String,
     base_url: String,
 ) -> Result<Vec<ModelOption>, String> {
     super::require_main(&caller)?;
-    fetch_models(&provider_id, &base_url).await
+    cancellable_request(&state, &security, fetch_models(&provider_id, &base_url)).await
+}
+
+async fn cancellable_request<T, F>(
+    requests: &ProviderRequests,
+    security: &crate::security::SecurityState,
+    future: F,
+) -> Result<T, String>
+where
+    F: Future<Output = Result<T, String>>,
+{
+    if security.is_halted() {
+        return Err("O OdeKrai está parado pelo kill switch.".into());
+    }
+    let token = CancellationToken::new();
+    let id;
+    {
+        let mut pending = requests
+            .0
+            .lock()
+            .map_err(|_| "Não foi possível iniciar a solicitação.".to_string())?;
+        loop {
+            let candidate = format!(
+                "internal-{}",
+                INTERNAL_REQUEST_ID.fetch_add(1, Ordering::Relaxed)
+            );
+            if !pending.contains_key(&candidate) {
+                id = candidate;
+                pending.insert(id.clone(), token.clone());
+                break;
+            }
+        }
+    }
+    if security.is_halted() {
+        token.cancel();
+    }
+    let result = tokio::select! {
+        biased;
+        _=token.cancelled()=>Err("Solicitação cancelada pelo kill switch.".into()),
+        result=future=>result,
+    };
+    if let Ok(mut pending) = requests.0.lock() {
+        pending.remove(&id);
+    }
+    result
 }
 
 async fn fetch_models(provider_id: &str, base_url: &str) -> Result<Vec<ModelOption>, String> {
@@ -255,15 +324,30 @@ async fn fetch_models(provider_id: &str, base_url: &str) -> Result<Vec<ModelOpti
 #[tauri::command]
 pub async fn test_provider_connection(
     caller: tauri::WebviewWindow,
+    requests: State<'_, ProviderRequests>,
+    security: State<'_, crate::security::SecurityState>,
     provider_id: String,
     base_url: String,
     model: String,
 ) -> Result<ConnectionTest, String> {
     super::require_main(&caller)?;
+    cancellable_request(
+        &requests,
+        &security,
+        test_provider_connection_inner(&provider_id, &base_url, &model),
+    )
+    .await
+}
+
+async fn test_provider_connection_inner(
+    provider_id: &str,
+    base_url: &str,
+    model: &str,
+) -> Result<ConnectionTest, String> {
     credential_entry(&provider_id)?
         .get_password()
         .map_err(|_| "Salve uma credencial para testar a conexão.")?;
-    let endpoint = provider_endpoint(&provider_id, &base_url)?;
+    let endpoint = provider_endpoint(provider_id, base_url)?;
     let mut stages = vec![
         ConnectionStage {
             id: "credential".into(),
@@ -279,7 +363,7 @@ pub async fn test_provider_connection(
             ),
         },
     ];
-    match fetch_models(&provider_id, &base_url).await {
+    match fetch_models(provider_id, base_url).await {
         Ok(models) => {
             stages.push(ConnectionStage {
                 id: "network".into(),
@@ -350,15 +434,26 @@ fn ping_body(provider_id: &str, model: &str) -> Option<Value> {
 #[tauri::command]
 pub async fn ping_provider(
     caller: tauri::WebviewWindow,
+    requests: State<'_, ProviderRequests>,
+    security: State<'_, crate::security::SecurityState>,
     provider_id: String,
     base_url: String,
     model: String,
 ) -> Result<(), String> {
     super::require_main(&caller)?;
-    let endpoint = provider_endpoint(&provider_id, &base_url)?;
-    let body = ping_body(&provider_id, &model)
+    cancellable_request(
+        &requests,
+        &security,
+        ping_provider_inner(&provider_id, &base_url, &model),
+    )
+    .await
+}
+
+async fn ping_provider_inner(provider_id: &str, base_url: &str, model: &str) -> Result<(), String> {
+    let endpoint = provider_endpoint(provider_id, base_url)?;
+    let body = ping_body(provider_id, model)
         .ok_or("O ping opcional não está disponível para este adaptador.")?;
-    let credential = credential_entry(&provider_id)?
+    let credential = credential_entry(provider_id)?
         .get_password()
         .map_err(|_| "Salve uma credencial para testar a geração.")?;
     let client = Client::builder()
@@ -369,7 +464,7 @@ pub async fn ping_provider(
         .map_err(|_| "Não foi possível preparar uma conexão segura.")?;
     let mut request = client
         .post(endpoint)
-        .pipe_auth(&provider_id, &credential)?
+        .pipe_auth(provider_id, &credential)?
         .json(&body);
     if provider_id == "anthropic" {
         request = request.header("anthropic-version", "2023-06-01");
@@ -388,6 +483,7 @@ pub async fn ping_provider(
 pub async fn send_provider_message(
     caller: tauri::WebviewWindow,
     state: State<'_, ProviderRequests>,
+    security: State<'_, crate::security::SecurityState>,
     provider_id: String,
     base_url: String,
     model: String,
@@ -395,6 +491,9 @@ pub async fn send_provider_message(
     request_id: String,
 ) -> Result<ProviderReply, String> {
     super::require_main(&caller)?;
+    if security.is_halted() {
+        return Err("O OdeKrai está parado pelo kill switch.".into());
+    }
     send_message_inner(
         state,
         provider_id,
@@ -403,6 +502,7 @@ pub async fn send_provider_message(
         messages,
         request_id,
         None,
+        security,
     )
     .await
 }
@@ -412,6 +512,7 @@ pub async fn stream_provider_message(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
     state: State<'_, ProviderRequests>,
+    security: State<'_, crate::security::SecurityState>,
     provider_id: String,
     base_url: String,
     model: String,
@@ -420,6 +521,9 @@ pub async fn stream_provider_message(
     on_chunk: Channel<String>,
 ) -> Result<ProviderReply, String> {
     super::require_main(&caller)?;
+    if security.is_halted() {
+        return Err("O OdeKrai está parado pelo kill switch.".into());
+    }
     let mut messages = messages;
     if messages.iter().any(|message| message.role == "system") {
         return Err("A mensagem de sistema só pode ser criada pelo aplicativo.".into());
@@ -441,6 +545,7 @@ pub async fn stream_provider_message(
         messages,
         request_id,
         Some(on_chunk),
+        security,
     )
     .await
 }
@@ -453,7 +558,11 @@ async fn send_message_inner(
     messages: Vec<ProviderMessage>,
     request_id: String,
     on_chunk: Option<Channel<String>>,
+    security: State<'_, crate::security::SecurityState>,
 ) -> Result<ProviderReply, String> {
+    if security.is_halted() {
+        return Err("O OdeKrai está parado pelo kill switch.".into());
+    }
     if request_id.is_empty()
         || request_id.len() > 80
         || !request_id
@@ -493,6 +602,13 @@ async fn send_message_inner(
             return Err("Já existe uma solicitação com este identificador.".into());
         }
         requests.insert(request_id.clone(), cancellation.clone());
+    }
+    if security.is_halted() {
+        cancellation.cancel();
+        if let Ok(mut requests) = state.0.lock() {
+            requests.remove(&request_id);
+        }
+        return Err("O OdeKrai está parado pelo kill switch.".into());
     }
 
     let result = tokio::select! {
@@ -894,6 +1010,21 @@ fn citation_from_value(value: &Value) -> Option<ProviderCitation> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn kill_switch_cancels_every_registered_provider_request() {
+        let state = ProviderRequests::default();
+        let first = CancellationToken::new();
+        let second = CancellationToken::new();
+        {
+            let mut requests = state.0.lock().unwrap();
+            requests.insert("one".into(), first.clone());
+            requests.insert("two".into(), second.clone());
+        }
+        cancel_requests(&state);
+        assert!(first.is_cancelled());
+        assert!(second.is_cancelled());
+    }
     use serde_json::json;
 
     #[test]

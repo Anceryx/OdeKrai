@@ -2,18 +2,37 @@ use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewW
 
 mod agent_home;
 mod history;
+mod policy;
 mod profile;
 mod providers;
+mod security;
 
 fn require_main(window: &tauri::WebviewWindow) -> Result<(), String> {
     require_caller(window, &["main"])
 }
 
 fn require_caller(window: &tauri::WebviewWindow, allowed: &[&str]) -> Result<(), String> {
-    if allowed.contains(&window.label()) {
+    if caller_label_allowed(&window.label(), allowed) {
         Ok(())
     } else {
         Err("Comando indisponível para esta janela.".into())
+    }
+}
+
+fn caller_label_allowed(label: &str, allowed: &[&str]) -> bool {
+    allowed.contains(&label)
+}
+
+#[cfg(test)]
+mod security_caller_tests {
+    use super::caller_label_allowed;
+
+    #[test]
+    fn approval_commands_only_accept_the_approval_window() {
+        assert!(caller_label_allowed("approval", &["approval"]));
+        assert!(!caller_label_allowed("main", &["approval"]));
+        assert!(!caller_label_allowed("island", &["approval"]));
+        assert!(!caller_label_allowed("mascot", &["approval"]));
     }
 }
 
@@ -218,8 +237,23 @@ pub fn run() {
                 let _ = window.set_focus();
             }
         }))
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        security::on_global_shortcut(app);
+                    }
+                })
+                .build(),
+        )
         .manage(providers::ProviderRequests::default())
+        .manage(security::SecurityState::new(true))
         .setup(|app| {
+            let halted = security::load_halted(app.handle());
+            if let Some(state) = app.try_state::<security::SecurityState>() {
+                state.set_initial_halted(halted);
+            }
+            security::init_shortcut(app.handle());
             let island =
                 WebviewWindowBuilder::new(app, "island", WebviewUrl::App("index.html".into()))
                     .title("Ilha do OdeKrai")
@@ -310,6 +344,20 @@ pub fn run() {
             history::append_conversation_message,
             history::delete_conversation,
             history::delete_all_conversations,
+            security::get_permission_settings,
+            security::set_permission_mode,
+            security::set_tool_override,
+            security::set_kill_shortcut,
+            security::set_approval_ttl,
+            security::halt_all,
+            security::resume_all,
+            security::list_audit,
+            security::verify_audit,
+            security::get_pending_approval,
+            security::get_full_approval_preview,
+            security::approval_respond,
+            #[cfg(debug_assertions)]
+            security::submit_simulated_action,
             agent_home::agent_home_status,
             agent_home::agent_home_init,
             agent_home::agent_home_read_core,

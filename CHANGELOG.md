@@ -2,6 +2,14 @@
 
 ## Não lançado
 
+### Fase 3
+
+- Adicionados motor de políticas em Rust, modos persistidos em SQLite, exceções por ferramenta com confirmação nativa e tabela modo × risco.
+- Adicionadas janela de aprovação de uso único, fila limitada e expiração configurável; parâmetros são vinculados por hash SHA-256 e só a janela `approval` pode responder.
+- Adicionados log JSONL diário encadeado, viewer/exportação, verificação da cadeia, atalho global e kill switch com cancelamento de streams.
+- Adicionadas ferramentas simuladas de workspace com backup reversível e lixeira; mensagens nunca são enviadas e pagamentos são bloqueados.
+- A validação visual e nativa de janelas, atalho, DPI e foco em Windows permanece pendente.
+
 ### Fase 2
 
 - Adicionadas pasta pessoal, identidade aprovada por hash, memória manual editável e prompt composto no Rust.

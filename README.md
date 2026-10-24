@@ -9,7 +9,7 @@ Aplicativo OdeKrai para Windows, desenvolvido com React, TypeScript e Tauri 2. O
 - Preferências locais sem chaves de API.
 - Armazenamento de credenciais via Gerenciador de Credenciais do Windows e envio de mensagens pelo processo Rust.
 - Histórico de conversas em SQLite local, com retomada da conversa e respostas incrementais para Anthropic e adaptadores Chat Completions. A Perplexity ainda retorna a resposta completa.
-- Pasta pessoal escolhida na primeira execução, identidade `ODEKRAI.md` e memória manual editáveis. O histórico pode ser apagado na interface. Modos de permissão ainda são apenas preferências registradas.
+- Pasta pessoal escolhida na primeira execução, identidade `ODEKRAI.md` e memória manual editáveis. O histórico pode ser apagado na interface. O motor de permissões em Rust inclui aprovação nativa, auditoria encadeada e kill switch; nesta fase, só há ferramentas simuladas.
 - Perfil local em SQLite, com avatar reprocessado no Rust e nunca enviado aos provedores.
 - Instância única, CSP de produção restrita e permissões separadas para as janelas auxiliares.
 - Adaptadores para 12 APIs Chat Completions, Anthropic Messages e Perplexity Agent API. Vertex AI continua como guia pendente de ADC/OAuth.

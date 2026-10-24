@@ -13,6 +13,14 @@
 - `npm run tauri:build`: aplicação e instalador NSIS.
 - `git diff --check`: whitespace e marcadores de conflito.
 
+### Fase 3 — permissões
+
+- `policy.rs`: tabela completa de modos × riscos × origens normal/tainted × dentro/fora do workspace, incluindo exceções permissivas e bloqueios fixos.
+- `security.rs`: schema tipado com campos desconhecidos recusados; validação de traversal, UNC, nomes reservados, reparse point e hard link; bloqueio de pagamento, caminhos comuns de credenciais e marcadores conhecidos de segredo; limite de frequência; escrita com backup e lixeira sem exclusão definitiva; hash de parâmetros, fila limitada e cadeia de auditoria com adulteração detectada.
+- `lib.rs`: teste de isolamento do chamador da aprovação (`approval` somente).
+- Todas as ferramentas desta fase são simuladas e os testes não fazem chamadas de rede reais.
+- A confirmação de modo e exceção usa caixa nativa Win32 em execução interativa; não é exercitada por teste automatizado.
+
 Resultados numéricos de builds e testes anteriores não devem ser aplicados à árvore atual. Uma tentativa antiga de instalação NSIS em pasta temporária e abertura do Hub não comprovou pixels renderizados. Os resultados atuais ficam registrados abaixo.
 
 ## Pré-visualização de desenvolvimento
@@ -43,6 +51,11 @@ Execute em uma sessão Windows com a janela visível. Registre sistema, escala D
 16. Crie duas conversas, apague uma e depois todo o histórico. Reinicie e confirme que nenhuma reaparece. Confira no provedor real, com conta de teste, o campo de sistema/instruções recebido; testes locais não comprovam essa integração.
 17. No perfil, salve nome e apelido, recarregue a aplicação e confirme persistência em SQLite. Tente SVG, GIF, arquivo corrompido, imagem acima do limite e PNG/JPEG/WebP válidos; confira recorte e dimensão 256 × 256.
 18. Troque entre provedores e confirme que endpoint/modelo não se misturam. Informe endpoint de outro provedor e confirme a recusa antes do salvamento da credencial. Carregue modelos somente nos provedores com endpoint documentado; confirme o estado parcial nos demais.
+19. Em Configurações → Permissões, troque cada modo e confirme a caixa nativa antes de salvar. Confira que o modo exibido em `ODEKRAI.md` não altera o modo efetivo do SQLite.
+20. Em build de desenvolvimento, teste leitura, gravação com backup, mover para `.trash`, envio simulado e bloqueio financeiro. Confirme que só a janela `approval` pode aprovar, que Negar e fechar negam, que parâmetros adulterados/replay/expiração/fila cheia falham fechados e que conteúdo externo pede aprovação.
+21. Teste `Ctrl+Shift+F12` e um atalho em conflito. Confirme que Parar tudo cancela uma resposta em streaming, nega aprovações pendentes, bloqueia novas ações e persiste após reiniciar; Retomar exige uma auditoria gravada.
+22. Na tela Atividade, confirme a cadeia, exporte JSONL e altere uma cópia de teste para verificar a detecção. Não edite os logs reais durante o ensaio.
+23. Repita a janela de aprovação em 100%, 125% e 150% de DPI, monitores distintos, foco alternado e telas menores; verifique texto longo sem renderização de Markdown/HTML.
 
 ## Inspeção visual manual pendente
 

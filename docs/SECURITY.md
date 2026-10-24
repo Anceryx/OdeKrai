@@ -13,3 +13,22 @@
 - `ODEKRAI.md` tem limite de 16 KiB, é salvo por ação explícita e só entra no prompt quando seu SHA-256 coincide com a versão aprovada. O Rust envia regras fixas primeiro e recusa mensagens `system` vindas do frontend.
 - Arquivos de `memory/` têm limite de 8 KiB, nomes simples e edição manual. Até 1.024 caracteres de `estilo.md` entram no prompt. Não armazene segredos: identidade e memória são texto simples. O agente não tem comando para escrever em `ODEKRAI.md` ou `logs/`.
 - A validação da pasta recusa UNC, raiz de unidade, pastas protegidas, `..`, nomes reservados e links/junctions. O OneDrive gera aviso. A resistência a trocas simultâneas de caminhos ainda requer avaliação nativa antes de futuras tools de escrita.
+
+## Fase 3 — política, aprovação, auditoria e parada
+
+- `src-tauri/src/policy.rs` é uma função pura com a matriz modo × risco × origem × workspace. O modo efetivo e exceções por ferramenta vêm de `permissions.sqlite3`; o modo descrito em `ODEKRAI.md` é informativo e não controla decisões.
+- `src-tauri/src/security.rs` valida os parâmetros Rust tipados, calcula o risco a partir da ferramenta, rejeita campos desconhecidos, limita cada ferramenta a cinco execuções por minuto e bloqueia pagamentos, leitura de caminhos comuns de credenciais e marcadores conhecidos de segredos. As ferramentas disponíveis nesta fase são simuladas; não há envio de mensagens nem pagamentos.
+- `workspace.read_file` só lê arquivos do workspace (limite 64 KiB). `workspace.write_file` limita arquivos a 1 MiB e guarda a versão anterior em `.history`. `workspace.delete_file` move para `.trash` e nunca apaga definitivamente. Caminhos absolutos, traversal, links/junctions, hard links, nomes reservados e pastas internas são recusados; cada execução volta a validar o destino.
+- As decisões que pedem aprovação abrem a janela `approval`, com capability separada. Só essa janela responde; a fila é FIFO, exibe uma ação por vez, aceita até três pendentes, usa hash SHA-256 dos parâmetros, expira por padrão em 120 segundos (configurável entre 30 e 600) e aceita uma aprovação de uso único. Fechar a janela nega a ação atual.
+- O modo global e exceções mais permissivas exigem confirmação em caixa nativa do Windows. O atalho global padrão é `Ctrl+Shift+F12`; conflitos são reportados nas configurações. O kill switch persiste o estado parado, cancela streams registrados, nega aprovações pendentes e bloqueia novos envios ao provedor até retomada explícita.
+- Cada decisão e resultado usa JSONL diário em `logs/`, com encadeamento SHA-256 e gravação confirmada antes da execução. Falha ao verificar ou gravar a auditoria bloqueia ações. O log não tem retenção automática nem controles de apagar na interface nesta fase.
+
+### Ameaças e limites
+
+- **Prompt injection e conteúdo externo:** a política mantém a origem como dado Rust; ações tainted com risco acima de leitura pedem aprovação em qualquer modo. Ainda não existe agent loop que atribua origem a conteúdo de provedores; ferramentas desta fase só podem ser disparadas manualmente pelo usuário em builds de desenvolvimento.
+- **Falsificação de aprovação e alteração de parâmetros:** o comando de resposta valida o rótulo `approval`, o ID e o hash da ação pendente; o Rust recalcula o hash e revalida caminhos imediatamente antes da execução. A UI nunca fornece a decisão de risco.
+- **XSS no WebView:** a janela de aprovação tem capability mínima, CSP local sem conexões remotas e mostra a prévia como texto puro React. Uma vulnerabilidade que execute código na própria janela de aprovação ainda poderia induzir um clique; nenhuma aprovação é transferida para a janela principal.
+- **TOCTOU:** canonicalização, detecção de reparse point/hard link e validação imediatamente antes da operação reduzem trocas de destino. Um processo local com os mesmos privilégios ainda pode disputar alterações durante a operação; a implementação não usa handles de diretório imutáveis para toda a caminhada.
+- **Adulteração de logs:** a cadeia detecta alterações e quebras acidentais. Ela não impede edição e não resiste a malware ou processo local capaz de reescrever os arquivos e recalcular os hashes; não é uma assinatura com chave protegida.
+- **Flood de aprovações:** uma fila limitada a três e uma janela visível por vez; excedentes são negados e auditados.
+- **Risco residual geral:** configurações SQLite e logs são arquivos locais. Um processo com os mesmos privilégios do usuário pode alterá-los. Este motor reduz erro/abuso do agente e injeção; não protege contra malware local.
