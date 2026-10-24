@@ -1,5 +1,6 @@
 use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder};
 
+mod agent_home;
 mod history;
 mod providers;
 
@@ -297,7 +298,18 @@ pub fn run() {
             providers::stream_provider_message,
             history::list_conversations,
             history::load_conversation,
-            history::append_conversation_message
+            history::append_conversation_message,
+            history::delete_conversation,
+            history::delete_all_conversations,
+            agent_home::agent_home_status,
+            agent_home::agent_home_init,
+            agent_home::agent_home_read_core,
+            agent_home::agent_home_save_core,
+            agent_home::agent_memory_list,
+            agent_home::agent_memory_read,
+            agent_home::agent_memory_save,
+            agent_home::agent_memory_delete,
+            agent_home::agent_memory_delete_all,
         ])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o OdeKrai");

@@ -146,6 +146,7 @@ pub async fn send_provider_message(
 
 #[tauri::command]
 pub async fn stream_provider_message(
+    app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
     state: State<'_, ProviderRequests>,
     provider_id: String,
@@ -156,6 +157,19 @@ pub async fn stream_provider_message(
     on_chunk: Channel<String>,
 ) -> Result<ProviderReply, String> {
     super::require_main(&caller)?;
+    let mut messages = messages;
+    if messages.iter().any(|message| message.role == "system") {
+        return Err("A mensagem de sistema só pode ser criada pelo aplicativo.".into());
+    }
+    if let Some(prompt) = super::agent_home::system_prompt(&app)? {
+        messages.insert(
+            0,
+            ProviderMessage {
+                role: "system".into(),
+                content: prompt,
+            },
+        );
+    }
     send_message_inner(
         state,
         provider_id,
@@ -201,6 +215,9 @@ async fn send_message_inner(
             > MAX_MESSAGE_BYTES
     {
         return Err("A conversa está vazia ou excede o limite permitido.".into());
+    }
+    if on_chunk.is_none() && messages.iter().any(|message| message.role == "system") {
+        return Err("A mensagem de sistema só pode ser criada pelo aplicativo.".into());
     }
 
     let cancellation = CancellationToken::new();
@@ -270,17 +287,10 @@ async fn request_provider(
                 .header("anthropic-version", "2023-06-01")
                 .json(&body)
         }
-        "perplexity" => {
-            let input = messages
-                .iter()
-                .map(|message| format!("{}: {}", message.role, message.content))
-                .collect::<Vec<_>>()
-                .join("\n\n");
-            client
-                .post(endpoint)
-                .pipe_auth(provider_id, &credential)?
-                .json(&json!({ "model": model, "input": input }))
-        }
+        "perplexity" => client
+            .post(endpoint)
+            .pipe_auth(provider_id, &credential)?
+            .json(&perplexity_body(model, messages)),
         "azure-openai" => client
             .post(endpoint)
             .pipe_auth(provider_id, &credential)?
@@ -377,6 +387,26 @@ async fn request_provider(
         .await
         .map_err(|_| "O provedor retornou uma resposta inválida.".to_string())?;
     parse_provider_reply(provider_id, &payload)
+}
+
+fn perplexity_body(model: &str, messages: &[ProviderMessage]) -> Value {
+    let input = messages
+        .iter()
+        .filter(|message| message.role != "system")
+        .map(|message| format!("{}: {}", message.role, message.content))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let instructions = messages
+        .iter()
+        .filter(|message| message.role == "system")
+        .map(|message| message.content.as_str())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let mut body = json!({ "model": model, "input": input });
+    if !instructions.is_empty() {
+        body["instructions"] = json!(instructions);
+    }
+    body
 }
 
 fn stream_delta<'a>(provider_id: &str, payload: &'a Value) -> Option<&'a str> {
@@ -585,6 +615,25 @@ fn citation_from_value(value: &Value) -> Option<ProviderCitation> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn perplexity_uses_instructions_for_system_prompt() {
+        let body = perplexity_body(
+            "sonar",
+            &[
+                ProviderMessage {
+                    role: "system".into(),
+                    content: "Regras fixas".into(),
+                },
+                ProviderMessage {
+                    role: "user".into(),
+                    content: "Olá".into(),
+                },
+            ],
+        );
+        assert_eq!(body["instructions"], "Regras fixas");
+        assert_eq!(body["input"], "user: Olá");
+    }
 
     #[test]
     fn builds_provider_specific_endpoints_without_allowing_host_confusion() {

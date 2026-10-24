@@ -28,7 +28,7 @@ fn database(app: &tauri::AppHandle) -> Result<Connection, String> {
 }
 
 fn init_schema(db: &Connection) -> Result<(), String> {
-    db.execute_batch("PRAGMA foreign_keys = ON;
+    db.execute_batch("PRAGMA foreign_keys = ON; PRAGMA secure_delete = ON;
         CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
         CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('user','assistant')), content TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
         CREATE INDEX IF NOT EXISTS messages_conversation ON messages(conversation_id, id);")
@@ -126,6 +126,39 @@ pub fn append_conversation_message(
         .map_err(|_| "Não foi possível salvar a conversa.".to_string())
 }
 
+#[tauri::command]
+pub fn delete_conversation(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    conversation_id: String,
+) -> Result<(), String> {
+    super::require_main(&caller)?;
+    if !valid_id(&conversation_id) {
+        return Err("Identificador de conversa inválido.".into());
+    }
+    let db = database(&app)?;
+    db.execute("DELETE FROM conversations WHERE id = ?1", [conversation_id])
+        .map_err(|_| "Não foi possível apagar a conversa.".to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_all_conversations(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+) -> Result<(), String> {
+    super::require_main(&caller)?;
+    let db = database(&app)?;
+    db.execute("DELETE FROM conversations", [])
+        .map_err(|_| "Não foi possível apagar o histórico.".to_string())?;
+    db.execute_batch("VACUUM")
+        .map_err(|_| "Não foi possível concluir a limpeza do histórico.".to_string())
+}
+
+fn valid_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 80 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -135,5 +168,27 @@ mod tests {
         let db = Connection::open_in_memory().unwrap();
         init_schema(&db).unwrap();
         assert!(db.execute("INSERT INTO messages (conversation_id, role, content) VALUES ('missing','user','olá')", []).is_err());
+    }
+
+    #[test]
+    fn deleting_conversation_cascades_messages() {
+        let db = Connection::open_in_memory().unwrap();
+        init_schema(&db).unwrap();
+        db.execute(
+            "INSERT INTO conversations (id, title) VALUES ('one', 'Um')",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO messages (conversation_id, role, content) VALUES ('one', 'user', 'Olá')",
+            [],
+        )
+        .unwrap();
+        db.execute("DELETE FROM conversations WHERE id = 'one'", [])
+            .unwrap();
+        let count: i64 = db
+            .query_row("SELECT count(*) FROM messages", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
     }
 }

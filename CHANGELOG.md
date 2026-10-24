@@ -2,6 +2,11 @@
 
 ## Não lançado
 
+### Fase 2
+
+- Adicionadas pasta pessoal, identidade aprovada por hash, memória manual editável e prompt composto no Rust.
+- Adicionada exclusão de conversas e de todo o histórico; corrigida a formatação global e atualizada a documentação de privacidade.
+
 - Adicionadas janelas Tauri separadas para a ilha e o marcador geométrico temporário.
 - Adicionados estados do Companion conectados ao ciclo real de solicitação do chat.
 - Adicionados controles e persistência de posição, tamanho, prioridade, modo livre e efeitos sonoros.

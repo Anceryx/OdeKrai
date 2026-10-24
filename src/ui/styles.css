@@ -2279,3 +2279,45 @@ html.island-window-html {
 .chat-history button[aria-current='page'] {
   font-weight: 700;
 }
+
+.settings-page {
+  max-width: 900px;
+}
+
+.settings-card {
+  display: grid;
+  gap: 12px;
+  margin: 20px 0;
+  padding: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.settings-card label {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-card input,
+.settings-card select,
+.settings-card textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 12px;
+  color: inherit;
+  background: #19191d;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.settings-card textarea {
+  resize: vertical;
+}
+
+.settings-card .primary-button,
+.settings-card .secondary-button {
+  width: fit-content;
+  margin: 4px;
+}

@@ -9,6 +9,7 @@ Assistente pessoal de inteligência artificial para Windows, desenvolvido com Re
 - Preferências locais sem chaves de API.
 - Armazenamento de credenciais via Gerenciador de Credenciais do Windows e envio de mensagens pelo processo Rust.
 - Histórico de conversas em SQLite local, com retomada da conversa e respostas incrementais para Anthropic e adaptadores Chat Completions. A Perplexity ainda retorna a resposta completa.
+- Pasta pessoal escolhida na primeira execução, identidade `ODEKRAI.md` e memória manual editáveis. O histórico pode ser apagado na interface. Modos de permissão ainda são apenas preferências registradas.
 - Instância única, CSP de produção restrita e permissões separadas para as janelas auxiliares.
 - Adaptadores para 12 APIs Chat Completions, Anthropic Messages e Perplexity Agent API. Vertex AI continua como guia pendente de ADC/OAuth.
 - Modelo 3D oficial local ignorado pelo Git; checkouts sem o asset usam fallback.

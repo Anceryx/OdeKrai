@@ -19,13 +19,15 @@ import {
 import { OdekraiMascot, type MascotMetrics, type MascotMotionRequest } from './OdekraiMascot';
 import { AI_PROVIDERS, type AiProvider } from '../core/providers';
 import { ProviderCatalog } from './ProviderCatalog';
+import { AgentHome } from './AgentHome';
 
-type Section = 'overview' | 'chat' | 'providers' | 'companion' | 'settings';
+type Section = 'overview' | 'chat' | 'providers' | 'companion' | 'settings' | 'agent';
 type Conversation = { id: string; title: string };
 
 const nav: { id: Section; label: string; icon: string; group: string }[] = [
   { id: 'overview', label: 'Visão geral', icon: '⌂', group: 'ESPAÇO DE TRABALHO' },
   { id: 'chat', label: 'Conversas', icon: '◌', group: 'ESPAÇO DE TRABALHO' },
+  { id: 'agent', label: 'Identidade e memória', icon: '◇', group: 'ESPAÇO DE TRABALHO' },
   { id: 'providers', label: 'Conectores de IA', icon: '✳', group: 'INTELIGÊNCIA' },
   { id: 'companion', label: 'Assistente do OdeKrai', icon: '◇', group: 'PERSONALIZAÇÃO' },
   { id: 'settings', label: 'Configurações', icon: '⚙', group: 'PERSONALIZAÇÃO' },
@@ -50,6 +52,14 @@ export function App() {
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
+  useEffect(() => {
+    if (!isTauri()) return;
+    void invoke<{ configured: boolean }>('agent_home_status')
+      .then((home) => {
+        if (!home.configured) setSection('agent');
+      })
+      .catch(() => setError('Não foi possível verificar a pasta do agente.'));
+  }, []);
   useEffect(() => {
     if (!isTauri()) return;
     void invoke<Conversation[]>('list_conversations')
@@ -223,7 +233,11 @@ export function App() {
       if (!(typeof cause === 'string' && cause.includes('cancelada'))) {
         setMessages(next);
         setError(
-          cause instanceof Error ? cause.message : 'Não foi possível concluir a solicitação.',
+          typeof cause === 'string'
+            ? cause
+            : cause instanceof Error
+              ? cause.message
+              : 'Não foi possível concluir a solicitação.',
         );
         void playSound('error', normalizeSoundPreferences(settings.companion.sounds));
         if (isTauri())
@@ -241,6 +255,36 @@ export function App() {
 
   function cancelRequest() {
     if (request.current) void invoke('cancel_provider_request', { requestId: request.current });
+  }
+
+  async function deleteConversation(id: string) {
+    if (busy || !window.confirm('Apagar esta conversa e suas mensagens?')) return;
+    try {
+      await invoke('delete_conversation', { conversationId: id });
+      setConversations((items) => items.filter((item) => item.id !== id));
+      if (conversationId === id) {
+        setConversationId(null);
+        setMessages([]);
+      }
+    } catch {
+      setError('Não foi possível apagar a conversa.');
+    }
+  }
+
+  async function deleteAllConversations() {
+    if (
+      busy ||
+      !window.confirm('Apagar todo o histórico de conversas? Esta ação não pode ser desfeita.')
+    )
+      return;
+    try {
+      await invoke('delete_all_conversations');
+      setConversations([]);
+      setConversationId(null);
+      setMessages([]);
+    } catch {
+      setError('Não foi possível apagar o histórico.');
+    }
   }
 
   return (
@@ -306,7 +350,7 @@ export function App() {
         </nav>
         <div className="sidebar-bottom">
           <div className="local-badge">
-            <span>◉</span> Seus dados ficam no dispositivo
+            <span>◉</span> Dados locais neste dispositivo
           </div>
           <button
             className="user-row"
@@ -370,6 +414,8 @@ export function App() {
                 setError('');
               }
             }}
+            onDeleteConversation={(id) => void deleteConversation(id)}
+            onDeleteAll={() => void deleteAllConversations()}
             busy={busy}
             draft={draft}
             setDraft={setDraft}
@@ -408,6 +454,7 @@ export function App() {
             {section === 'settings' && (
               <Settings settings={settings} update={(next) => setSettings(next)} />
             )}
+            {section === 'agent' && <AgentHome />}
           </div>
         )}
       </main>
@@ -462,8 +509,8 @@ function Overview({
             <em>Seu jeito de fazer.</em>
           </h2>
           <p>
-            Conecte seu provedor de IA e comece uma conversa. Sua chave fica apenas nesta sessão
-            nesta versão inicial.
+            Conecte seu provedor de IA e comece uma conversa. Sua chave fica no Gerenciador de
+            Credenciais do Windows.
           </p>
           <button className="primary-button" onClick={onChat}>
             Iniciar conversa <span>↗</span>
@@ -1116,6 +1163,8 @@ function ChatView({
   conversationId,
   onConversation,
   onNewConversation,
+  onDeleteConversation,
+  onDeleteAll,
   busy,
   draft,
   setDraft,
@@ -1129,6 +1178,8 @@ function ChatView({
   conversationId: string | null;
   onConversation: (id: string) => void;
   onNewConversation: () => void;
+  onDeleteConversation: (id: string) => void;
+  onDeleteAll: () => void;
   busy: boolean;
   draft: string;
   setDraft: (value: string) => void;
@@ -1153,16 +1204,30 @@ function ChatView({
           Nova conversa
         </button>
         {conversations.map((item) => (
-          <button
-            type="button"
-            key={item.id}
-            onClick={() => onConversation(item.id)}
-            disabled={busy}
-            aria-current={conversationId === item.id ? 'page' : undefined}
-          >
-            {item.title}
-          </button>
+          <span key={item.id}>
+            <button
+              type="button"
+              onClick={() => onConversation(item.id)}
+              disabled={busy}
+              aria-current={conversationId === item.id ? 'page' : undefined}
+            >
+              {item.title}
+            </button>
+            <button
+              type="button"
+              onClick={() => onDeleteConversation(item.id)}
+              disabled={busy}
+              aria-label={`Apagar conversa ${item.title}`}
+            >
+              Apagar
+            </button>
+          </span>
         ))}
+        {conversations.length > 0 && (
+          <button type="button" onClick={onDeleteAll} disabled={busy}>
+            Apagar todo o histórico
+          </button>
+        )}
       </div>
       <div className="messages-area">
         {messages.length === 0 ? (

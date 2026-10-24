@@ -18,6 +18,12 @@ O GLB e as referências fornecidas pelo proprietário são extraídos para `asse
 
 No Windows, as janelas auxiliares recebem regiões Win32 arredondadas para hit-testing. A região é atualizada no redimensionamento e na alteração de DPI. Isso ainda exige teste de desktop real para confirmar o encaminhamento de cliques nas áreas transparentes.
 
+## Pasta e identidade do agente
+
+`src-tauri/src/agent_home.rs` valida a pasta escolhida na primeira execução (sugestão: `%USERPROFILE%\OdeKrai`) e cria `ODEKRAI.md`, `memory/`, `workspace/`, `skills/` e `logs/`. O template está embutido no Rust; o repositório não contém o arquivo pessoal gerado. A última versão aprovada e seu SHA-256 ficam nos dados locais do aplicativo. Uma alteração externa suspende o prompt até revisão e aprovação.
+
+O Rust compõe o prompt na ordem: regras fixas, identidade aprovada e até 1.024 caracteres de `memory/estilo.md`. Anthropic recebe `system`, APIs Chat Completions recebem uma mensagem `system` e a [Perplexity Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart) recebe `instructions`. Sem pasta configurada, o chat funciona sem prompt pessoal. Os modos ainda são preferências registradas, sem motor de permissões.
+
 ## Limites conhecidos
 
 - Um ensaio anterior abriu o executável com o UDF WebView2 padrão. O erro `0x800700AA` também ocorreu em outra tentativa; a causa permanece inconclusiva. O plugin de instância única evita abrir uma segunda instância do aplicativo, mas seu efeito sobre esse erro precisa de teste nativo. Orientação UV, alinhamento facial e renderização precisam de validação visual.

@@ -35,6 +35,10 @@ Execute em uma sessão Windows com a janela visível. Registre sistema, escala D
 10. Instale o NSIS em pasta de teste isolada, abra e feche o app, depois desinstale. Confirme que o UDF normal, o histórico e as preferências existentes permanecem intactos.
 11. Abra o aplicativo duas vezes; confirme que a segunda abertura traz o Hub existente ao foco e não reproduz `0x800700AA`. Se o erro reaparecer, registre o processo e o perfil WebView2 em uso.
 12. Envie uma resposta longa e confirme texto incremental, cancelamento e retomada da conversa após reiniciar. Repita com Anthropic, um adaptador Chat Completions e Perplexity.
+13. Em perfil Windows novo, confirme a sugestão `%USERPROFILE%\OdeKrai`, escolha outra pasta local, confira o aviso OneDrive e verifique a estrutura criada. Tente UNC, raiz de unidade, pasta do sistema, pasta do aplicativo, `..`, nome reservado e junction; confirme as recusas.
+14. Edite `ODEKRAI.md` fora do aplicativo, volte à tela Identidade e memória e confira o diff. Confirme que o chat bloqueia a identidade alterada e só retoma após aprovação explícita.
+15. Crie, leia, edite e apague `memory/estilo.md` e outra nota. Apague toda a memória. Reinicie e confirme persistência. Não use dados reais sensíveis nesse ensaio.
+16. Crie duas conversas, apague uma e depois todo o histórico. Reinicie e confirme que nenhuma reaparece. Confira no provedor real, com conta de teste, o campo de sistema/instruções recebido; testes locais não comprovam essa integração.
 
 ## Inspeção visual manual pendente
 
@@ -65,3 +69,7 @@ As capturas desta revisão ainda não foram produzidas. Em Windows com sessão g
 - Prettier nos arquivos alterados: passou. `npm run format:check` global falhou em `index.html`, `README.en.md`, `src/ui/IslandWindow.tsx` e no arquivo local não rastreado `ODEKRAI.md`; esses arquivos não foram modificados nesta fase.
 - `cargo test --manifest-path src-tauri/Cargo.toml --lib`: 5 testes passaram, incluindo cabeçalhos com servidor simulado, parsing de streaming e esquema SQLite.
 - Inspeção visual e teste com provedores reais: não executados.
+
+## Fase 2
+
+O roteiro nativo da Fase 2 está nos itens 13–16. A validação automatizada desta revisão deve incluir sanitização dos campos, caminhos proibidos, detecção de alterações externas e ordem/limite do prompt, além de `npm run build`, `npm test`, `npm run format:check`, `cargo fmt --check`, `cargo test` e `git diff --check`. Registrar os resultados efetivamente obtidos no relatório da tarefa; build e testes locais não comprovam o assistente visível, junctions do perfil real, Credential Manager nem o formato aceito por contas reais dos provedores.
