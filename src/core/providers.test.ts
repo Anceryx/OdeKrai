@@ -36,6 +36,7 @@ describe('catálogo de provedores', () => {
 
   it('configura cabeçalho de autenticação e endpoint especiais do Azure e Bedrock', () => {
     expect(providerById('azure-openai')).toMatchObject({ authMode: 'api-key', baseUrl: '' });
+    expect(providerById('anthropic')).toMatchObject({ authMode: 'x-api-key' });
     expect(providerById('bedrock')).toMatchObject({ region: true, authMode: 'bearer' });
   });
 });

@@ -99,7 +99,10 @@ export function loadSettings(): AppSettings {
           ? value.provider.providerId
           : (AI_PROVIDERS.find((provider) => provider.name === value.provider.name)?.id ??
             'openai'),
-        authMode: value.provider.authMode === 'api-key' ? 'api-key' : 'bearer',
+        authMode:
+          AI_PROVIDERS.find((provider) => provider.id === value.provider.providerId)?.authMode ??
+          AI_PROVIDERS.find((provider) => provider.name === value.provider.name)?.authMode ??
+          'bearer',
       },
       companion: {
         ...defaultSettings.companion,

@@ -1,4 +1,4 @@
-export type ProviderAuthMode = 'bearer' | 'api-key';
+export type ProviderAuthMode = 'bearer' | 'api-key' | 'x-api-key';
 export type ProviderIntegration =
   'openai-chat' | 'anthropic-messages' | 'perplexity-agent' | 'guide';
 
@@ -42,7 +42,7 @@ export const AI_PROVIDERS: AiProvider[] = [
     consoleUrl: 'https://platform.claude.com/settings/keys',
     baseUrl: 'https://api.anthropic.com',
     modelHint: 'ID de modelo Claude',
-    authMode: 'bearer',
+    authMode: 'x-api-key',
     requirements: [
       'Chave da Claude Console',
       'Modelo disponível no workspace',

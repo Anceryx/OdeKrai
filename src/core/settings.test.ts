@@ -55,6 +55,7 @@ describe('preferências persistidas', () => {
     });
     vi.stubGlobal('localStorage', { getItem: () => value, setItem: () => undefined });
     expect(loadSettings().provider.providerId).toBe('anthropic');
+    expect(loadSettings().provider.authMode).toBe('x-api-key');
     value = JSON.stringify({
       language: 'pt-BR',
       reduceMotion: false,
