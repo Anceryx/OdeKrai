@@ -1,6 +1,19 @@
 use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder};
 
+mod history;
 mod providers;
+
+fn require_main(window: &tauri::WebviewWindow) -> Result<(), String> {
+    require_caller(window, &["main"])
+}
+
+fn require_caller(window: &tauri::WebviewWindow, allowed: &[&str]) -> Result<(), String> {
+    if allowed.contains(&window.label()) {
+        Ok(())
+    } else {
+        Err("Comando indisponível para esta janela.".into())
+    }
+}
 
 #[cfg(windows)]
 fn apply_click_region(
@@ -65,7 +78,12 @@ fn apply_click_region(
 }
 
 #[tauri::command]
-fn set_island_visible(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
+fn set_island_visible(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    visible: bool,
+) -> Result<(), String> {
+    require_caller(&caller, &["main", "island", "mascot"])?;
     let window = app
         .get_webview_window("island")
         .ok_or("Janela do assistente indisponível")?;
@@ -78,7 +96,14 @@ fn set_island_visible(app: tauri::AppHandle, visible: bool) -> Result<(), String
 }
 
 #[tauri::command]
-fn set_island_position(app: tauri::AppHandle, x: f64, y: f64, size: f64) -> Result<(), String> {
+fn set_island_position(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    x: f64,
+    y: f64,
+    size: f64,
+) -> Result<(), String> {
+    require_caller(&caller, &["main", "mascot"])?;
     if !x.is_finite()
         || !y.is_finite()
         || !(-100_000.0..=100_000.0).contains(&x)
@@ -103,7 +128,12 @@ fn set_island_position(app: tauri::AppHandle, x: f64, y: f64, size: f64) -> Resu
 }
 
 #[tauri::command]
-fn set_island_topmost(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+fn set_island_topmost(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    enabled: bool,
+) -> Result<(), String> {
+    require_caller(&caller, &["main", "mascot"])?;
     app.get_webview_window("island")
         .ok_or("Janela do assistente indisponível")?
         .set_always_on_top(enabled)
@@ -111,7 +141,13 @@ fn set_island_topmost(app: tauri::AppHandle, enabled: bool) -> Result<(), String
 }
 
 #[tauri::command]
-fn set_island_height(app: tauri::AppHandle, size: f64, height: f64) -> Result<(), String> {
+fn set_island_height(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    size: f64,
+    height: f64,
+) -> Result<(), String> {
+    require_caller(&caller, &["main", "island"])?;
     if !(0.75..=1.5).contains(&size) || !height.is_finite() || !(100.0..=360.0).contains(&height) {
         return Err("Dimensão inválida".into());
     }
@@ -125,7 +161,12 @@ fn set_island_height(app: tauri::AppHandle, size: f64, height: f64) -> Result<()
 }
 
 #[tauri::command]
-fn set_character_visible(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
+fn set_character_visible(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    visible: bool,
+) -> Result<(), String> {
+    require_caller(&caller, &["main", "island", "mascot"])?;
     let window = app
         .get_webview_window("mascot")
         .ok_or("Janela do marcador indisponível")?;
@@ -138,7 +179,14 @@ fn set_character_visible(app: tauri::AppHandle, visible: bool) -> Result<(), Str
 }
 
 #[tauri::command]
-fn set_character_position(app: tauri::AppHandle, x: f64, y: f64, size: f64) -> Result<(), String> {
+fn set_character_position(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    x: f64,
+    y: f64,
+    size: f64,
+) -> Result<(), String> {
+    require_caller(&caller, &["main", "island"])?;
     if !x.is_finite()
         || !y.is_finite()
         || !(-100_000.0..=100_000.0).contains(&x)
@@ -162,6 +210,12 @@ fn set_character_position(app: tauri::AppHandle, x: f64, y: f64, size: f64) -> R
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .manage(providers::ProviderRequests::default())
         .setup(|app| {
             let island =
@@ -239,7 +293,11 @@ pub fn run() {
             providers::has_provider_credential,
             providers::remove_provider_credential,
             providers::send_provider_message,
-            providers::cancel_provider_request
+            providers::cancel_provider_request,
+            providers::stream_provider_message,
+            history::list_conversations,
+            history::load_conversation,
+            history::append_conversation_message
         ])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o OdeKrai");

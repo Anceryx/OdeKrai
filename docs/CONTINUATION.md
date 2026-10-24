@@ -1,26 +1,13 @@
-# Continuação
+# Continuação da Fase 1
 
-## ODEKRAI 2.0 — 24/10/2026
+Estado em 24/10/2026: a implementação da Fase 1 está na branch `main` local. Consulte [o estado atual](IMPLEMENTATION-STATUS.md) e [os resultados de teste](TESTING.md); relatórios anteriores de outra árvore não validam este código.
 
-Estado local: branch `codex/odekrai-foundation`, baseada no HEAD `1243a27`. Preservar todos os diffs locais. Esta revisão adicionou backend Tauri/Rust para credenciais e chamadas de provedores, catálogo com 14 adaptadores e Vertex como guia, README em português/inglês e documentação atualizada.
+## Validação nativa ainda necessária
 
-### Evidências
+1. Em uma sessão Windows visível, abrir o aplicativo duas vezes e observar se a segunda abertura foca a instância existente. Se `0x800700AA` reaparecer, registrar os processos e o perfil WebView2 envolvidos.
+2. Confirmar salvar, consultar e remover uma credencial descartável no Gerenciador de Credenciais do Windows, sem registrar o valor.
+3. Com contas autorizadas, testar Anthropic, um adaptador Chat Completions e Perplexity; observar resposta incremental onde implementada, cancelamento e persistência do histórico após reinício. Essas chamadas podem gerar custo.
+4. Inspecionar Hub, catálogo, ilha e modo livre; validar DPI, múltiplos monitores, fullscreen, foco, click-through e WebGL.
+5. Validar instalador e atualização somente em procedimento próprio, sem publicar artefatos ou o GLB privado.
 
-- Build web passou; 15 testes Vitest passaram em 5 arquivos; TypeScript passou.
-- `cargo test --lib`: 2 testes passaram; `cargo check` para `x86_64-pc-windows-msvc` passou.
-- `npm run tauri:build` recompilou frontend e crates, mas falhou na etapa final ao substituir `src-tauri/target/release/odekrai.exe`: erro 5, porque a instância anterior está aberta.
-- `tauri:dev` compilou em 4m58s e iniciou `src-tauri/target/debug/odekrai.exe`, processo responsivo no Windows; a automação não permitiu verificar pixels ou interações. O executável de release atualizado não foi produzido.
-- Credential Manager real e provedores com credenciais do proprietário ainda não foram validados.
-
-### Próxima sequência
-
-1. Fechar o ODEKRAI antigo pela interface do Windows e repetir `npm run tauri:build` com `%USERPROFILE%\.cargo\bin` no PATH.
-2. Abrir o novo executável; validar credencial descartável salvar/consultar/remover no Credential Manager. Não registrar chave em logs.
-3. Fazer testes com credenciais de provedor autorizadas e observar respostas, erros e possíveis cobranças.
-4. Inspecionar/capturar Hub, catálogo, ilha e modo livre. Validar arraste, click-through, foco, always-on-top, persistência, retorno, DPI, monitores e fullscreen.
-5. Revisar licenças internas dos sons Kenney antes de qualquer integração; nenhum som foi adicionado nesta etapa.
-
-Nenhum commit, push, release ou publicação foi feito. Verificar o remoto antes de qualquer publicação futura.
-
-- O build release agora passou após remover os artefatos antigos: executável `src-tauri/target/release/odekrai.exe` (13.324.800 bytes) e instalador NSIS `src-tauri/target/release/bundle/nsis/OdeKrai_0.1.0_x64-setup.exe` (3.692.149 bytes), ambos `NotSigned`.
-- `cargo run --release` manteve o processo responsivo. A abertura direta com `Start-Process` encerrou com código 101; o stderr registrou `0x800700AA` (recurso solicitado em uso) na criação do WebView2. O processo que mantém o recurso ocupado não foi identificado. A sessão gráfica inacessível impede confirmar a janela; abrir visualmente e testar as interações segue pendente.
+Essas verificações não pertencem às próximas fases de agent loop ou integrações.

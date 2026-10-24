@@ -24,6 +24,7 @@ describe('preferências persistidas', () => {
       sounds: { enabled: true },
     });
     expect(loadSettings().provider.authMode).toBe('bearer');
+    expect(loadSettings().provider.providerId).toBe('openai');
   });
 
   it('salva somente preferências e recupera a posição da ilha', () => {
@@ -44,5 +45,26 @@ describe('preferências persistidas', () => {
     });
     expect(storage.get('odekrai.settings.v1')).not.toContain('apiKey');
     expect(storage.get('odekrai.settings.v1')).not.toContain('chave');
+  });
+
+  it('migra o ID pelo nome antigo e preserva um ID válido quando o nome muda', () => {
+    let value = JSON.stringify({
+      language: 'pt-BR',
+      reduceMotion: false,
+      provider: { name: 'Anthropic', baseUrl: 'https://api.anthropic.com', model: 'claude' },
+    });
+    vi.stubGlobal('localStorage', { getItem: () => value, setItem: () => undefined });
+    expect(loadSettings().provider.providerId).toBe('anthropic');
+    value = JSON.stringify({
+      language: 'pt-BR',
+      reduceMotion: false,
+      provider: {
+        providerId: 'anthropic',
+        name: 'Nome alterado',
+        baseUrl: 'https://api.anthropic.com',
+        model: 'claude',
+      },
+    });
+    expect(loadSettings().provider.providerId).toBe('anthropic');
   });
 });

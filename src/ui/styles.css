@@ -2261,3 +2261,21 @@ html.island-window-html {
     text-align: left;
   }
 }
+.chat-history {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.5rem 1rem;
+}
+
+.chat-history button {
+  flex: 0 0 auto;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-history button[aria-current='page'] {
+  font-weight: 700;
+}

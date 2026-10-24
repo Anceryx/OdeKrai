@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { ChatMessage } from '../core/provider-messages';
 import { defaultSettings, loadSettings, saveSettings, type AppSettings } from '../core/settings';
 import { emit } from '@tauri-apps/api/event';
-import { invoke, isTauri } from '@tauri-apps/api/core';
+import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
 import {
   normalizeSoundPreferences,
   playSound,
@@ -21,6 +21,7 @@ import { AI_PROVIDERS, type AiProvider } from '../core/providers';
 import { ProviderCatalog } from './ProviderCatalog';
 
 type Section = 'overview' | 'chat' | 'providers' | 'companion' | 'settings';
+type Conversation = { id: string; title: string };
 
 const nav: { id: Section; label: string; icon: string; group: string }[] = [
   { id: 'overview', label: 'Visão geral', icon: '⌂', group: 'ESPAÇO DE TRABALHO' },
@@ -34,10 +35,10 @@ export function App() {
   const [section, setSection] = useState<Section>('overview');
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
   const [keySavedForSession, setKeySavedForSession] = useState(false);
-  const [selectedProviderId, setSelectedProviderId] = useState(
-    () => AI_PROVIDERS.find((provider) => provider.name === settings.provider.name)?.id ?? 'openai',
-  );
+  const [selectedProviderId, setSelectedProviderId] = useState(settings.provider.providerId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -50,7 +51,21 @@ export function App() {
     saveSettings(settings);
   }, [settings]);
   useEffect(() => {
-    const provider = AI_PROVIDERS.find((item) => item.name === settings.provider.name);
+    if (!isTauri()) return;
+    void invoke<Conversation[]>('list_conversations')
+      .then((items) => {
+        setConversations(items);
+        if (items[0]) {
+          setConversationId(items[0].id);
+          void invoke<ChatMessage[]>('load_conversation', { conversationId: items[0].id })
+            .then(setMessages)
+            .catch(() => setError('Não foi possível abrir a conversa anterior.'));
+        }
+      })
+      .catch(() => setError('Não foi possível abrir o histórico local.'));
+  }, []);
+  useEffect(() => {
+    const provider = AI_PROVIDERS.find((item) => item.id === settings.provider.providerId);
     if (!provider || !isTauri()) {
       setKeySavedForSession(false);
       return;
@@ -58,7 +73,7 @@ export function App() {
     void invoke<boolean>('has_provider_credential', { providerId: provider.id })
       .then(setKeySavedForSession)
       .catch(() => setKeySavedForSession(false));
-  }, [settings.provider.name]);
+  }, [settings.provider.providerId]);
   useEffect(() => {
     const refreshSettings = () => setSettings(loadSettings());
     window.addEventListener('storage', refreshSettings);
@@ -135,6 +150,7 @@ export function App() {
       setSection('providers');
       return;
     }
+    const activeId = conversationId ?? crypto.randomUUID();
     const next = [...messages, { role: 'user' as const, content: text }];
     setMessages(next);
     setDraft('');
@@ -149,18 +165,38 @@ export function App() {
     const requestId = crypto.randomUUID();
     request.current = requestId;
     try {
-      const provider = AI_PROVIDERS.find((item) => item.name === settings.provider.name);
+      const provider = AI_PROVIDERS.find((item) => item.id === settings.provider.providerId);
       if (!provider) throw new Error('O provedor selecionado não possui adaptador conhecido.');
+      await invoke('append_conversation_message', {
+        conversationId: activeId,
+        role: 'user',
+        content: text,
+      });
+      setConversationId(activeId);
+      if (!conversationId)
+        setConversations((items) => [{ id: activeId, title: text.slice(0, 80) }, ...items]);
+      const onChunk = new Channel<string>();
+      let streamed = '';
+      onChunk.onmessage = (chunk) => {
+        streamed += chunk;
+        setMessages([...next, { role: 'assistant', content: streamed }]);
+      };
       const answer = await invoke<{ content: string; citations: { title: string; url: string }[] }>(
-        'send_provider_message',
+        'stream_provider_message',
         {
           providerId: provider.id,
           baseUrl: settings.provider.baseUrl,
           model: settings.provider.model,
           messages: next,
           requestId,
+          onChunk,
         },
       );
+      await invoke('append_conversation_message', {
+        conversationId: activeId,
+        role: 'assistant',
+        content: answer.content,
+      });
       setMessages([
         ...next,
         { role: 'assistant', content: answer.content, citations: answer.citations },
@@ -205,7 +241,6 @@ export function App() {
 
   function cancelRequest() {
     if (request.current) void invoke('cancel_provider_request', { requestId: request.current });
-    setBusy(false);
   }
 
   return (
@@ -319,6 +354,22 @@ export function App() {
         {chatMode || section === 'chat' ? (
           <ChatView
             messages={messages}
+            conversations={conversations}
+            conversationId={conversationId}
+            onConversation={(id) => {
+              if (busy) return;
+              setConversationId(id);
+              void invoke<ChatMessage[]>('load_conversation', { conversationId: id })
+                .then(setMessages)
+                .catch(() => setError('Não foi possível abrir a conversa.'));
+            }}
+            onNewConversation={() => {
+              if (!busy) {
+                setConversationId(null);
+                setMessages([]);
+                setError('');
+              }
+            }}
             busy={busy}
             draft={draft}
             setDraft={setDraft}
@@ -744,8 +795,8 @@ function Companion({
           <div>
             <h3>Ilha na área de trabalho</h3>
             <p>
-              Abre uma janela transparente do assistente. A posição pode ficar em qualquer canto da tela
-              principal.
+              Abre uma janela transparente do assistente. A posição pode ficar em qualquer canto da
+              tela principal.
             </p>
           </div>
           <button
@@ -1061,6 +1112,10 @@ function Settings({
 
 function ChatView({
   messages,
+  conversations,
+  conversationId,
+  onConversation,
+  onNewConversation,
   busy,
   draft,
   setDraft,
@@ -1070,6 +1125,10 @@ function ChatView({
   providerName,
 }: {
   messages: ChatMessage[];
+  conversations: Conversation[];
+  conversationId: string | null;
+  onConversation: (id: string) => void;
+  onNewConversation: () => void;
   busy: boolean;
   draft: string;
   setDraft: (value: string) => void;
@@ -1088,6 +1147,22 @@ function ChatView({
         <span className="chat-provider">
           <i /> Provedor selecionado: {providerName}
         </span>
+      </div>
+      <div className="chat-history" aria-label="Histórico de conversas">
+        <button type="button" onClick={onNewConversation} disabled={busy}>
+          Nova conversa
+        </button>
+        {conversations.map((item) => (
+          <button
+            type="button"
+            key={item.id}
+            onClick={() => onConversation(item.id)}
+            disabled={busy}
+            aria-current={conversationId === item.id ? 'page' : undefined}
+          >
+            {item.title}
+          </button>
+        ))}
       </div>
       <div className="messages-area">
         {messages.length === 0 ? (

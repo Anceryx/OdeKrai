@@ -41,7 +41,7 @@ export function ProviderCatalog({
   onCredentialRemoved,
 }: Props) {
   const selected = AI_PROVIDERS.find((provider) => provider.id === selectedId) ?? AI_PROVIDERS[0];
-  const isActive = settings.name === selected.name;
+  const isActive = settings.providerId === selected.id;
   const [draft, setDraft] = useState<ProviderSettings>(settings);
   const [secret, setSecret] = useState('');
   const [showKey, setShowKey] = useState(false);
@@ -54,6 +54,7 @@ export function ProviderCatalog({
       isActive
         ? settings
         : {
+            providerId: selected.id,
             name: selected.name,
             baseUrl: selected.baseUrl ?? '',
             model: '',
@@ -95,7 +96,13 @@ export function ProviderCatalog({
     const baseUrl = selected.region
       ? `https://bedrock-runtime.${(draft.region ?? '').trim()}.amazonaws.com/openai/v1`
       : draft.baseUrl.trim();
-    const next = { ...draft, name: selected.name, baseUrl, authMode: selected.authMode };
+    const next = {
+      ...draft,
+      providerId: selected.id,
+      name: selected.name,
+      baseUrl,
+      authMode: selected.authMode,
+    };
     setBusy(true);
     setNotice('');
     try {
@@ -197,7 +204,7 @@ export function ProviderCatalog({
                           : 'Chat Completions'}
                   </small>
                 </span>
-                {settings.name === provider.name && (
+                {settings.providerId === provider.id && (
                   <span className="provider-active-dot" title="Selecionado no aplicativo" />
                 )}
               </button>

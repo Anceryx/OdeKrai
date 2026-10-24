@@ -2,6 +2,6 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Permissões mínimas da janela principal do Odekrai.",
-  "windows": ["main", "island", "mascot"],
+  "windows": ["main"],
   "permissions": ["core:default"]
 }

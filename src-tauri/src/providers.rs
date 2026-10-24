@@ -3,7 +3,7 @@ use reqwest::{header, redirect::Policy, Client, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{collections::HashMap, sync::Mutex, time::Duration};
-use tauri::State;
+use tauri::{ipc::Channel, State};
 use tokio_util::sync::CancellationToken;
 
 const KEYRING_SERVICE: &str = "site.anceryx.odekrai.provider";
@@ -60,7 +60,12 @@ fn credential_entry(provider_id: &str) -> Result<Entry, String> {
 }
 
 #[tauri::command]
-pub fn save_provider_credential(provider_id: String, credential: String) -> Result<(), String> {
+pub fn save_provider_credential(
+    caller: tauri::WebviewWindow,
+    provider_id: String,
+    credential: String,
+) -> Result<(), String> {
+    super::require_main(&caller)?;
     let credential = credential.trim();
     if credential.is_empty() || credential.len() > MAX_CREDENTIAL_BYTES {
         return Err("Informe uma credencial válida (até 4.096 bytes).".into());
@@ -71,7 +76,11 @@ pub fn save_provider_credential(provider_id: String, credential: String) -> Resu
 }
 
 #[tauri::command]
-pub fn has_provider_credential(provider_id: String) -> Result<bool, String> {
+pub fn has_provider_credential(
+    caller: tauri::WebviewWindow,
+    provider_id: String,
+) -> Result<bool, String> {
+    super::require_main(&caller)?;
     match credential_entry(&provider_id)?.get_password() {
         Ok(_) => Ok(true),
         Err(keyring::Error::NoEntry) => Ok(false),
@@ -80,7 +89,11 @@ pub fn has_provider_credential(provider_id: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub fn remove_provider_credential(provider_id: String) -> Result<(), String> {
+pub fn remove_provider_credential(
+    caller: tauri::WebviewWindow,
+    provider_id: String,
+) -> Result<(), String> {
+    super::require_main(&caller)?;
     match credential_entry(&provider_id)?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(_) => Err("Não foi possível remover a credencial do Gerenciador do Windows.".into()),
@@ -89,9 +102,11 @@ pub fn remove_provider_credential(provider_id: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn cancel_provider_request(
+    caller: tauri::WebviewWindow,
     state: State<'_, ProviderRequests>,
     request_id: String,
 ) -> Result<bool, String> {
+    super::require_main(&caller)?;
     let token = state
         .0
         .lock()
@@ -108,12 +123,59 @@ pub async fn cancel_provider_request(
 
 #[tauri::command]
 pub async fn send_provider_message(
+    caller: tauri::WebviewWindow,
     state: State<'_, ProviderRequests>,
     provider_id: String,
     base_url: String,
     model: String,
     messages: Vec<ProviderMessage>,
     request_id: String,
+) -> Result<ProviderReply, String> {
+    super::require_main(&caller)?;
+    send_message_inner(
+        state,
+        provider_id,
+        base_url,
+        model,
+        messages,
+        request_id,
+        None,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn stream_provider_message(
+    caller: tauri::WebviewWindow,
+    state: State<'_, ProviderRequests>,
+    provider_id: String,
+    base_url: String,
+    model: String,
+    messages: Vec<ProviderMessage>,
+    request_id: String,
+    on_chunk: Channel<String>,
+) -> Result<ProviderReply, String> {
+    super::require_main(&caller)?;
+    send_message_inner(
+        state,
+        provider_id,
+        base_url,
+        model,
+        messages,
+        request_id,
+        Some(on_chunk),
+    )
+    .await
+}
+
+async fn send_message_inner(
+    state: State<'_, ProviderRequests>,
+    provider_id: String,
+    base_url: String,
+    model: String,
+    messages: Vec<ProviderMessage>,
+    request_id: String,
+    on_chunk: Option<Channel<String>>,
 ) -> Result<ProviderReply, String> {
     if request_id.is_empty()
         || request_id.len() > 80
@@ -155,7 +217,7 @@ pub async fn send_provider_message(
 
     let result = tokio::select! {
         _ = cancellation.cancelled() => Err("Solicitação cancelada.".into()),
-        response = request_provider(&provider_id, &base_url, &model, &messages) => response,
+        response = request_provider(&provider_id, &base_url, &model, &messages, on_chunk) => response,
     };
     if let Ok(mut requests) = state.0.lock() {
         requests.remove(&request_id);
@@ -168,6 +230,7 @@ async fn request_provider(
     base_url: &str,
     model: &str,
     messages: &[ProviderMessage],
+    on_chunk: Option<Channel<String>>,
 ) -> Result<ProviderReply, String> {
     let entry = credential_entry(provider_id)?;
     let credential = entry.get_password().map_err(|error| match error {
@@ -197,13 +260,13 @@ async fn request_provider(
                 .filter(|message| message.role != "system")
                 .map(|message| json!({ "role": message.role, "content": message.content }))
                 .collect::<Vec<_>>();
-            let mut body = json!({ "model": model, "max_tokens": 2048, "messages": conversation });
+            let mut body = json!({ "model": model, "max_tokens": 2048, "messages": conversation, "stream": on_chunk.is_some() });
             if !system.is_empty() {
                 body["system"] = json!(system);
             }
             client
                 .post(endpoint)
-                .header(header::AUTHORIZATION, bearer_value(&credential)?)
+                .pipe_auth(provider_id, &credential)?
                 .header("anthropic-version", "2023-06-01")
                 .json(&body)
         }
@@ -215,28 +278,24 @@ async fn request_provider(
                 .join("\n\n");
             client
                 .post(endpoint)
-                .header(header::AUTHORIZATION, bearer_value(&credential)?)
+                .pipe_auth(provider_id, &credential)?
                 .json(&json!({ "model": model, "input": input }))
         }
         "azure-openai" => client
             .post(endpoint)
-            .header("api-key", header_value(&credential)?)
-            .json(&json!({ "model": model, "messages": messages, "stream": false })),
+            .pipe_auth(provider_id, &credential)?
+            .json(&json!({ "model": model, "messages": messages, "stream": on_chunk.is_some() })),
         _ => client
             .post(endpoint)
-            .header(header::AUTHORIZATION, bearer_value(&credential)?)
-            .json(&json!({ "model": model, "messages": messages, "stream": false })),
+            .pipe_auth(provider_id, &credential)?
+            .json(&json!({ "model": model, "messages": messages, "stream": on_chunk.is_some() })),
     };
 
-    let response = request
+    let mut response = request
         .send()
         .await
         .map_err(|error| safe_transport_error(&error))?;
     let status = response.status();
-    let payload: Value = response
-        .json()
-        .await
-        .map_err(|_| "O provedor retornou uma resposta inválida.".to_string())?;
     if !status.is_success() {
         return Err(match status.as_u16() {
             401 | 403 => "O provedor recusou a credencial ou as permissões configuradas.".into(),
@@ -248,7 +307,88 @@ async fn request_provider(
             _ => format!("O provedor respondeu com HTTP {}.", status.as_u16()),
         });
     }
+    if let Some(channel) = on_chunk {
+        if provider_id != "perplexity" {
+            let mut pending = Vec::new();
+            let mut content = String::new();
+            let mut finished = false;
+            while let Some(chunk) = response
+                .chunk()
+                .await
+                .map_err(|error| safe_transport_error(&error))?
+            {
+                pending.extend_from_slice(&chunk);
+                if pending.len() > MAX_MESSAGE_BYTES {
+                    return Err("A resposta excede o limite permitido.".into());
+                }
+                while let Some((end, delimiter_len)) = pending
+                    .windows(4)
+                    .position(|part| part == b"\r\n\r\n")
+                    .map(|end| (end, 4))
+                    .or_else(|| {
+                        pending
+                            .windows(2)
+                            .position(|part| part == b"\n\n")
+                            .map(|end| (end, 2))
+                    })
+                {
+                    let event = pending.drain(..end + delimiter_len).collect::<Vec<_>>();
+                    for line in String::from_utf8_lossy(&event).lines() {
+                        if let Some(data) = line.trim_end_matches('\r').strip_prefix("data: ") {
+                            if data == "[DONE]" {
+                                finished = true;
+                                continue;
+                            }
+                            let payload: Value = serde_json::from_str(data).map_err(|_| {
+                                "O provedor retornou um evento inválido.".to_string()
+                            })?;
+                            if payload["type"] == "message_stop" {
+                                finished = true;
+                            }
+                            if payload["type"] == "error" {
+                                return Err("O provedor interrompeu a resposta.".into());
+                            }
+                            let delta = stream_delta(provider_id, &payload);
+                            if let Some(delta) = delta {
+                                content.push_str(delta);
+                                if content.len() > MAX_MESSAGE_BYTES {
+                                    return Err("A resposta excede o limite permitido.".into());
+                                }
+                                let _ = channel.send(delta.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            if !finished {
+                return Err("A resposta do provedor foi interrompida.".into());
+            }
+            if content.trim().is_empty() {
+                return Err("O provedor retornou uma resposta vazia.".into());
+            }
+            return Ok(ProviderReply {
+                content,
+                citations: Vec::new(),
+            });
+        }
+    }
+    let payload: Value = response
+        .json()
+        .await
+        .map_err(|_| "O provedor retornou uma resposta inválida.".to_string())?;
     parse_provider_reply(provider_id, &payload)
+}
+
+fn stream_delta<'a>(provider_id: &str, payload: &'a Value) -> Option<&'a str> {
+    if provider_id == "anthropic" {
+        if payload["type"] == "content_block_delta" && payload["delta"]["type"] == "text_delta" {
+            payload["delta"]["text"].as_str()
+        } else {
+            None
+        }
+    } else {
+        payload["choices"][0]["delta"]["content"].as_str()
+    }
 }
 
 fn provider_endpoint(provider_id: &str, base_url: &str) -> Result<Url, String> {
@@ -319,6 +459,22 @@ fn provider_endpoint(provider_id: &str, base_url: &str) -> Result<Url, String> {
 fn header_value(value: &str) -> Result<header::HeaderValue, String> {
     header::HeaderValue::from_str(value)
         .map_err(|_| "A credencial contém caracteres inválidos para uma requisição.".to_string())
+}
+
+trait AuthRequest {
+    fn pipe_auth(self, provider_id: &str, credential: &str) -> Result<Self, String>
+    where
+        Self: Sized;
+}
+
+impl AuthRequest for reqwest::RequestBuilder {
+    fn pipe_auth(self, provider_id: &str, credential: &str) -> Result<Self, String> {
+        Ok(match provider_id {
+            "anthropic" => self.header("x-api-key", header_value(credential)?),
+            "azure-openai" => self.header("api-key", header_value(credential)?),
+            _ => self.header(header::AUTHORIZATION, bearer_value(credential)?),
+        })
+    }
 }
 
 fn bearer_value(value: &str) -> Result<header::HeaderValue, String> {
@@ -471,5 +627,78 @@ mod tests {
         .unwrap();
         assert_eq!(perplexity.content, "Resposta");
         assert_eq!(perplexity.citations[0].title, "Fonte");
+    }
+
+    #[tokio::test]
+    async fn sends_provider_specific_authentication_headers_to_mock_server() {
+        use std::io::{Read, Write};
+        for provider in ["anthropic", "azure-openai", "openai", "perplexity"] {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = std::thread::spawn(move || {
+                let (mut socket, _) = listener.accept().unwrap();
+                socket
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut bytes = [0_u8; 4096];
+                let count = socket.read(&mut bytes).unwrap();
+                let request = String::from_utf8_lossy(&bytes[..count]).to_ascii_lowercase();
+                socket
+                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}")
+                    .unwrap();
+                request
+            });
+            let client = Client::new();
+            client
+                .post(format!("http://{address}/"))
+                .pipe_auth(provider, "test-secret")
+                .unwrap()
+                .header("anthropic-version", "2023-06-01")
+                .body("{}")
+                .send()
+                .await
+                .unwrap();
+            let request = server.join().unwrap();
+            let expected = match provider {
+                "anthropic" => "x-api-key: test-secret",
+                "azure-openai" => "api-key: test-secret",
+                _ => "authorization: bearer test-secret",
+            };
+            assert!(
+                request.contains(expected),
+                "cabeçalho incorreto para {provider}"
+            );
+            if provider == "anthropic" {
+                assert!(!request.contains("authorization:"));
+            }
+            if provider == "azure-openai" {
+                assert!(!request.contains("authorization:"));
+            }
+        }
+    }
+
+    #[test]
+    fn extracts_only_text_from_stream_events() {
+        assert_eq!(
+            stream_delta(
+                "anthropic",
+                &json!({"type":"content_block_delta","delta":{"type":"text_delta","text":"Olá"}})
+            ),
+            Some("Olá")
+        );
+        assert_eq!(
+            stream_delta(
+                "anthropic",
+                &json!({"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"secret"}})
+            ),
+            None
+        );
+        assert_eq!(
+            stream_delta(
+                "openai",
+                &json!({"choices":[{"delta":{"content":"Tudo bem"}}]})
+            ),
+            Some("Tudo bem")
+        );
     }
 }

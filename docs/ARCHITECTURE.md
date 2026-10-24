@@ -14,13 +14,13 @@ O GLB e as referências fornecidas pelo proprietário são extraídos para `asse
 
 ## Ilha, áudio e armazenamento
 
-`src/core/island.ts` implementa transições e prioridades. `src/core/sounds.ts` carrega sons sob demanda, mantém cache, limita repetições, aplica volume e ignora arquivos ausentes ou inválidos. Preferências não secretas ficam no armazenamento local do WebView; chaves de API não são salvas.
+`src/core/island.ts` implementa transições e prioridades. `src/core/sounds.ts` carrega sons sob demanda, mantém cache, limita repetições, aplica volume e ignora arquivos ausentes ou inválidos. Preferências não secretas ficam no armazenamento local do WebView; chaves de API não são salvas. O histórico de conversas fica em SQLite na pasta de dados do aplicativo, acessado somente pelos comandos Rust da janela principal.
 
 No Windows, as janelas auxiliares recebem regiões Win32 arredondadas para hit-testing. A região é atualizada no redimensionamento e na alteração de DPI. Isso ainda exige teste de desktop real para confirmar o encaminhamento de cliques nas áreas transparentes.
 
 ## Limites conhecidos
 
-- O executável abriu com o UDF WebView2 padrão em um novo ensaio, mas a sessão não permite inspecionar a imagem da janela. Orientação UV, alinhamento facial e renderização precisam de validação visual. A causa do `0x800700AA` anterior permanece inconclusiva.
+- Um ensaio anterior abriu o executável com o UDF WebView2 padrão. O erro `0x800700AA` também ocorreu em outra tentativa; a causa permanece inconclusiva. O plugin de instância única evita abrir uma segunda instância do aplicativo, mas seu efeito sobre esse erro precisa de teste nativo. Orientação UV, alinhamento facial e renderização precisam de validação visual.
 - O aplicativo pode usar o marcador de fallback em builds sem asset local. O bundle de build feito neste checkout inclui o GLB privado e não pode ser publicado.
 - Escalas DPI, monitores adicionais, reconexão, fullscreen e hit-testing ainda precisam de validação manual.
 - Nenhum áudio Kenney foi integrado.

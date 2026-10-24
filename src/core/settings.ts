@@ -1,7 +1,8 @@
 import { normalizeSoundPreferences } from './sounds';
-import type { ProviderAuthMode } from './providers';
+import { AI_PROVIDERS, type ProviderAuthMode } from './providers';
 
 export type ProviderSettings = {
+  providerId: string;
   name: string;
   baseUrl: string;
   model: string;
@@ -37,6 +38,7 @@ export const defaultSettings: AppSettings = {
   language: 'pt-BR',
   reduceMotion: false,
   provider: {
+    providerId: 'openai',
     name: 'OpenAI compatível',
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-4o-mini',
@@ -93,6 +95,10 @@ export function loadSettings(): AppSettings {
       provider: {
         ...defaultSettings.provider,
         ...value.provider,
+        providerId: AI_PROVIDERS.some((provider) => provider.id === value.provider.providerId)
+          ? value.provider.providerId
+          : (AI_PROVIDERS.find((provider) => provider.name === value.provider.name)?.id ??
+            'openai'),
         authMode: value.provider.authMode === 'api-key' ? 'api-key' : 'bearer',
       },
       companion: {
