@@ -1,6 +1,9 @@
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use tauri::Manager;
+
+const PET_CATALOG: &str = include_str!("../../assets/pets/kenney-mini-characters/pets.json");
+const DEFAULT_PET_ID: &str = "character-female-a";
 
 #[derive(Serialize)]
 pub struct Conversation {
@@ -32,8 +35,79 @@ fn init_schema(db: &Connection) -> Result<(), String> {
     db.execute_batch("PRAGMA foreign_keys = ON; PRAGMA secure_delete = ON;
         CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
         CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('user','assistant')), content TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
-        CREATE INDEX IF NOT EXISTS messages_conversation ON messages(conversation_id, id);")
+        CREATE INDEX IF NOT EXISTS messages_conversation ON messages(conversation_id, id);
+        CREATE TABLE IF NOT EXISTS pet_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);")
         .map_err(|_| "Não foi possível preparar o histórico local.".to_string())?;
+    Ok(())
+}
+
+#[derive(serde::Deserialize)]
+struct PetCatalogEntry {
+    id: String,
+    file: String,
+}
+
+fn valid_pet_catalog(json: &str) -> Result<Vec<PetCatalogEntry>, String> {
+    let pets: Vec<PetCatalogEntry> = serde_json::from_str(json)
+        .map_err(|_| "O catálogo de personagens está ausente ou inválido.".to_string())?;
+    if pets.is_empty()
+        || pets.iter().any(|pet| {
+            pet.id.is_empty()
+                || !pet
+                    .id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+                || !pet.file.strip_suffix(".png").is_some_and(|stem| {
+                    !stem.is_empty()
+                        && stem.bytes().all(|byte| {
+                            byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-'
+                        })
+                })
+        })
+    {
+        return Err("O catálogo contém um caminho de personagem inválido.".into());
+    }
+    Ok(pets)
+}
+
+fn pet_id_is_valid(id: &str, manifest: &str) -> bool {
+    valid_pet_catalog(manifest).is_ok_and(|pets| pets.iter().any(|pet| pet.id == id))
+}
+
+#[tauri::command]
+pub fn get_selected_pet(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+) -> Result<String, String> {
+    super::require_caller(&caller, &["main", "island", "mascot"])?;
+    let db = database(&app)?;
+    db.query_row(
+        "SELECT value FROM pet_preferences WHERE key = 'selected'",
+        [],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(|_| "Não foi possível ler o personagem selecionado.".to_string())
+    .map(|saved: Option<String>| {
+        saved
+            .filter(|id| pet_id_is_valid(id, PET_CATALOG))
+            .unwrap_or_else(|| DEFAULT_PET_ID.to_string())
+    })
+}
+
+#[tauri::command]
+pub fn set_selected_pet(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    pet_id: String,
+) -> Result<(), String> {
+    super::require_main(&caller)?;
+    if !pet_id_is_valid(&pet_id, PET_CATALOG) {
+        return Err("Personagem inválido.".into());
+    }
+    let db = database(&app)?;
+    db.execute("INSERT INTO pet_preferences(key, value) VALUES ('selected', ?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [pet_id])
+        .map_err(|_| "Não foi possível salvar o personagem selecionado.".to_string())?;
     Ok(())
 }
 
@@ -211,5 +285,43 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].title, "Teste");
         assert_eq!(items[0].created_at, 1798000000);
+    }
+
+    #[test]
+    fn pet_catalog_rejects_missing_json_and_unsafe_paths() {
+        assert!(valid_pet_catalog("").is_err());
+        assert!(valid_pet_catalog(r#"[{"id":"bad","file":"../secret.png"}]"#).is_err());
+        assert!(valid_pet_catalog(r#"[{"id":"bad","file":"C:secret.png"}]"#).is_err());
+        assert!(valid_pet_catalog(PET_CATALOG).is_ok());
+    }
+
+    #[test]
+    fn selected_pet_defaults_and_persists_in_sqlite() {
+        let db = Connection::open_in_memory().unwrap();
+        init_schema(&db).unwrap();
+        let selected: Option<String> = db
+            .query_row(
+                "SELECT value FROM pet_preferences WHERE key='selected'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .unwrap();
+        assert!(selected.is_none());
+        db.execute(
+            "INSERT INTO pet_preferences(key,value) VALUES ('selected','character-male-a')",
+            [],
+        )
+        .unwrap();
+        let selected: String = db
+            .query_row(
+                "SELECT value FROM pet_preferences WHERE key='selected'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(selected, "character-male-a");
+        assert_eq!(DEFAULT_PET_ID, "character-female-a");
+        assert!(!pet_id_is_valid("../secret", PET_CATALOG));
     }
 }

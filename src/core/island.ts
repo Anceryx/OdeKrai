@@ -9,7 +9,9 @@ export type IslandState =
   | 'task'
   | 'notification'
   | 'error'
-  | 'completed';
+  | 'completed'
+  | 'awaiting_approval'
+  | 'paused';
 
 export type IslandEvent =
   | { type: 'open' }
@@ -20,7 +22,15 @@ export type IslandEvent =
       type: 'activity';
       state: Extract<
         IslandState,
-        'listening' | 'thinking' | 'responding' | 'task' | 'notification' | 'error' | 'completed'
+        | 'listening'
+        | 'thinking'
+        | 'responding'
+        | 'task'
+        | 'notification'
+        | 'error'
+        | 'completed'
+        | 'awaiting_approval'
+        | 'paused'
       >;
       message?: string;
     }
@@ -43,6 +53,8 @@ const priorities: Record<IslandState, number> = {
   responding: 4,
   task: 4,
   completed: 5,
+  awaiting_approval: 6,
+  paused: 7,
   notification: 6,
   error: 7,
 };
@@ -88,4 +100,6 @@ export const islandLabels: Record<IslandState, string> = {
   notification: 'Notificação',
   error: 'Falha',
   completed: 'Concluído',
+  awaiting_approval: 'Aguardando aprovação',
+  paused: 'Pausado',
 };

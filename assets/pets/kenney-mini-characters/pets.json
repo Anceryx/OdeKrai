@@ -1,0 +1,74 @@
+[
+  {
+    "id": "character-female-a",
+    "name": "Feminino A",
+    "file": "character-female-a.png",
+    "altText": "Personagem feminino com roupa azul"
+  },
+  {
+    "id": "character-female-b",
+    "name": "Feminino B",
+    "file": "character-female-b.png",
+    "altText": "Personagem feminino com roupa verde"
+  },
+  {
+    "id": "character-female-c",
+    "name": "Feminino C",
+    "file": "character-female-c.png",
+    "altText": "Personagem feminino com roupa vermelha"
+  },
+  {
+    "id": "character-female-d",
+    "name": "Feminino D",
+    "file": "character-female-d.png",
+    "altText": "Personagem feminino com roupa amarela"
+  },
+  {
+    "id": "character-female-e",
+    "name": "Feminino E",
+    "file": "character-female-e.png",
+    "altText": "Personagem feminino com roupa roxa"
+  },
+  {
+    "id": "character-female-f",
+    "name": "Feminino F",
+    "file": "character-female-f.png",
+    "altText": "Personagem feminino com roupa escura"
+  },
+  {
+    "id": "character-male-a",
+    "name": "Masculino A",
+    "file": "character-male-a.png",
+    "altText": "Personagem masculino com roupa azul"
+  },
+  {
+    "id": "character-male-b",
+    "name": "Masculino B",
+    "file": "character-male-b.png",
+    "altText": "Personagem masculino com roupa verde"
+  },
+  {
+    "id": "character-male-c",
+    "name": "Masculino C",
+    "file": "character-male-c.png",
+    "altText": "Personagem masculino com roupa vermelha"
+  },
+  {
+    "id": "character-male-d",
+    "name": "Masculino D",
+    "file": "character-male-d.png",
+    "altText": "Personagem masculino com roupa amarela"
+  },
+  {
+    "id": "character-male-e",
+    "name": "Masculino E",
+    "file": "character-male-e.png",
+    "altText": "Personagem masculino com roupa roxa"
+  },
+  {
+    "id": "character-male-f",
+    "name": "Masculino F",
+    "file": "character-male-f.png",
+    "altText": "Personagem masculino com roupa escura"
+  }
+]

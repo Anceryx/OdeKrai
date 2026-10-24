@@ -31,6 +31,8 @@ import { AgentHome } from './AgentHome';
 import { Profile, initials, type ProfileData } from './Profile';
 import { ApprovalWindow, isApprovalWindow, SecurityCenter } from './SecurityCenter';
 import { Button, PageHeader, Toggle } from './DesignSystem';
+import { DEFAULT_PET_ID, PETS, type PetAnimationState } from '../core/pets';
+import { PetSprite } from './PetSprite';
 
 type Section =
   | 'overview'
@@ -76,6 +78,7 @@ function MainApp() {
   const [selectedProviderId, setSelectedProviderId] = useState(settings.activeProviderId);
   const activeProvider = activeProviderSettings(settings);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [selectedPet, setSelectedPet] = useState(DEFAULT_PET_ID);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -88,6 +91,9 @@ function MainApp() {
 
   useEffect(() => {
     if (!isTauri()) return;
+    void invoke<string>('get_selected_pet')
+      .then(setSelectedPet)
+      .catch(() => undefined);
     const refreshPermissionIndicator = () => {
       void invoke<{ mode: string; halted: boolean }>('get_permission_settings')
         .then(setPermissionIndicator)
@@ -111,6 +117,17 @@ function MainApp() {
     });
     return () => unlisten.forEach((off) => off());
   }, []);
+
+  async function choosePet(petId: string) {
+    if (!PETS.some((pet) => pet.id === petId)) return;
+    try {
+      await invoke('set_selected_pet', { petId });
+      setSelectedPet(petId);
+      await emit('selected-pet-updated', petId);
+    } catch {
+      setToast('Não foi possível salvar o personagem selecionado.');
+    }
+  }
 
   useEffect(() => {
     saveSettings(settings);
@@ -516,6 +533,7 @@ function MainApp() {
             cancel={cancelRequest}
             providerName={activeProvider.name}
             profile={profile}
+            selectedPet={selectedPet}
           />
         ) : (
           <div className="content-scroll">
@@ -526,6 +544,7 @@ function MainApp() {
                 provider={activeProvider}
                 keyReady={keySavedForSession}
                 profile={profile}
+                selectedPet={selectedPet}
               />
             )}
             {section === 'providers' && (
@@ -547,7 +566,13 @@ function MainApp() {
               />
             )}
             {section === 'companion' && (
-              <Companion settings={settings} update={setSettings} onError={setToast} />
+              <Companion
+                settings={settings}
+                update={setSettings}
+                onError={setToast}
+                selectedPet={selectedPet}
+                onSelectPet={(petId) => void choosePet(petId)}
+              />
             )}
             {section === 'settings' && (
               <Settings settings={settings} update={(next) => setSettings(next)} />
@@ -576,12 +601,14 @@ function Overview({
   provider,
   keyReady,
   profile,
+  selectedPet,
 }: {
   onChat: () => void;
   onOpen: (section: Section) => void;
   provider: ProviderSettings;
   keyReady: boolean;
   profile: ProfileData;
+  selectedPet: string;
 }) {
   const today = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
     .format(new Date())
@@ -608,7 +635,9 @@ function Overview({
         </div>
       </div>
       <section className="hero-card">
-        <div className="hero-pet-space" aria-hidden="true" />
+        <div className="hero-pet-space">
+          <PetSprite estado="idle" petId={selectedPet} />
+        </div>
         <div className="hero-content">
           <span className="pill-label">
             <i /> OdeKrai
@@ -690,10 +719,14 @@ function Companion({
   settings,
   update,
   onError,
+  selectedPet,
+  onSelectPet,
 }: {
   settings: AppSettings;
   update: (settings: AppSettings) => void;
   onError: (message: string) => void;
+  selectedPet: string;
+  onSelectPet: (petId: string) => void;
 }) {
   const [soundEvent, setSoundEvent] = useState<SoundEvent>('notification');
   const [previewExpression, setPreviewExpression] = useState<MascotExpression>('happy');
@@ -704,6 +737,7 @@ function Companion({
     drawCalls: 0,
   });
   const [previewAnimations, setPreviewAnimations] = useState(true);
+  const [petState, setPetState] = useState<PetAnimationState>('idle');
   const [previewLight, setPreviewLight] = useState(1);
   const [previewScale, setPreviewScale] = useState(1);
   const [previewOffset, setPreviewOffset] = useState({ x: 0, y: 0 });
@@ -776,24 +810,89 @@ function Companion({
         title="Assistente do OdeKrai"
         subtitle="Uma presença leve para acompanhar você na área de trabalho."
       />
+      <section className="settings-panel pet-picker-panel">
+        <div className="panel-heading">
+          <div>
+            <h3>Escolha seu personagem</h3>
+            <p>
+              Os previews têm 64×64 px e são exibidos sem ultrapassar o dobro do tamanho original.
+            </p>
+          </div>
+        </div>
+        <div className="pet-picker-grid" role="group" aria-label="Personagem do OdeKrai">
+          {PETS.map((pet) => (
+            <button
+              type="button"
+              aria-pressed={selectedPet === pet.id}
+              className={`pet-choice ${selectedPet === pet.id ? 'selected' : ''}`}
+              key={pet.id}
+              onClick={() => onSelectPet(pet.id)}
+            >
+              <PetSprite estado="idle" petId={pet.id} reduceMotion={settings.reduceMotion} />
+              <span>{pet.name}</span>
+              {selectedPet === pet.id && <small>Selecionado</small>}
+            </button>
+          ))}
+        </div>
+        <label className="pet-state-select">
+          <span>Prévia de estado</span>
+          <select
+            value={petState}
+            onChange={(event) => setPetState(event.target.value as PetAnimationState)}
+          >
+            <option value="idle">Em espera</option>
+            <option value="thinking">Pensando</option>
+            <option value="working">Trabalhando</option>
+            <option value="awaiting_approval">Aguardando aprovação</option>
+            <option value="success">Concluído</option>
+            <option value="error">Erro</option>
+            <option value="paused">Pausado</option>
+          </select>
+        </label>
+        <div className="pet-legacy-toggle">
+          <span>Renderer 3D legado (WebGL)</span>
+          <Toggle
+            checked={settings.companion.mascotType === 'legacy'}
+            label="Usar renderer 3D legado"
+            onClick={() =>
+              update({
+                ...settings,
+                companion: {
+                  ...settings.companion,
+                  mascotType: settings.companion.mascotType === 'legacy' ? 'sprite' : 'legacy',
+                },
+              })
+            }
+          />
+        </div>
+      </section>
       <div className="companion-preview">
         <div className="preview-grid" />
         <div className="preview-island">
           <span className="island-light" />
-          <OdekraiMascot
-            className="preview-mascot"
-            expression={previewExpression}
-            reduceMotion={settings.reduceMotion}
-            motionRequest={previewMotion}
-            animationsEnabled={previewAnimations}
-            lightIntensity={previewLight}
-            modelScale={previewScale}
-            modelOffset={previewOffset}
-            cameraYaw={previewCamera.yaw}
-            cameraPitch={previewCamera.pitch}
-            cameraZoom={previewCamera.zoom}
-            onMetrics={setPreviewMetrics}
-          />
+          {settings.companion.mascotType === 'legacy' ? (
+            <OdekraiMascot
+              className="preview-mascot"
+              expression={previewExpression}
+              reduceMotion={settings.reduceMotion}
+              motionRequest={previewMotion}
+              animationsEnabled={previewAnimations}
+              lightIntensity={previewLight}
+              modelScale={previewScale}
+              modelOffset={previewOffset}
+              cameraYaw={previewCamera.yaw}
+              cameraPitch={previewCamera.pitch}
+              cameraZoom={previewCamera.zoom}
+              onMetrics={setPreviewMetrics}
+            />
+          ) : (
+            <PetSprite
+              className="preview-mascot"
+              estado={petState}
+              petId={selectedPet}
+              reduceMotion={settings.reduceMotion}
+            />
+          )}
           <span className="island-label">
             PET OdeKrai <i />
           </span>
@@ -1254,6 +1353,7 @@ function ChatView({
   cancel,
   providerName,
   profile,
+  selectedPet,
 }: {
   messages: ChatMessage[];
   conversations: Conversation[];
@@ -1270,6 +1370,7 @@ function ChatView({
   cancel: () => void;
   providerName: string;
   profile: ProfileData;
+  selectedPet: string;
 }) {
   return (
     <div className="chat-view">
@@ -1345,7 +1446,7 @@ function ChatView({
                   ) : message.role === 'user' ? (
                     initials(profile.displayName)
                   ) : (
-                    'O'
+                    <PetSprite estado="idle" petId={selectedPet} avatar />
                   )}
                 </span>
                 <div>

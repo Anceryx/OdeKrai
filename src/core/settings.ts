@@ -23,6 +23,7 @@ export type AppSettings = {
   providers: Record<string, ProviderSettings>;
   companion: {
     enabled: boolean;
+    mascotType: 'sprite' | 'legacy';
     position: 'top-right' | 'bottom-right' | 'top-left' | 'bottom-left';
     size: number;
     alwaysOnTop: boolean;
@@ -68,6 +69,7 @@ export const defaultSettings: AppSettings = {
   providers: {},
   companion: {
     enabled: false,
+    mascotType: 'sprite',
     position: 'bottom-right',
     size: 1,
     alwaysOnTop: true,
@@ -187,6 +189,7 @@ export function loadSettingsWithWarnings(): { settings: AppSettings; warnings: s
           ...defaultSettings.companion,
           ...value.companion,
           enabled: typeof companion.enabled === 'boolean' ? companion.enabled : false,
+          mascotType: companion.mascotType === 'legacy' ? 'legacy' : 'sprite',
           position,
           size: Number.isFinite(companion.size)
             ? Math.max(0.75, Math.min(1.5, companion.size!))

@@ -1525,6 +1525,7 @@ fn submit_action(
                 return Err(error);
             }
             let _ = app.emit("approval-updated", ());
+            let _ = app.emit("companion-state", serde_json::json!({"type":"activity","state":"awaiting_approval","message":"Aguardando aprovação"}));
             Ok(ActionResult {
                 id,
                 status: "awaiting_approval".into(),
@@ -1786,6 +1787,22 @@ pub fn approval_respond(
         error.clone(),
     )?;
     close_approval_if_empty(&app, &state);
+    let next_activity = if state
+        .pending
+        .lock()
+        .map(|queue| !queue.is_empty())
+        .unwrap_or(true)
+    {
+        "awaiting_approval"
+    } else if status == "completed" {
+        "completed"
+    } else {
+        "error"
+    };
+    let _ = app.emit(
+        "companion-state",
+        serde_json::json!({"type":"activity","state":next_activity}),
+    );
     Ok(ActionResult {
         id: item.id,
         status: status.into(),
@@ -1867,7 +1884,7 @@ fn set_halted(
         if let Some(window) = app.get_webview_window("approval") {
             let _ = window.close();
         }
-        let _ = app.emit("companion-state",serde_json::json!({"type":"activity","state":"error","message":"Parado pelo kill switch"}));
+        let _ = app.emit("companion-state",serde_json::json!({"type":"activity","state":"paused","message":"Parado pelo kill switch"}));
         let _ = app.emit("security-halted", ());
         let request_id = id();
         let origin = Origin::User;
@@ -1910,6 +1927,7 @@ fn set_halted(
     )?;
     set_db_setting(app, "halted", "false")?;
     state.halted.store(false, Ordering::SeqCst);
+    let _ = app.emit("companion-state", serde_json::json!({"type":"reveal"}));
     let _ = app.emit("security-resumed", ());
     Ok(())
 }

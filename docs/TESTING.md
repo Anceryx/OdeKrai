@@ -36,7 +36,15 @@ island/mascote.
 - `DesignSystem.test.tsx`: variantes de botão, nome e estado acessíveis de alternância e cartão selecionável, estrutura de cabeçalho, aviso, selo, cartão, campo e seletor.
 - `npm run build`: verifica TypeScript e bundle após a adoção dos componentes e tokens.
 - Validação visual pendente no Windows: Visão geral, Conversas, Identidade e memória, Conectores, Assistente, Configurações, Permissões, Atividade e Perfil em 1250 × 700 e 1000 × 600; conferir foco, contraste e escala de texto.
-- `assets-src/iconly/` não foi fornecida neste checkout. A substituição de glifos por ícones Iconly e a atribuição/licença associada dependem dos SVGs e da licença exportados pelo usuário.
+- `assets-src/iconly/` contém SVGs locais ainda não rastreados, mas não há arquivo de licença nem atribuição informada. Os ícones não foram incorporados; a atribuição e o uso dependem de confirmar os direitos.
+
+### UI-3 — pet 2D
+
+- `src/core/pets.test.ts`: rejeita catálogo ausente e nomes de arquivo inválidos, verifica mapeamento da FSM, fallback para PNG ausente e preferência de movimento reduzido.
+- `history.rs`: `pet_catalog_rejects_missing_json_and_unsafe_paths` valida o manifesto e bloqueia caminhos inseguros; `selected_pet_defaults_and_persists_in_sqlite` confere o padrão e persistência local.
+- `npm run build`, `npm test`, `npm run format:check`, `cargo fmt --check`, `cargo test --offline --lib` e `git diff --check` devem ser executados para validar o código.
+- Validação visual nativa pendente no Windows: seleção, animações, avatar, pet da Visão geral, transparência, arrasto, topmost, click-through e escala/DPI nas janelas auxiliares.
+- Há SVGs locais em `assets-src/iconly/`, sem arquivo de licença e ainda não rastreados pelo Git; não são incorporados nesta fase.
 
 ### Fase 3 — permissões
 

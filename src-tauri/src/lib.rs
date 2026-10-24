@@ -200,7 +200,7 @@ fn ensure_mascot_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String>
         .visible(false)
         .build()
         .map_err(|_| "Não foi possível preparar a janela do mascote.".to_string())?;
-    if let Err(error) = apply_click_region(&window, 8.0, 26.0) {
+    if let Err(error) = apply_click_region(&window, 8.0, 0.0) {
         let _ = window.close();
         return Err(error);
     }
@@ -211,7 +211,7 @@ fn ensure_mascot_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String>
             event,
             tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
         ) {
-            let _ = apply_click_region(&moved_window, 8.0, 26.0);
+            let _ = apply_click_region(&moved_window, 8.0, 0.0);
         }
         if let tauri::WindowEvent::Moved(position) = event {
             let scale = moved_window.scale_factor().unwrap_or(1.0);
@@ -350,7 +350,7 @@ fn set_character_position(
     window
         .set_size(LogicalSize::new(104.0 * size, 104.0 * size))
         .map_err(|e| e.to_string())?;
-    apply_click_region(&window, 8.0, 26.0)?;
+    apply_click_region(&window, 8.0, 0.0)?;
     window
         .set_position(LogicalPosition::new(x, y))
         .map_err(|e| e.to_string())
@@ -411,6 +411,8 @@ pub fn run() {
             history::append_conversation_message,
             history::delete_conversation,
             history::delete_all_conversations,
+            history::get_selected_pet,
+            history::set_selected_pet,
             security::get_permission_settings,
             security::set_permission_mode,
             security::set_tool_override,

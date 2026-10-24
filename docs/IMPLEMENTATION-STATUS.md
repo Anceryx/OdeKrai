@@ -14,6 +14,10 @@ demais provedores permanecem `unverified` para tools.
 
 ## Implementado
 
+- UI-3: catálogo 2D Kenney CC0, seleção no Assistente persistida no SQLite, avatar e pet da Visão geral,
+  estados CSS ligados à FSM e renderer 3D legado selecionável sob demanda. O preview female-a não
+  veio na entrada e usa fallback; os 11 PNGs recebidos são 64×64 transparentes.
+
 - Catálogo de 15 provedores; Vertex AI permanece como guia. O chat usa um provedor configurado por vez, identificado por `providerId` persistido nas preferências. Preferências antigas são migradas pelo nome conhecido.
 - O backend Rust guarda chaves pelo `keyring`, restringe endpoints a HTTPS e hosts conhecidos e não segue redirecionamentos. A Anthropic usa `x-api-key` conforme a [API Messages](https://platform.claude.com/docs/en/api/messages/create).
 - O chat salva conversas em SQLite local e pode retomá-las. Anthropic e adaptadores Chat Completions enviam trechos ao frontend por canal Tauri; Perplexity Agent API ainda retorna a resposta completa.
@@ -32,6 +36,7 @@ demais provedores permanecem `unverified` para tools.
 - Fase 2.1 também requer validação visual nativa do perfil/avatar, tipografia, contraste, fluxo de configuração por provedor e chamadas de listagem em contas de teste. A integração de Vertex AI continua sem verificação completa de ADC.
 - DPI, múltiplos monitores, fullscreen, foco, click-through, WebGL, instalador e atualização não são comprovados pelos testes automatizados.
 - Agent loop, ferramentas reais, roteador, aprendizado automático e sons integrados continuam pendentes. Os modos declarados em `ODEKRAI.md` são informativos; o modo efetivo vem do SQLite. A auditoria grava em `logs/` sem retenção automática.
+- A UI-3 exige validação visual no Windows para seletor, animações, recorte do avatar, janela de ilha/mascote, arrasto, click-through e topmost. Não foi realizada nesta execução.
 - A Fase 3 ainda requer confirmação visual da janela nativa, teste do atalho global e validação de foco, DPI e múltiplos monitores em Windows.
 - O mascote já é carregado com `React.lazy` e o bundle principal permanece abaixo de 500 kB, mas a dependência Three.js forma um chunk lazy isolado acima de 500 kB bruto. O aviso de tamanho permanece; o chunk mede cerca de 617 kB bruto/156 kB gzip no build atual.
 - A verificação automatizada de build de distribuição bloqueia o empacotamento quando o GLB ou as referências oficiais estão presentes em `dist/`. O build local `npm run build` ainda pode copiá-los; consulte [`LICENSE-ASSETS.md`](../LICENSE-ASSETS.md).

@@ -39,7 +39,21 @@ injeção de instrução, e a proteção depende do taint e da política para ef
 
 O frontend usa React + TypeScript + Vite. `src/core/` mantém regras sem dependência da apresentação; `src/ui/` contém o Hub e as janelas do Companion. Na abertura, o Tauri cria somente `main`. Rust cria `island` e `mascot` quando ativadas e fecha cada uma quando desativada; cria `approval` quando há uma aprovação pendente e fecha a janela após resolver ou expirar a fila. Comandos Rust controlam posição, tamanho, visibilidade e prioridade. Eventos Tauri conectam o chat às janelas do Companion e sincronizam as preferências locais.
 
-## Mascote 3D
+## Pet 2D e renderer legado 3D
+
+O pet padrão é o sprite CSS de `assets/pets/kenney-mini-characters/`, escolhido pelo usuário e
+persistido na tabela `pet_preferences` do SQLite local. O catálogo `pets.json` é validado no
+frontend e no Rust; nomes de arquivo aceitos são apenas nomes simples `.png`. Estados da FSM são
+convertidos em animações CSS, que ficam estáticas quando a preferência do aplicativo ou do sistema
+reduz movimento está ativa. O catálogo inclui o ID feminino A solicitado como padrão, mas o PNG
+correspondente não foi fornecido; essa entrada exibe um fallback CSS.
+
+O renderer Three.js continua opcional e legado. A tela Assistente permite ativá-lo; só então o
+componente 3D lazy é montado. O build local ainda emite o chunk do Three.js e o GLB se o asset
+proprietário estiver presente no checkout. Os avisos de distribuição continuam bloqueando esse
+conteúdo; não adicionar o GLB ao Git ou a artefatos publicados.
+
+## Detalhes do renderer 3D legado
 
 `src/core/mascot.ts` declara as 16 expressões, seus parâmetros faciais, o mapeamento dos estados reais da ilha e os movimentos. `src/core/mascot-face.ts` desenha os olhos em um Canvas 2D transparente. `src/ui/OdekraiCompanion.tsx` carrega o GLB com `GLTFLoader`, localiza `ADA_Face_Display`, clona o material `ADA_Eyes_Emissive_ReplaceTexture` e usa uma `CanvasTexture` como mapa de cor e emissão. O root usado pelo código chama-se `odekraiRoot`; nomes do GLB permanecem intactos.
 
@@ -51,7 +65,7 @@ O GLB e as referências fornecidas pelo proprietário são extraídos para `asse
 
 `src/core/island.ts` implementa transições e prioridades. `src/core/sounds.ts` carrega sons sob demanda, mantém cache, limita repetições, aplica volume e ignora arquivos ausentes ou inválidos. Preferências não secretas ficam no armazenamento local do WebView; chaves de API não são salvas. O histórico de conversas fica em SQLite na pasta de dados do aplicativo, acessado somente pelos comandos Rust da janela principal.
 
-No Windows, as janelas auxiliares recebem regiões Win32 arredondadas para hit-testing. A região é atualizada no redimensionamento e na alteração de DPI. Isso ainda exige teste de desktop real para confirmar o encaminhamento de cliques nas áreas transparentes.
+No Windows, a janela do mascote recebe região Win32 retangular no limite do sprite; a ilha mantém a região arredondada para acomodar seus controles. As regiões são atualizadas no redimensionamento e na alteração de DPI. Isso ainda exige teste de desktop real para confirmar o encaminhamento de cliques nas áreas transparentes.
 
 ## Pasta e identidade do agente
 

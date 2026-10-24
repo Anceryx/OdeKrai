@@ -5,12 +5,15 @@ import { loadSettings, saveSettings } from '../core/settings';
 import { normalizeSoundPreferences, playSound } from '../core/sounds';
 import { initialIslandSnapshot, transitionIsland, type IslandEvent } from '../core/island';
 import { expressionForIslandState, type MascotExpression } from '../core/mascot';
+import { petAnimationForIslandState, type PetAnimationState } from '../core/pets';
 import { OdekraiMascot, type MascotMotionRequest } from './OdekraiMascot';
+import { PetSprite } from './PetSprite';
 
 export function DesktopCharacter() {
   const [settings, setSettings] = useState(loadSettings);
   const [error, setError] = useState('');
   const [expression, setExpression] = useState<MascotExpression>('idle');
+  const [petState, setPetState] = useState<PetAnimationState>('idle');
   const [motionRequest, setMotionRequest] = useState<MascotMotionRequest>();
   const motionId = useRef(0);
   const [returning, setReturning] = useState(false);
@@ -36,6 +39,7 @@ export function DesktopCharacter() {
       listen<IslandEvent>('companion-state', ({ payload }) => {
         activitySnapshot.current = transitionIsland(activitySnapshot.current, payload);
         setExpression(expressionForIslandState(activitySnapshot.current.state));
+        setPetState(petAnimationForIslandState(activitySnapshot.current.state));
       }),
     ]).then((off) => {
       unlisten = off;
@@ -100,12 +104,20 @@ export function DesktopCharacter() {
       }}
     >
       <div className="desktop-drag-handle" data-tauri-drag-region aria-hidden="true" />
-      <OdekraiMascot
-        className={`desktop-model desktop-${expression}`}
-        expression={expression}
-        reduceMotion={settings.reduceMotion}
-        motionRequest={motionRequest}
-      />
+      {settings.companion.mascotType === 'legacy' ? (
+        <OdekraiMascot
+          className={`desktop-model desktop-${expression}`}
+          expression={expression}
+          reduceMotion={settings.reduceMotion}
+          motionRequest={motionRequest}
+        />
+      ) : (
+        <PetSprite
+          className="desktop-model"
+          estado={petState}
+          reduceMotion={settings.reduceMotion}
+        />
+      )}
       <button
         className="desktop-return"
         onClick={() => void returnHome()}

@@ -18,3 +18,12 @@ As dependências declaradas em `package.json` mantêm suas próprias licenças e
 - DM Mono, pacote `@fontsource/dm-mono` 5.3.0. Autores: The DM Mono Project Authors. Licença SIL Open Font License 1.1; arquivo `node_modules/@fontsource/dm-mono/LICENSE`. Pacote local: https://www.npmjs.com/package/@fontsource/dm-mono.
 
 Os arquivos das fontes são empacotados localmente pelo Vite; não há carregamento por CDN.
+
+## Personagens 2D
+
+Os previews do pacote **Mini Characters (1.0)** foram criados e distribuídos por Kenney
+(www.kenney.nl), em 17-07-2024. Licença Creative Commons Zero (CC0):
+https://creativecommons.org/publicdomain/zero/1.0/. Atribuição não é obrigatória.
+Texto da licença: `assets/pets/kenney-mini-characters/CC0-LICENSE.txt`.
+Origem do pacote: https://kenney.nl/assets/mini-characters. Os PNGs foram copiados sem
+alteração; o arquivo `character-female-a.png` não estava presente na pasta de entrada.
