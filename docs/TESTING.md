@@ -5,12 +5,14 @@
 - `npm test`: chat, estados da ilha, persistência, carregador de sons, registro das 16 expressões, mapeamento de eventos, interpolação facial, piscadas e movimento reduzido.
 - `npm run build`: TypeScript e bundle Vite.
 - `npm run format:check`: estilo Prettier.
+- `npm run check:debug-command`: confirma que declaração e registro do disparo manual estão limitados a `debug_assertions`.
+- `npm run check:release-assets`: verifica `dist/` e falha se encontrar o GLB proprietário ou referências oficiais. O comando de build Tauri executa essa verificação antes do empacotamento.
 - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`: formatação Rust.
 - `cargo check --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc`: compilação Rust para Windows.
 - `cargo test --manifest-path src-tauri/Cargo.toml --lib`: testes Rust, incluindo cabeçalhos de autenticação com servidor local simulado.
 - Testes Rust da validação do endpoint, mapeamento de status, recusa de formatos de imagem e normalização de avatar; sem chamadas às APIs reais.
 - Testes Vitest da migração v1 e isolamento de endpoint/modelo entre provedores.
-- `npm run tauri:build`: aplicação e instalador NSIS.
+- `npm run tauri:build`: valida o build e as guardas de distribuição antes de compilar/gerar o NSIS; falhar por GLB ou referência proprietária é o resultado esperado neste checkout.
 - `git diff --check`: whitespace e marcadores de conflito.
 
 ### Fase 3 — permissões
@@ -27,7 +29,7 @@ Resultados numéricos de builds e testes anteriores não devem ser aplicados à 
 
 Na página Companion, abrir “Pré-visualização e ferramentas de diagnóstico”. O painel permite escolher qualquer expressão, testar movimentos, habilitar flutuação/animações, ajustar luz, escala, posição e órbita da câmera, e ler FPS/triângulos/chamadas. O aviso identifica a simulação como local; os controles não emitem eventos para outras janelas.
 
-O GLB deste proprietário fica fora do Git e é incluído apenas no build feito neste checkout. Um checkout sem o GLB deve exibir o fallback e seguir compilando. As referências não são importadas pelo Vite.
+O GLB deste proprietário fica fora do Git e pode ser incluído pelo `npm run build` local neste checkout. O empacotamento Tauri é bloqueado enquanto o GLB ou referências forem detectados em `dist/`. Um checkout sem o GLB deve exibir o fallback e seguir compilando. As referências não são importadas pelo Vite.
 
 ## Checklist manual de validação nativa
 
@@ -53,9 +55,12 @@ Execute em uma sessão Windows com a janela visível. Registre sistema, escala D
 18. Troque entre provedores e confirme que endpoint/modelo não se misturam. Informe endpoint de outro provedor e confirme a recusa antes do salvamento da credencial. Carregue modelos somente nos provedores com endpoint documentado; confirme o estado parcial nos demais.
 19. Em Configurações → Permissões, troque cada modo e confirme a caixa nativa antes de salvar. Confira que o modo exibido em `ODEKRAI.md` não altera o modo efetivo do SQLite.
 20. Em build de desenvolvimento, teste leitura, gravação com backup, mover para `.trash`, envio simulado e bloqueio financeiro. Confirme que só a janela `approval` pode aprovar, que Negar e fechar negam, que parâmetros adulterados/replay/expiração/fila cheia falham fechados e que conteúdo externo pede aprovação.
-21. Teste `Ctrl+Shift+F12` e um atalho em conflito. Confirme que Parar tudo cancela uma resposta em streaming, nega aprovações pendentes, bloqueia novas ações e persiste após reiniciar; Retomar exige uma auditoria gravada.
-22. Na tela Atividade, confirme a cadeia, exporte JSONL e altere uma cópia de teste para verificar a detecção. Não edite os logs reais durante o ensaio.
-23. Repita a janela de aprovação em 100%, 125% e 150% de DPI, monitores distintos, foco alternado e telas menores; verifique texto longo sem renderização de Markdown/HTML.
+21. Ao mudar modo ou habilitar override, confirme que a caixa Win32 aparece sem congelar a janela principal enquanto permanece aberta; confirme Cancelar e Sim retornando à interface.
+22. Execute `npm run build` e confirme que o mascote fica em chunk lazy separado. O chunk Three.js ainda pode superar 500 kB bruto; registre o tamanho e gzip, sem elevar o limite de aviso para ocultá-lo.
+23. Teste `npm run check:release-assets` com um `dist/` de fixture limpo (passa) e com o GLB/uma referência oficial (falha com os caminhos detectados). Não publique artefatos locais que contenham o GLB.
+24. Teste `Ctrl+Shift+F12` e um atalho em conflito. Confirme que Parar tudo cancela uma resposta em streaming, nega aprovações pendentes, bloqueia novas ações e persiste após reiniciar; Retomar exige uma auditoria gravada.
+25. Na tela Atividade, confirme a cadeia, exporte JSONL e altere uma cópia de teste para verificar a detecção. Não edite os logs reais durante o ensaio.
+26. Repita a janela de aprovação em 100%, 125% e 150% de DPI, monitores distintos, foco alternado e telas menores; verifique texto longo sem renderização de Markdown/HTML.
 
 ## Inspeção visual manual pendente
 

@@ -1,13 +1,19 @@
-# Política de assets e identidade visual
+# Licença e distribuição de assets
 
-Este arquivo descreve a intenção atual do projeto e ainda precisa de revisão jurídica pelo proprietário antes de qualquer publicação de artes oficiais.
+O código e as dependências do aplicativo têm seus próprios termos de licença. Eles não concedem
+direito de redistribuir os materiais visuais fornecidos pelo proprietário.
 
-O código original do Odekrai é licenciado separadamente sob MIT. A licença MIT não concede direitos sobre o nome Odekrai, marcas, identidade visual, logotipos, personagem, ilustrações, sprites, animações, roupas, sons ou materiais promocionais oficiais. Esses materiais, quando fornecidos, permanecem reservados ao proprietário, salvo licença específica publicada por escrito.
+O modelo `odekrai-head.glb` e as referências visuais em `assets/odekrai/` são materiais privados do
+proprietário. Não os inclua em instaladores, releases, capturas públicas ou outros artefatos
+distribuídos sem autorização explícita. Esses arquivos permanecem fora do Git.
 
-Forks e redistribuições comerciais podem usar o código MIT respeitando seus termos, mas devem remover ou substituir assets oficiais que não estejam cobertos por uma autorização específica. Não presuma que a existência de um arquivo no repositório concede permissão para utilizá-lo fora do projeto.
+`npm run build` é um build local do frontend e pode copiar o modelo para `dist/assets/`. Para
+preparar o aplicativo distribuível, use `npm run tauri:build`: o `beforeBuildCommand` executa
+`check:release-assets` e bloqueia a preparação se encontrar `odekrai-head*.glb` ou arquivos dentro
+de `official-references/`. Também executa `check:debug-command`, que exige `cfg(debug_assertions)`
+na declaração e no registro da ferramenta manual simulada. Esses verificadores analisam os fontes
+de `dist/`, sem abrir ou imprimir o conteúdo dos assets.
 
-Assets oficiais ainda não autorizados para publicação devem permanecer fora do Git e ser ignorados conforme `.gitignore`. Os placeholders geométricos de CSS são originais e técnicos; não representam o personagem definitivo.
-
-## Inspiração e separação
-
-O projeto Coucou foi consultado como referência técnica e de experiência, em especial sua documentação da implementação Windows. Nenhum código, asset ou marca do Coucou foi copiado para esta base. Se isso mudar, a origem, o escopo derivado e os avisos de licença serão registrados antes da incorporação.
+Se a verificação bloquear, não remova a guarda nem publique o artefato. Prepare um build sem esses
+materiais e repita a verificação. A ausência deles no artefato precisa ser confirmada antes da
+distribuição.

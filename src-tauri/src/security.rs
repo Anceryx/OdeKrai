@@ -200,7 +200,14 @@ impl Tool for WorkspaceRead {
         if bytes.len() > 64 * 1024 {
             return Err("A leitura simulada é limitada a 64 KiB.".into());
         }
-        String::from_utf8(bytes).map_err(|_| "O arquivo não contém texto UTF-8.".into())
+        let text = String::from_utf8(bytes)
+            .map_err(|_| "O arquivo não contém texto UTF-8.".to_string())?;
+        if contains_secret_marker(&text) {
+            return Err(
+                "A leitura foi bloqueada porque o arquivo parece conter um segredo.".into(),
+            );
+        }
+        Ok(text)
     }
 }
 
@@ -431,9 +438,32 @@ fn validate_action(action: &SimulatedAction) -> Result<(), String> {
     Ok(())
 }
 
-fn is_secret_path(raw: &str) -> bool {
-    raw.split(['/', '\\']).any(|part| {
-        let name = part.to_ascii_lowercase();
+fn protected_path_block(raw: &str) -> Option<&'static str> {
+    let parts: Vec<String> = raw
+        .split(['/', '\\'])
+        .map(str::to_ascii_lowercase)
+        .collect();
+    if parts.iter().any(|part| part == "odekrai.md") {
+        return Some("fixed_block_core_identity");
+    }
+    if parts.iter().any(|part| part == "logs") {
+        return Some("fixed_block_audit_logs");
+    }
+    if parts.iter().any(|part| {
+        matches!(
+            part.as_str(),
+            "config" | "configs" | "configuration" | "database" | "databases"
+        ) || matches!(
+            Path::new(part).extension().and_then(|ext| ext.to_str()),
+            Some("db" | "sqlite" | "sqlite3")
+        ) || matches!(
+            part.as_str(),
+            "config.json" | "settings.json" | "permissions.json"
+        )
+    }) {
+        return Some("fixed_block_database_or_config");
+    }
+    if parts.iter().any(|name| {
         name == ".env"
             || name.starts_with(".env.")
             || name.contains("credential")
@@ -444,7 +474,10 @@ fn is_secret_path(raw: &str) -> bool {
             || name == "id_rsa"
             || name == "id_ed25519"
             || name == "known_hosts"
-    })
+    }) {
+        return Some("fixed_block_secret_path");
+    }
+    None
 }
 
 fn contains_secret_marker(text: &str) -> bool {
@@ -677,6 +710,24 @@ fn queue_has_capacity(queue: &VecDeque<PendingAction>) -> bool {
 fn is_expired(expires: Instant, now: Instant) -> bool {
     now >= expires
 }
+
+fn take_pending_approval(
+    queue: &mut VecDeque<PendingAction>,
+    id: &str,
+    display_hash: &str,
+) -> Result<PendingAction, &'static str> {
+    let Some(item) = queue.front() else {
+        return Err("approval_unavailable");
+    };
+    if item.id != id {
+        return Err("approval_stale");
+    }
+    if !display_hash_matches(&item.action, &item.digest, display_hash) {
+        return Err("approval_parameters_changed");
+    }
+    Ok(queue.pop_front().expect("front exists"))
+}
+
 fn now_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -805,7 +856,14 @@ pub fn get_permission_settings(
 }
 
 #[cfg(windows)]
-fn native_confirm(message: &str) -> bool {
+async fn native_confirm(message: String) -> bool {
+    tauri::async_runtime::spawn_blocking(move || native_confirm_blocking(&message))
+        .await
+        .unwrap_or(false)
+}
+
+#[cfg(windows)]
+fn native_confirm_blocking(message: &str) -> bool {
     use std::ffi::c_void;
     #[link(name = "user32")]
     unsafe extern "system" {
@@ -824,12 +882,12 @@ fn native_confirm(message: &str) -> bool {
 }
 
 #[cfg(not(windows))]
-fn native_confirm(_: &str) -> bool {
+async fn native_confirm(_: String) -> bool {
     false
 }
 
 #[tauri::command]
-pub fn set_permission_mode(
+pub async fn set_permission_mode(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
     mode: Mode,
@@ -839,7 +897,7 @@ pub fn set_permission_mode(
     if current == mode {
         return Ok(());
     }
-    if !native_confirm(&format!("Alterar o modo de permissão de {} para {}? Esta confirmação ocorre em uma janela nativa do Windows.", current.label(), mode.label())) {
+    if !native_confirm(format!("Alterar o modo de permissão de {} para {}? Esta confirmação ocorre em uma janela nativa do Windows.", current.label(), mode.label())).await {
         return Err("Alteração de modo cancelada pelo usuário.".into());
     }
     set_db_setting(&app, "mode", mode.label())?;
@@ -848,7 +906,7 @@ pub fn set_permission_mode(
 }
 
 #[tauri::command]
-pub fn set_tool_override(
+pub async fn set_tool_override(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
     tool: String,
@@ -858,7 +916,7 @@ pub fn set_tool_override(
     if !known_tool(&tool) {
         return Err("Ferramenta desconhecida.".into());
     }
-    if more_permissive && !override_enabled(&app, &tool)? && !native_confirm(&format!("Permitir que {tool} execute com menos confirmações que o modo global? Esta exceção nunca ignora bloqueios fixos nem conteúdo externo.")) {
+    if more_permissive && !override_enabled(&app, &tool)? && !native_confirm(format!("Permitir que {tool} execute com menos confirmações que o modo global? Esta exceção nunca ignora bloqueios fixos nem conteúdo externo.")).await {
         return Err("Exceção não ativada.".into());
     }
     database(&app)?.execute("INSERT INTO tool_overrides(tool,more_permissive) VALUES (?1,?2) ON CONFLICT(tool) DO UPDATE SET more_permissive=excluded.more_permissive", params![tool, more_permissive as i64]).map_err(|_| "Não foi possível salvar a exceção.".to_string())?;
@@ -940,9 +998,11 @@ fn action_metadata(action: &SimulatedAction) -> (&'static str, Risk, bool, Optio
     );
     let fixed = match action {
         SimulatedAction::Payment { .. } => Some("fixed_block_payment"),
-        SimulatedAction::ReadFile { path } if is_secret_path(path) => {
-            Some("fixed_block_secret_read")
+        SimulatedAction::ReadFile { path } | SimulatedAction::DeleteFile { path } => {
+            protected_path_block(path)
         }
+        SimulatedAction::WriteFile { path, content } => protected_path_block(path)
+            .or_else(|| contains_secret_marker(content).then_some("fixed_block_secret_storage")),
         SimulatedAction::SendMessage { message, .. } if contains_secret_marker(message) => {
             Some("fixed_block_secret_exfiltration")
         }
@@ -1647,7 +1707,8 @@ pub fn approval_respond(
     if !display_hash_matches(&item.action, &item.digest, &display_hash) {
         return Err("Os parâmetros exibidos mudaram; a ação foi recusada.".into());
     }
-    let item = pending.pop_front().expect("front exists");
+    let item = take_pending_approval(&mut pending, &id, &display_hash)
+        .map_err(|_| "A aprovação não corresponde à ação pendente.".to_string())?;
     drop(pending);
     let tool = tool_for(&item.action).name();
     if is_expired(item.expires, Instant::now()) || state.is_halted() || !approve {
@@ -1956,14 +2017,14 @@ mod tests {
                 path: ".env".into()
             })
             .3,
-            Some("fixed_block_secret_read")
+            Some("fixed_block_secret_path")
         );
         assert_eq!(
             action_metadata(&SimulatedAction::ReadFile {
                 path: "keys/id_ed25519".into()
             })
             .3,
-            Some("fixed_block_secret_read")
+            Some("fixed_block_secret_path")
         );
         assert_eq!(
             action_metadata(&SimulatedAction::SendMessage {
@@ -1982,6 +2043,53 @@ mod tests {
             Some("fixed_block_payment")
         );
         assert!(contains_secret_marker("-----BEGIN PRIVATE KEY-----"));
+        assert_eq!(
+            action_metadata(&SimulatedAction::WriteFile {
+                path: "notes.txt".into(),
+                content: "password=do-not-save".into(),
+            })
+            .3,
+            Some("fixed_block_secret_storage")
+        );
+    }
+
+    #[test]
+    fn fixed_path_blocks_protect_identity_logs_databases_and_configuration_for_all_tools() {
+        for path in [
+            "ODEKRAI.md",
+            "nested/ODEKRAI.md",
+            "logs/audit.jsonl",
+            "config/providers.json",
+            "data/profile.sqlite3",
+            "cache/index.db",
+            ".env.production",
+        ] {
+            for action in [
+                SimulatedAction::ReadFile { path: path.into() },
+                SimulatedAction::WriteFile {
+                    path: path.into(),
+                    content: "safe".into(),
+                },
+                SimulatedAction::DeleteFile { path: path.into() },
+            ] {
+                assert!(
+                    action_metadata(&action).3.is_some(),
+                    "fixed block missing for {path}"
+                );
+            }
+        }
+        assert!(relative_path("../outside.txt").is_err());
+    }
+
+    #[test]
+    fn workspace_read_blocks_known_secret_markers_in_file_contents() {
+        let root = temp_dir();
+        fs::write(root.join("notes.txt"), "password=do-not-read").unwrap();
+        let action = SimulatedAction::ReadFile {
+            path: "notes.txt".into(),
+        };
+        assert!(WorkspaceRead.execute(&action, &root).is_err());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -2016,7 +2124,8 @@ mod tests {
             });
         }
         assert!(!queue_has_capacity(&queue));
-        let consumed = queue.pop_front().unwrap();
+        let consumed = take_pending_approval(&mut queue, "0", &expected).unwrap();
+        assert!(take_pending_approval(&mut queue, &consumed.id, &expected).is_err());
         assert!(queue_has_capacity(&queue));
         assert!(
             queue.iter().all(|item| item.id != consumed.id),

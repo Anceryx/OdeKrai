@@ -2,6 +2,13 @@
 
 ## Não lançado
 
+### Revisão de fechamento da Fase 3.1
+
+- Bloqueadas operações simuladas sobre `ODEKRAI.md`, `logs/`, configurações, bancos locais e conteúdo reconhecido como segredo.
+- Movida a confirmação `MessageBoxW` para o executor de operações bloqueantes do Tauri; comandos de modo e override agora aguardam assincronamente.
+- Adicionados verificadores de release para assets privados e para o comando de disparo manual exclusivo de debug; `tauri:build` interrompe se detectar assets proprietários.
+- Adicionada matriz de rastreabilidade das Fases 2.1 e 3, com pendências de teste e validação nativa.
+
 ### Fase 3
 
 - Adicionados motor de políticas em Rust, modos persistidos em SQLite, exceções por ferramenta com confirmação nativa e tabela modo × risco.

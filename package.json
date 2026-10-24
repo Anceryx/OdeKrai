@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "check:debug-command": "node scripts/check-debug-command.mjs",
+    "check:release-assets": "node scripts/check-release-assets.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "format": "prettier --write . --ignore-unknown",
