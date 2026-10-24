@@ -118,7 +118,9 @@ export function IslandWindow() {
         <button
           className="island-action"
           aria-label={
-            state === 'expanded' ? 'Recolher assistente do OdeKrai' : 'Expandir assistente do OdeKrai'
+            state === 'expanded'
+              ? 'Recolher assistente do OdeKrai'
+              : 'Expandir assistente do OdeKrai'
           }
           onClick={() =>
             void send(
