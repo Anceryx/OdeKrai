@@ -1,34 +1,26 @@
-# Retomada do desenvolvimento
+# Continuação
 
-## Estado
+## ODEKRAI 2.0 — 24/10/2026
 
-Branch local `codex/odekrai-foundation`, HEAD `5335af4` antes desta etapa. A árvore já continha ilha flutuante, modo livre, estados, áudio e correções do build Windows; preservar todas as alterações não commitadas.
+Estado local: branch `codex/odekrai-foundation`, baseada no HEAD `1243a27`. Preservar todos os diffs locais. Esta revisão adicionou backend Tauri/Rust para credenciais e chamadas de provedores, catálogo com 14 adaptadores e Vertex como guia, README em português/inglês e documentação atualizada.
 
-O pacote `ODEKRAI_Referencias_Codex.zip` foi lido. O GLB e seis referências oficiais estão em diretórios locais ignorados. Não adicioná-los ao Git ou publicar o bundle local sem autorização específica.
+### Evidências
 
-## Trabalho desta etapa
+- Build web passou; 15 testes Vitest passaram em 5 arquivos; TypeScript passou.
+- `cargo test --lib`: 2 testes passaram; `cargo check` para `x86_64-pc-windows-msvc` passou.
+- `npm run tauri:build` recompilou frontend e crates, mas falhou na etapa final ao substituir `src-tauri/target/release/odekrai.exe`: erro 5, porque a instância anterior está aberta.
+- `tauri:dev` compilou em 4m58s e iniciou `src-tauri/target/debug/odekrai.exe`, processo responsivo no Windows; a automação não permitiu verificar pixels ou interações. O executável de release atualizado não foi produzido.
+- Credential Manager real e provedores com credenciais do proprietário ainda não foram validados.
 
-- Adicionados Three.js 0.186.1 e `@types/three` 0.185.3.
-- Implementado renderer do GLB e CanvasTexture facial programática, com validação dos nomes da malha/material, clonagem do material facial e descarte dos recursos temporários.
-- Integradas 16 expressões e movimentos ao Companion da ilha e da janela livre; eventos do chat atualizam a expressão sem substituir a máquina de prioridades existente.
-- Substituída a forma geométrica nas janelas do Companion pelo renderer do mascote e adicionada pré-visualização local de diagnóstico.
-- `npm run build` passou, com aviso de chunk Three.js de 617 kB. `npm test` passou com 17 testes em 5 arquivos.
-- `tauri dev` iniciou com perfil WebView2 temporário; depois, o executável de release abriu com o UDF padrão e criou a janela `ODEKRAI Hub`. O erro `0x800700AA` anterior não se reproduziu; causa inconclusiva. NSIS instalado e desinstalado em pasta TEMP isolada (ambos com código 0); a cópia instalada abriu o Hub. A automação não expôs a imagem da janela. O instalador está sem assinatura Authenticode.
+### Próxima sequência
 
-## Próximas ações
+1. Fechar o ODEKRAI antigo pela interface do Windows e repetir `npm run tauri:build` com `%USERPROFILE%\.cargo\bin` no PATH.
+2. Abrir o novo executável; validar credencial descartável salvar/consultar/remover no Credential Manager. Não registrar chave em logs.
+3. Fazer testes com credenciais de provedor autorizadas e observar respostas, erros e possíveis cobranças.
+4. Inspecionar/capturar Hub, catálogo, ilha e modo livre. Validar arraste, click-through, foco, always-on-top, persistência, retorno, DPI, monitores e fullscreen.
+5. Revisar licenças internas dos sons Kenney antes de qualquer integração; nenhum som foi adicionado nesta etapa.
 
-1. Abrir o app em uma sessão gráfica e inspecionar HUB, ilha e Companion; o teste automatizado de processo não substitui a inspeção visual.
-2. Comparar textura facial e orientação UV com as referências locais; corrigir somente após inspeção do GLB renderizado.
-3. Validar expressões, movimentos, eventos reais, retorno, persistência, foco e hit-testing conforme `docs/TESTING.md`.
-4. Executar o checklist gráfico manual, inclusive inspeção do GLB e validação das 16 expressões; o teste automático comprovou abertura de janela, não a aparência do renderer.
-5. Testar build sem o GLB para confirmar fallback sem assets privados.
-6. Validar DPI, múltiplos monitores, desconexão e fullscreen.
-7. Consultar `origin/main` antes de integração/publicação. Não publicar sem autorização explícita.
+Nenhum commit, push, release ou publicação foi feito. Verificar o remoto antes de qualquer publicação futura.
 
-## Comandos úteis
-
-- Build web: `npm run build`
-- Testes: `npm test`
-- Build Windows: `npm run tauri:build` em ambiente `VsDevCmd.bat` com MSVC/Windows SDK.
-- Asset local ignorado: `assets/odekrai/character/odekrai-head.glb`.
-- Renderer: `src/ui/OdekraiCompanion.tsx` e `src/core/mascot-face.ts`.
+- O build release agora passou após remover os artefatos antigos: executável `src-tauri/target/release/odekrai.exe` (13.324.800 bytes) e instalador NSIS `src-tauri/target/release/bundle/nsis/OdeKrai_0.1.0_x64-setup.exe` (3.693.545 bytes), ambos `NotSigned`.
+- `cargo run --release` manteve o processo responsivo. A tentativa com `Start-Process` encerrou com código 101, sem causa confirmada. A sessão gráfica inacessível impede confirmar a janela; abrir visualmente e testar as interações segue pendente.

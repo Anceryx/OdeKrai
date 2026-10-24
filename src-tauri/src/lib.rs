@@ -1,5 +1,7 @@
 use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder};
 
+mod providers;
+
 #[cfg(windows)]
 fn apply_click_region(
     window: &tauri::WebviewWindow,
@@ -66,7 +68,7 @@ fn apply_click_region(
 fn set_island_visible(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
     let window = app
         .get_webview_window("island")
-        .ok_or("Janela Companion indisponível")?;
+        .ok_or("Janela do assistente indisponível")?;
     if visible {
         window.show()
     } else {
@@ -87,7 +89,7 @@ fn set_island_position(app: tauri::AppHandle, x: f64, y: f64, size: f64) -> Resu
     }
     let window = app
         .get_webview_window("island")
-        .ok_or("Janela Companion indisponível")?;
+        .ok_or("Janela do assistente indisponível")?;
     let factor = window.scale_factor().map_err(|e| e.to_string())?;
     let current_size = window.inner_size().map_err(|e| e.to_string())?;
     let height = current_size.height as f64 / factor;
@@ -103,7 +105,7 @@ fn set_island_position(app: tauri::AppHandle, x: f64, y: f64, size: f64) -> Resu
 #[tauri::command]
 fn set_island_topmost(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
     app.get_webview_window("island")
-        .ok_or("Janela Companion indisponível")?
+        .ok_or("Janela do assistente indisponível")?
         .set_always_on_top(enabled)
         .map_err(|e| e.to_string())
 }
@@ -115,7 +117,7 @@ fn set_island_height(app: tauri::AppHandle, size: f64, height: f64) -> Result<()
     }
     let window = app
         .get_webview_window("island")
-        .ok_or("Janela Companion indisponível")?;
+        .ok_or("Janela do assistente indisponível")?;
     window
         .set_size(LogicalSize::new(280.0 * size, height))
         .map_err(|error| error.to_string())?;
@@ -160,10 +162,11 @@ fn set_character_position(app: tauri::AppHandle, x: f64, y: f64, size: f64) -> R
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(providers::ProviderRequests::default())
         .setup(|app| {
             let island =
                 WebviewWindowBuilder::new(app, "island", WebviewUrl::App("index.html".into()))
-                    .title("ODEKRAI Companion")
+                    .title("Ilha do OdeKrai")
                     .inner_size(280.0, 150.0)
                     .decorations(false)
                     .transparent(true)
@@ -194,7 +197,7 @@ pub fn run() {
             });
             let mascot =
                 WebviewWindowBuilder::new(app, "mascot", WebviewUrl::App("index.html".into()))
-                    .title("ODEKRAI Companion")
+                    .title("OdeKrai")
                     .inner_size(104.0, 104.0)
                     .decorations(false)
                     .transparent(true)
@@ -231,8 +234,13 @@ pub fn run() {
             set_island_topmost,
             set_island_height,
             set_character_visible,
-            set_character_position
+            set_character_position,
+            providers::save_provider_credential,
+            providers::has_provider_credential,
+            providers::remove_provider_credential,
+            providers::send_provider_message,
+            providers::cancel_provider_request
         ])
         .run(tauri::generate_context!())
-        .expect("falha ao iniciar o Odekrai");
+        .expect("falha ao iniciar o OdeKrai");
 }

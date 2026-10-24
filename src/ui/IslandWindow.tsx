@@ -96,7 +96,7 @@ export function IslandWindow() {
         {!settings.companion.freeMode && (
           <button
             className="island-mascot"
-            aria-label="Abrir o Companion"
+            aria-label="Abrir o assistente do OdeKrai"
             onClick={() =>
               void send(
                 { type: state === 'expanded' ? 'close' : 'open' },
@@ -112,12 +112,14 @@ export function IslandWindow() {
           </button>
         )}
         <div className="island-copy">
-          <strong>ODEKRAI</strong>
+          <strong>OdeKrai</strong>
           <span>{snapshot.message || islandLabels[state]}</span>
         </div>
         <button
           className="island-action"
-          aria-label={state === 'expanded' ? 'Recolher Companion' : 'Expandir Companion'}
+          aria-label={
+            state === 'expanded' ? 'Recolher assistente do OdeKrai' : 'Expandir assistente do OdeKrai'
+          }
           onClick={() =>
             void send(
               { type: state === 'expanded' ? 'close' : 'open' },
@@ -169,7 +171,7 @@ export function IslandWindow() {
                       void emit('companion-state', {
                         type: 'activity',
                         state: 'error',
-                        message: 'Não foi possível mover o mascote para o desktop',
+                        message: 'Não foi possível mover o OdeKrai para o desktop',
                       });
                     });
                 }}

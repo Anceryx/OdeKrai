@@ -1,47 +1,34 @@
-# Odekrai
+# OdeKrai
 
-**Seu companheiro pessoal de IA para Windows.** Odekrai é um projeto local-first em estágio inicial, com código original sob MIT e assets oficiais separados.
+Assistente pessoal de inteligência artificial para Windows, desenvolvido com React, TypeScript e Tauri 2. O nome do aplicativo é **OdeKrai**. O projeto está em desenvolvimento: o build do frontend e os testes automatizados não comprovam a inspeção visual nem a validação dos adaptadores com contas reais.
 
-> **Estado:** Hub e janelas do Companion implementados em código; o build nativo e a validação no Windows ainda estão pendentes. O chat envia mensagens reais a uma API compatível com OpenAI Chat Completions. Não há arquivos de áudio integrados. Consulte [docs/IMPLEMENTATION-STATUS.md](docs/IMPLEMENTATION-STATUS.md) antes de usar.
+## Recursos implementados
 
-## Português
+- Aplicativo com visão geral, conversas, catálogo de 15 provedores e configurações do assistente.
+- Janelas nativas do Tauri para a ilha flutuante e o modo livre do mascote.
+- Preferências locais sem chaves de API.
+- Armazenamento de credenciais via Gerenciador de Credenciais do Windows e envio de mensagens pelo processo Rust.
+- Adaptadores para 12 APIs Chat Completions, Anthropic Messages e Perplexity Agent API. Vertex AI continua como guia pendente de ADC/OAuth.
+- Modelo 3D oficial local ignorado pelo Git; checkouts sem o asset usam fallback.
 
-### O que funciona nesta base
+## Requisitos e execução
 
-- Hub em React e TypeScript com navegação entre visão geral, conversas, provedores, Companion e configurações.
-- Shell Tauri 2 com janela da ilha e janela secundária do marcador em modo livre; o build Tauri ainda não foi comprovado.
-- Preferências de interface salvas localmente no navegador do aplicativo.
-- Chat real com endpoint compatível com OpenAI Chat Completions, usando URL e modelo configuráveis.
-- A chave é mantida somente em memória nesta versão e apagada ao fechar a aplicação.
-- Interface escura responsiva, opção de movimento reduzido e marcador geométrico original, arrastável e retornável à ilha.
-- Máquina de estados conectada a espera, conclusão e erro reais do chat; motor de áudio com cache, mute, volume e substituições locais. Os pacotes de som ainda não foram baixados.
+- Windows 10/11 x64, Node.js 20.19+ ou 22.12+, Rust estável, MSVC Build Tools, Windows SDK e WebView2 Runtime.
+- `npm install`, `npm run dev`, `npm run build`, `npm test`.
+- `npm run tauri:dev` inicia o aplicativo; `npm run tauri:build` gera os artefatos Windows.
 
-### Desenvolvimento
+No catálogo, informe o endpoint permitido, o ID do modelo e a credencial. Salvar não valida o acesso. **Testar conexão** envia uma solicitação real e pode gerar cobrança. As chaves compatíveis ficam no Gerenciador de Credenciais do Windows. Vertex AI, autenticação AWS IAM/SigV4 e listagem automática de modelos não estão implementados.
 
-Requisitos: Node.js 20.19+ ou 22.12+, npm e, para o aplicativo desktop, Rust estável e os pré-requisitos de compilação do Tauri 2 para Windows.
+## Capturas de tela
 
-```powershell
-npm install
-npm run dev
-```
+Não há capturas verificadas desta revisão. Para capturá-las, consulte [docs/TESTING.md](docs/TESTING.md) e registre as telas do aplicativo, catálogo, ilha e modo livre depois de executar o build atualizado. Não use imagens conceituais como evidência de execução.
 
-Para compilar a interface: `npm run build`. A configuração desktop está em `src-tauri/`; `npm run tauri:dev` inicia o shell e `npm run tauri:build` gera o pacote quando os pré-requisitos Windows estiverem disponíveis. O shell ainda não foi validado nesta sessão.
-
-Na tela **Provedores de IA**, configure o nome, a URL base, o modelo e uma chave para uma API compatível. O envio direto do WebView ao serviço depende de CORS habilitado pelo provedor. As mensagens e a chave deixam o dispositivo ao usar o provedor; confira os termos e custos dele.
-
-### Documentação
+## Documentação
 
 - [Arquitetura](docs/ARCHITECTURE.md) · [Segurança](docs/SECURITY.md) · [Privacidade](docs/PRIVACY.md)
-- [Provedores de IA](docs/AI-PROVIDERS.md) · [Desenvolvimento](docs/DEVELOPMENT.md) · [Testes](docs/TESTING.md)
-- [Guia de assets](docs/ASSET-GUIDE.md) · [Áudio](docs/AUDIO-ASSETS.md) · [Roadmap](docs/ROADMAP.md) · [Distribuição](docs/RELEASE.md)
-- [Status de implementação](docs/IMPLEMENTATION-STATUS.md)
+- [Provedores](docs/AI-PROVIDERS.md) · [Desenvolvimento](docs/DEVELOPMENT.md) · [Testes](docs/TESTING.md)
+- [Assets](docs/ASSET-GUIDE.md) · [Áudio](docs/AUDIO-ASSETS.md) · [Status](docs/IMPLEMENTATION-STATUS.md) · [Continuação](docs/CONTINUATION.md)
 
-### Licenças
+## Licenças
 
-O código original é disponibilizado sob MIT; isso não licencia o nome, a marca ou futuras artes oficiais. Consulte [LICENSE-ASSETS.md](LICENSE-ASSETS.md) e [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). As artes definitivas devem ser fornecidas pelo proprietário.
-
-## English
-
-Odekrai is an early-stage, local-first personal AI companion for Windows. The current source includes a React and TypeScript hub, separate Tauri windows for the island and a draggable geometric placeholder, locally persisted preferences, a chat request flow, and a configurable sound engine. The Tauri build and Windows behavior are not validated yet; no sound files are bundled. API keys stay in memory only and are cleared when the app closes.
-
-Run `npm install` and `npm run dev` to start the UI. See the linked documentation for architecture, security, privacy, development, testing, assets, and the implementation status. Original code is MIT-licensed; official Odekrai art and branding are reserved and are not granted by that license.
+O código original está sob MIT. Essa licença não concede direitos sobre a marca ou arquivos oficiais do mascote. Consulte [LICENSE-ASSETS.md](LICENSE-ASSETS.md) e [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Não distribua os assets privados.

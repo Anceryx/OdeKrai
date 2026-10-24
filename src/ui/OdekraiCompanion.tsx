@@ -493,11 +493,11 @@ export function OdekraiCompanion({
       role="img"
       aria-label={
         loadError
-          ? `Prévia do mascote indisponível: ${loadError}`
-          : `Mascote ODEKRAI. Expressão: ${expression}.`
+          ? `Prévia do OdeKrai indisponível: ${loadError}`
+          : `OdeKrai. Expressão: ${expression}.`
       }
       data-model-status={loaded ? 'loaded' : loadError ? 'fallback' : 'loading'}
-      title={loadError || 'Mascote 3D oficial do ODEKRAI'}
+      title={loadError || 'OdeKrai'}
     >
       <canvas ref={canvasRef} aria-hidden="true" />
       <span className="odekrai-renderer-fallback" aria-hidden="true">

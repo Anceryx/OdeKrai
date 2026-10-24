@@ -109,7 +109,7 @@ export function DesktopCharacter() {
       <button
         className="desktop-return"
         onClick={() => void returnHome()}
-        aria-label="Retornar o mascote à ilha"
+        aria-label="Retornar o OdeKrai à ilha"
       >
         ↩
       </button>

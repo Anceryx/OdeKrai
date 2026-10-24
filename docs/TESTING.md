@@ -43,3 +43,22 @@ Build/testes automatizados não comprovam visualização 3D correta, orientaçã
 ## Áudio
 
 Não há sons Kenney integrados. As páginas oficiais de [UI Audio](https://kenney.nl/assets/ui-audio) e [Interface Sounds](https://kenney.nl/assets/interface-sounds) indicam CC0, mas os arquivos ZIP e licenças internas ainda precisam ser verificados. Não copiar sons do Coucou.
+
+## Capturas verificáveis da revisão atual
+
+As capturas desta revisão ainda não foram produzidas. Em Windows com sessão gráfica disponível:
+
+1. Feche o processo antigo de release e gere o pacote atualizado com `npm run tauri:build`.
+2. Inicie o novo executável e capture o Hub em 1366×768 ou na resolução real usada, com a escala DPI anotada.
+3. Capture o catálogo mostrando o estado do provedor sem credencial e, se houver conta autorizada, uma conexão testada sem expor campos secretos.
+4. Capture a ilha e a janela livre em separado, incluindo uma imagem sobre desktop claro e outra escuro para avaliar transparência.
+5. Salve PNGs em diretório de evidências local ignorado pelo Git; anote build/commit, Windows, resolução, escala, monitor e etapa do checklist. Nunca publique imagens que mostrem chaves ou dados privados.
+
+## Resultados desta revisão (24/10/2026)
+
+- `npm run build`: passou; 54 módulos, com aviso do chunk Three.js de 617,24 kB.
+- `npm test -- --pool=threads --maxWorkers=1`: 15 testes passaram em 5 arquivos.
+- `cargo test --manifest-path src-tauri/Cargo.toml --lib`: 2 testes passaram.
+- `cargo check --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc`: passou.
+- `npm run tauri:build`: compilou o frontend e as dependências Rust, mas não substituiu `src-tauri/target/release/odekrai.exe` porque a versão antiga estava aberta (erro Windows 5).
+- `npm run tauri:dev`: build de desenvolvimento terminou e executou `src-tauri/target/debug/odekrai.exe`; o processo foi listado como responsivo. Captura visual, título da janela e interações não foram confirmados nesta sessão.

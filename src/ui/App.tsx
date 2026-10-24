@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { sendChatMessage, type ChatMessage } from '../core/chat';
+import type { ChatMessage } from '../core/provider-messages';
 import { defaultSettings, loadSettings, saveSettings, type AppSettings } from '../core/settings';
 import { emit } from '@tauri-apps/api/event';
 import { invoke, isTauri } from '@tauri-apps/api/core';
@@ -17,34 +17,48 @@ import {
   type MascotMotion,
 } from '../core/mascot';
 import { OdekraiMascot, type MascotMetrics, type MascotMotionRequest } from './OdekraiMascot';
+import { AI_PROVIDERS, type AiProvider } from '../core/providers';
+import { ProviderCatalog } from './ProviderCatalog';
 
 type Section = 'overview' | 'chat' | 'providers' | 'companion' | 'settings';
 
 const nav: { id: Section; label: string; icon: string; group: string }[] = [
   { id: 'overview', label: 'Visão geral', icon: '⌂', group: 'ESPAÇO DE TRABALHO' },
   { id: 'chat', label: 'Conversas', icon: '◌', group: 'ESPAÇO DE TRABALHO' },
-  { id: 'providers', label: 'Provedores de IA', icon: '✳', group: 'INTELIGÊNCIA' },
-  { id: 'companion', label: 'Companion', icon: '◇', group: 'PERSONALIZAÇÃO' },
+  { id: 'providers', label: 'Conectores de IA', icon: '✳', group: 'INTELIGÊNCIA' },
+  { id: 'companion', label: 'Assistente do OdeKrai', icon: '◇', group: 'PERSONALIZAÇÃO' },
   { id: 'settings', label: 'Configurações', icon: '⚙', group: 'PERSONALIZAÇÃO' },
 ];
 
 export function App() {
   const [section, setSection] = useState<Section>('overview');
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
-  const [apiKey, setApiKey] = useState('');
   const [keySavedForSession, setKeySavedForSession] = useState(false);
+  const [selectedProviderId, setSelectedProviderId] = useState(
+    () => AI_PROVIDERS.find((provider) => provider.name === settings.provider.name)?.id ?? 'openai',
+  );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
   const [chatMode, setChatMode] = useState(false);
-  const request = useRef<AbortController | null>(null);
+  const request = useRef<string | null>(null);
   const companionStateTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
+  useEffect(() => {
+    const provider = AI_PROVIDERS.find((item) => item.name === settings.provider.name);
+    if (!provider || !isTauri()) {
+      setKeySavedForSession(false);
+      return;
+    }
+    void invoke<boolean>('has_provider_credential', { providerId: provider.id })
+      .then(setKeySavedForSession)
+      .catch(() => setKeySavedForSession(false));
+  }, [settings.provider.name]);
   useEffect(() => {
     const refreshSettings = () => setSettings(loadSettings());
     window.addEventListener('storage', refreshSettings);
@@ -65,7 +79,7 @@ export function App() {
       .then(() => invoke('set_island_topmost', { enabled: companion.alwaysOnTop }))
       .then(() => invoke('set_island_visible', { visible: true }))
       .then(() => emit('companion-state', { type: 'reveal' }))
-      .catch(() => setToast('Não foi possível restaurar a ilha do Companion.'));
+      .catch(() => setToast('Não foi possível restaurar a ilha do assistente.'));
   }, []);
   useEffect(() => {
     const companion = settings.companion;
@@ -78,7 +92,7 @@ export function App() {
       Math.max(0, (screen.availHeight - 104 * companion.size) / 2);
     void invoke('set_character_position', { x, y, size: companion.size })
       .then(() => invoke('set_character_visible', { visible: true }))
-      .catch(() => setToast('Não foi possível restaurar o mascote no desktop.'));
+      .catch(() => setToast('Não foi possível restaurar o OdeKrai no desktop.'));
   }, []);
   useEffect(() => {
     if (!toast) return;
@@ -87,7 +101,7 @@ export function App() {
   }, [toast]);
   useEffect(
     () => () => {
-      request.current?.abort();
+      if (request.current) void invoke('cancel_provider_request', { requestId: request.current });
       window.clearTimeout(companionStateTimer.current);
     },
     [],
@@ -95,16 +109,29 @@ export function App() {
 
   const currentNav = useMemo(() => nav.find((item) => item.id === section), [section]);
 
-  function updateProvider(field: keyof AppSettings['provider'], value: string) {
-    setSettings((current) => ({ ...current, provider: { ...current.provider, [field]: value } }));
+  function selectProvider(provider: AiProvider) {
+    if (provider.id !== selectedProviderId) {
+      setKeySavedForSession(false);
+    }
+    setSelectedProviderId(provider.id);
+  }
+
+  function beginChat() {
+    if (!keySavedForSession || !isTauri()) {
+      setSection('providers');
+      setChatMode(false);
+      return;
+    }
+    setChatMode(true);
   }
 
   async function submitMessage(event: FormEvent) {
     event.preventDefault();
     const text = draft.trim();
     if (!text || busy) return;
-    if (!apiKey.trim()) {
-      setError('Adicione uma chave de API para conversar com o provedor configurado.');
+    if (!keySavedForSession || !isTauri()) {
+      setError('Configure uma credencial no Gerenciador de Credenciais do Windows.');
+      setChatMode(false);
       setSection('providers');
       return;
     }
@@ -119,16 +146,25 @@ export function App() {
         state: 'thinking',
         message: 'Aguardando resposta do provedor',
       });
-    request.current = new AbortController();
+    const requestId = crypto.randomUUID();
+    request.current = requestId;
     try {
-      const answer = await sendChatMessage(
-        settings.provider.baseUrl,
-        settings.provider.model,
-        apiKey,
-        next,
-        request.current.signal,
+      const provider = AI_PROVIDERS.find((item) => item.name === settings.provider.name);
+      if (!provider) throw new Error('O provedor selecionado não possui adaptador conhecido.');
+      const answer = await invoke<{ content: string; citations: { title: string; url: string }[] }>(
+        'send_provider_message',
+        {
+          providerId: provider.id,
+          baseUrl: settings.provider.baseUrl,
+          model: settings.provider.model,
+          messages: next,
+          requestId,
+        },
       );
-      setMessages([...next, { role: 'assistant', content: answer }]);
+      setMessages([
+        ...next,
+        { role: 'assistant', content: answer.content, citations: answer.citations },
+      ]);
       void playSound('success', normalizeSoundPreferences(settings.companion.sounds));
       window.clearTimeout(companionStateTimer.current);
       if (isTauri()) {
@@ -148,7 +184,7 @@ export function App() {
         );
       }
     } catch (cause) {
-      if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
+      if (!(typeof cause === 'string' && cause.includes('cancelada'))) {
         setMessages(next);
         setError(
           cause instanceof Error ? cause.message : 'Não foi possível concluir a solicitação.',
@@ -168,7 +204,7 @@ export function App() {
   }
 
   function cancelRequest() {
-    request.current?.abort();
+    if (request.current) void invoke('cancel_provider_request', { requestId: request.current });
     setBusy(false);
   }
 
@@ -187,8 +223,8 @@ export function App() {
         >
           <span className="brand-mark">O</span>
           <span>
-            <strong>ODEKRAI</strong>
-            <small>PERSONAL AI COMPANION</small>
+            <strong>OdeKrai</strong>
+            <small>COMPANION DE IA PESSOAL</small>
           </span>
         </button>
         <div className="profile-card">
@@ -257,7 +293,7 @@ export function App() {
       <main className="main-area">
         <header className="topbar">
           <div className="breadcrumbs">
-            <span>ODEKRAI</span>
+            <span>OdeKrai</span>
             <b>/</b>
             <strong>{chatMode ? 'Nova conversa' : currentNav?.label}</strong>
           </div>
@@ -295,21 +331,24 @@ export function App() {
           <div className="content-scroll">
             {section === 'overview' && (
               <Overview
-                onChat={() => setChatMode(true)}
+                onChat={beginChat}
                 onOpen={(target) => setSection(target)}
                 provider={settings.provider}
                 keyReady={keySavedForSession}
               />
             )}
             {section === 'providers' && (
-              <Providers
-                settings={settings}
-                updateProvider={updateProvider}
-                apiKey={apiKey}
-                setApiKey={setApiKey}
+              <ProviderCatalog
+                settings={settings.provider}
                 keySaved={keySavedForSession}
-                setKeySaved={setKeySavedForSession}
-                onChat={() => setChatMode(true)}
+                selectedId={selectedProviderId}
+                onSelect={selectProvider}
+                onSave={(provider) => {
+                  setSettings((current) => ({ ...current, provider }));
+                  setKeySavedForSession(true);
+                }}
+                onChat={beginChat}
+                onCredentialRemoved={() => setKeySavedForSession(false)}
               />
             )}
             {section === 'companion' && (
@@ -364,7 +403,7 @@ function Overview({
         <div className="hero-orbit orbit-two" />
         <div className="hero-content">
           <span className="pill-label">
-            <i /> ODEKRAI HUB
+            <i /> OdeKrai
           </span>
           <h2>
             Uma mente curiosa.
@@ -396,7 +435,7 @@ function Overview({
       <div className="section-title">
         <div>
           <span className="eyebrow">PONTO DE PARTIDA</span>
-          <h3>Seu Odekrai</h3>
+          <h3>Conheça o OdeKrai</h3>
         </div>
         <button className="text-button" onClick={() => onOpen('settings')}>
           Personalizar <span>↗</span>
@@ -407,22 +446,21 @@ function Overview({
           <div className="card-icon red-icon">✳</div>
           <div className="feature-copy">
             <span className="eyebrow">INTELIGÊNCIA</span>
-            <h4>{keyReady ? 'Provedor conectado' : 'Escolha sua IA'}</h4>
+            <h4>{keyReady ? 'Provedor configurado' : 'Escolha sua IA'}</h4>
             <p>
-              {provider.name} <span className="dot-sep">·</span> {provider.model}
+              {keyReady
+                ? `${provider.name} · ${provider.model}`
+                : 'Conecte uma IA para habilitar conversas.'}
             </p>
           </div>
           <span className="card-arrow">↗</span>
-          <div className="mini-meter">
-            <i style={{ width: keyReady ? '86%' : '28%' }} />
-          </div>
         </button>
         <button className="feature-card companion-card" onClick={() => onOpen('companion')}>
           <div className="card-icon neutral-icon">◇</div>
           <div className="feature-copy">
             <span className="eyebrow">COMPANION</span>
             <h4>Seu espaço de presença</h4>
-            <p>Conheça o personagem e a ilha.</p>
+            <p>Conheça o OdeKrai e configure sua ilha.</p>
           </div>
           <span className="card-arrow">↗</span>
           <div className="companion-doodle">O</div>
@@ -440,127 +478,9 @@ function Overview({
       </div>
       <div className="home-footer">
         <span>
-          ODEKRAI <b>·</b> VERSÃO 0.1.0
+          OdeKrai <b>·</b> VERSÃO 0.1.0
         </span>
         <span>UM COMPANHEIRO PARA O SEU DIA A DIA</span>
-      </div>
-    </div>
-  );
-}
-
-function Providers({
-  settings,
-  updateProvider,
-  apiKey,
-  setApiKey,
-  keySaved,
-  setKeySaved,
-  onChat,
-}: {
-  settings: AppSettings;
-  updateProvider: (field: keyof AppSettings['provider'], value: string) => void;
-  apiKey: string;
-  setApiKey: (value: string) => void;
-  keySaved: boolean;
-  setKeySaved: (value: boolean) => void;
-  onChat: () => void;
-}) {
-  const [showKey, setShowKey] = useState(false);
-  return (
-    <div className="page subpage">
-      <div className="page-heading">
-        <div>
-          <span className="eyebrow">INTELIGÊNCIA</span>
-          <h1>Provedores de IA</h1>
-          <p>Conecte uma API compatível com o formato OpenAI Chat Completions.</p>
-        </div>
-        <span className="heading-symbol">✳</span>
-      </div>
-      <section className="settings-panel">
-        <div className="panel-heading">
-          <div>
-            <h3>Conexão principal</h3>
-            <p>As mensagens são enviadas diretamente ao endereço escolhido.</p>
-          </div>
-          <span className={`state-chip ${keySaved ? 'connected' : ''}`}>
-            <i />
-            {keySaved ? 'PRONTO NESTA SESSÃO' : 'NÃO CONFIGURADO'}
-          </span>
-        </div>
-        <label className="field-label">
-          Nome do provedor
-          <input
-            value={settings.provider.name}
-            onChange={(e) => updateProvider('name', e.target.value)}
-            placeholder="Ex.: OpenAI"
-          />
-        </label>
-        <label className="field-label">
-          URL base da API
-          <input
-            value={settings.provider.baseUrl}
-            onChange={(e) => updateProvider('baseUrl', e.target.value)}
-            placeholder="https://api.openai.com/v1"
-            spellCheck={false}
-          />
-        </label>
-        <label className="field-label">
-          Modelo
-          <input
-            value={settings.provider.model}
-            onChange={(e) => updateProvider('model', e.target.value)}
-            placeholder="gpt-4o-mini"
-            spellCheck={false}
-          />
-        </label>
-        <label className="field-label">
-          Chave de API
-          <div className="secret-input">
-            <input
-              type={showKey ? 'text' : 'password'}
-              value={apiKey}
-              onChange={(e) => {
-                setApiKey(e.target.value);
-                setKeySaved(Boolean(e.target.value));
-              }}
-              placeholder={keySaved ? 'Chave disponível nesta sessão' : 'Cole sua chave de API'}
-              autoComplete="off"
-            />
-            <button type="button" onClick={() => setShowKey(!showKey)}>
-              {showKey ? 'Ocultar' : 'Exibir'}
-            </button>
-          </div>
-        </label>
-        <div className="security-callout">
-          <span>◇</span>
-          <p>
-            A chave permanece apenas na memória desta sessão e não é gravada no disco. Ao fechar o
-            aplicativo, será necessário inseri-la novamente. O armazenamento seguro do sistema
-            operacional ainda será integrado.
-          </p>
-        </div>
-        <div className="panel-actions">
-          <button
-            className="secondary-button"
-            onClick={() => {
-              setApiKey('');
-              setKeySaved(false);
-            }}
-          >
-            Limpar chave
-          </button>
-          <button className="primary-button" onClick={onChat} disabled={!keySaved}>
-            Testar em uma conversa <span>↗</span>
-          </button>
-        </div>
-      </section>
-      <div className="provider-footnote">
-        <span>ⓘ</span>
-        <p>
-          Use apenas um provedor em que você confia. Verifique os termos, a política de retenção e
-          os custos da API escolhida. O Odekrai não controla a disponibilidade nem as cobranças do
-          provedor.
-        </p>
       </div>
     </div>
   );
@@ -622,7 +542,7 @@ function Companion({
       }
     } catch {
       update({ ...settings, companion: { ...settings.companion, enabled: !enabled } });
-      onError('Não foi possível alterar a janela do Companion.');
+      onError('Não foi possível alterar a janela do assistente.');
     }
   }
   async function setFreeMode(freeMode: boolean) {
@@ -646,7 +566,7 @@ function Companion({
       }
     } catch {
       update({ ...settings, companion: { ...settings.companion, freeMode: !freeMode } });
-      onError('Não foi possível mover o mascote entre as janelas.');
+      onError('Não foi possível mover o OdeKrai entre as janelas.');
     }
   }
   return (
@@ -654,7 +574,7 @@ function Companion({
       <div className="page-heading">
         <div>
           <span className="eyebrow">PERSONALIZAÇÃO</span>
-          <h1>ODEKRAI Companion</h1>
+          <h1>Assistente do OdeKrai</h1>
           <p>Uma presença leve para acompanhar você na área de trabalho.</p>
         </div>
         <span className="heading-symbol">◇</span>
@@ -678,20 +598,19 @@ function Companion({
             onMetrics={setPreviewMetrics}
           />
           <span className="island-label">
-            ILHA ODEKRAI <i />
+            ILHA OdeKrai <i />
           </span>
         </div>
         <div className="preview-caption">
-          <span className="eyebrow">MASCOTE 3D OFICIAL</span>
+          <span className="eyebrow">ILHA DO OdeKrai</span>
           <strong>{MASCOT_EXPRESSION_LABELS[previewExpression]}</strong>
-          <p>Expressões programáticas aplicadas à malha facial do GLB local.</p>
+          <p>OdeKrai pronto para acompanhar sua área de trabalho.</p>
         </div>
       </div>
       <details className="mascot-preview-tools">
-        <summary>Pré-visualização e ferramentas de diagnóstico</summary>
+        <summary>Ajustes avançados da prévia</summary>
         <div className="mascot-preview-notice">
-          Simulação local de desenvolvimento. Os controles deste painel não emitem eventos reais do
-          Companion.
+          Estes ajustes afetam somente a prévia desta tela. As configurações da ilha ficam abaixo.
         </div>
         <div className="mascot-preview-controls">
           <label className="mascot-expression-control">
@@ -825,7 +744,7 @@ function Companion({
           <div>
             <h3>Ilha na área de trabalho</h3>
             <p>
-              Abre uma janela transparente do Companion. Posição expressa em um dos cantos da tela
+              Abre uma janela transparente do assistente. A posição pode ficar em qualquer canto da tela
               principal.
             </p>
           </div>
@@ -834,7 +753,7 @@ function Companion({
             aria-checked={settings.companion.enabled}
             className={`toggle ${settings.companion.enabled ? 'on' : ''}`}
             onClick={() => void setEnabled(!settings.companion.enabled)}
-            aria-label="Ativar ilha do Companion"
+            aria-label="Ativar ilha do assistente"
             disabled={!isTauri()}
           >
             <span />
@@ -867,8 +786,8 @@ function Companion({
         </div>
         <div className="preference-row">
           <div>
-            <strong>Modo livre do mascote</strong>
-            <span>Permite mover o mascote 3D em uma janela separada.</span>
+            <strong>Modo livre do OdeKrai</strong>
+            <span>Permite mover o OdeKrai em uma janela separada.</span>
           </div>
           <button
             role="switch"
@@ -1082,7 +1001,7 @@ function Settings({
         <div>
           <span className="eyebrow">PERSONALIZAÇÃO</span>
           <h1>Configurações</h1>
-          <p>Ajuste a experiência do Odekrai neste dispositivo.</p>
+          <p>Ajuste a experiência do OdeKrai neste dispositivo.</p>
         </div>
         <span className="heading-symbol">⚙</span>
       </div>
@@ -1167,7 +1086,7 @@ function ChatView({
           <h2>Uma nova ideia começa aqui.</h2>
         </div>
         <span className="chat-provider">
-          <i /> {providerName}
+          <i /> Provedor selecionado: {providerName}
         </span>
       </div>
       <div className="messages-area">
@@ -1195,9 +1114,18 @@ function ChatView({
                 <span className="message-avatar">{message.role === 'user' ? 'D' : 'O'}</span>
                 <div>
                   <span className="message-role">
-                    {message.role === 'user' ? 'VOCÊ' : 'ODEKRAI'}
+                    {message.role === 'user' ? 'VOCÊ' : 'OdeKrai'}
                   </span>
                   <p>{message.content}</p>
+                  {message.citations?.length ? (
+                    <div className="message-citations">
+                      {message.citations.map((citation) => (
+                        <a key={citation.url} href={citation.url} target="_blank" rel="noreferrer">
+                          {citation.title}
+                        </a>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </article>
             ))}
@@ -1208,7 +1136,7 @@ function ChatView({
                   <i />
                   <i />
                 </span>
-                <span>Odekrai está pensando</span>
+                <span>OdeKrai está pensando</span>
               </div>
             )}
           </div>

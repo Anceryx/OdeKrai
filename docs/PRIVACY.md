@@ -1,7 +1,7 @@
 # Privacidade
 
-Esta base não exige conta e não implementa servidor Odekrai nem telemetria. Preferências não secretas são salvas no armazenamento local do WebView. Conversas ficam apenas em memória na versão atual.
+Preferências de aparência, Companion e configuração não secreta do provedor são salvas no armazenamento local do WebView. Credenciais suportadas são guardadas pelo processo Tauri no Gerenciador de Credenciais do Windows e não entram em `localStorage`.
 
-Quando o usuário envia uma mensagem, o conteúdo e a chave de API são enviados diretamente ao endereço configurado para que o provedor processe o pedido. A política de retenção e os custos dependem desse serviço externo. Nenhuma chave é persistida nesta versão; fechar a aplicação a remove da memória do processo.
+Ao conversar ou testar conexão, o texto da conversa é enviado ao provedor selecionado. O aplicativo não mantém histórico de conversas após encerrar a sessão. A política de retenção e uso do conteúdo depende do provedor e da conta do usuário. Não envie dados que não deseja compartilhar com esse serviço.
 
-Esta página descreve apenas o comportamento implementado no estado indicado em `IMPLEMENTATION-STATUS.md`; não é uma garantia jurídica para versões futuras.
+A integração de credenciais depende do aplicativo nativo Windows. A prévia web não encaminha chamadas de IA.

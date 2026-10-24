@@ -23,6 +23,7 @@ describe('preferências persistidas', () => {
       position: 'bottom-right',
       sounds: { enabled: true },
     });
+    expect(loadSettings().provider.authMode).toBe('bearer');
   });
 
   it('salva somente preferências e recupera a posição da ilha', () => {
@@ -42,5 +43,6 @@ describe('preferências persistidas', () => {
       desktopCoordinates: { x: 410, y: 80 },
     });
     expect(storage.get('odekrai.settings.v1')).not.toContain('apiKey');
+    expect(storage.get('odekrai.settings.v1')).not.toContain('chave');
   });
 });
