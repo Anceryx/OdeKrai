@@ -32,4 +32,4 @@ Validado localmente: `npm run build` passou com TypeScript e Vite; `npm test` pa
 
 `npm ci` e `npm run format:check` também passaram na árvore final.
 
-Pendente: `npm run tauri:build`, `cargo test`, execução em Windows empacotado, resultado real do workflow no GitHub e instalação manual. O ambiente não possui Rust/Cargo, o binding nativo do CLI Tauri não carrega e a conexão ao GitHub falhou. Não há commit nem PR confirmado.
+Pendente: `npm run tauri:build`, `cargo test`, execução em Windows empacotado, resultado real do workflow no GitHub e instalação manual. O ambiente não possui Rust/Cargo, o binding nativo do CLI Tauri não carrega e a conexão ao GitHub falhou. Há um commit local inicial na branch `codex/odekrai-foundation`; não há push nem PR.

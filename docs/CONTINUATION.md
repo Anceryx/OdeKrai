@@ -21,3 +21,7 @@ Validado: `npm ci`, `npm run build`, 5 testes `npm test`, `npm run format:check`
 3. Integrar credenciais via Windows Credential Manager antes de permitir persistência de chaves.
 4. Adicionar testes para persistência de settings e tratamento do provedor.
 5. Implementar manifesto de assets e validar previews sem depender de artes finais.
+
+## Git
+
+Commit local inicial: `feat: inicializa fundação do Odekrai`. A branch foi criada como raiz porque a cópia local não tinha commits e o remoto não pôde ser consultado. Não publicar até reconciliar com `origin/main`.
