@@ -10,6 +10,47 @@ const KEYRING_SERVICE: &str = "site.anceryx.odekrai.provider";
 const MAX_CREDENTIAL_BYTES: usize = 4096;
 const MAX_MESSAGE_BYTES: usize = 1_000_000;
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelOption {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionStage {
+    pub id: String,
+    pub status: String,
+    pub message: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionTest {
+    pub stages: Vec<ConnectionStage>,
+    pub overall: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CatalogEntry {
+    id: String,
+    base_url: String,
+    chat_path: Option<String>,
+    auth_header: Option<String>,
+    model_list_path: Option<String>,
+    model_list_shape: Option<String>,
+    host_rule: Option<String>,
+}
+
+fn catalog_entry(provider_id: &str) -> Option<CatalogEntry> {
+    serde_json::from_str::<Vec<CatalogEntry>>(include_str!("../resources/provider-catalog.json"))
+        .ok()?
+        .into_iter()
+        .find(|entry| entry.id == provider_id)
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ProviderMessage {
     pub role: String,
@@ -119,6 +160,228 @@ pub async fn cancel_provider_request(
     } else {
         Ok(false)
     }
+}
+
+#[tauri::command]
+pub fn validate_provider_endpoint(
+    caller: tauri::WebviewWindow,
+    provider_id: String,
+    base_url: String,
+) -> Result<(), String> {
+    super::require_main(&caller)?;
+    provider_endpoint(&provider_id, &base_url).map(|_| ())
+}
+
+#[tauri::command]
+pub async fn list_provider_models(
+    caller: tauri::WebviewWindow,
+    provider_id: String,
+    base_url: String,
+) -> Result<Vec<ModelOption>, String> {
+    super::require_main(&caller)?;
+    fetch_models(&provider_id, &base_url).await
+}
+
+async fn fetch_models(provider_id: &str, base_url: &str) -> Result<Vec<ModelOption>, String> {
+    let mut url = provider_endpoint(provider_id, base_url)?;
+    let entry =
+        catalog_entry(provider_id).ok_or("O catálogo deste provedor não está disponível.")?;
+    let path = entry.model_list_path.as_deref().ok_or(
+        "A documentação oficial deste provedor não oferece listagem de modelos neste endpoint.",
+    )?;
+    let credential = credential_entry(provider_id)?
+        .get_password()
+        .map_err(|_| "Salve uma credencial para listar os modelos.")?;
+    let base_path = if provider_id == "azure-openai" {
+        url.path()
+            .strip_suffix("/chat/completions")
+            .unwrap_or(url.path())
+            .trim_end_matches('/')
+            .to_string()
+    } else if entry.base_url.is_empty() {
+        url.path().trim_end_matches('/').to_string()
+    } else {
+        Url::parse(&entry.base_url)
+            .map(|u| u.path().trim_end_matches('/').to_string())
+            .unwrap_or_default()
+    };
+    url.set_path(&format!("{}{}", base_path, path));
+    let client = Client::builder()
+        .redirect(Policy::none())
+        .connect_timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|_| "Não foi possível preparar uma conexão segura.".to_string())?;
+    let mut request = client.get(url).pipe_auth(provider_id, &credential)?;
+    if provider_id == "anthropic" {
+        request = request.header("anthropic-version", "2023-06-01");
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|error| safe_transport_error(&error))?;
+    if !response.status().is_success() {
+        return Err(provider_http_error(response.status().as_u16()));
+    }
+    let payload: Value = response
+        .json()
+        .await
+        .map_err(|_| "O provedor retornou uma lista inválida.".to_string())?;
+    let values = if entry.model_list_shape.as_deref() == Some("data") {
+        payload.get("data").and_then(Value::as_array)
+    } else {
+        payload.as_array()
+    }
+    .ok_or("A resposta não corresponde ao formato documentado do provedor.")?;
+    Ok(values
+        .iter()
+        .filter_map(|value| {
+            let id = value
+                .get("id")
+                .or_else(|| value.get("name"))?
+                .as_str()?
+                .to_string();
+            if id.is_empty() || id.len() > 300 {
+                return None;
+            }
+            Some(ModelOption {
+                name: id.clone(),
+                id,
+            })
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub async fn test_provider_connection(
+    caller: tauri::WebviewWindow,
+    provider_id: String,
+    base_url: String,
+    model: String,
+) -> Result<ConnectionTest, String> {
+    super::require_main(&caller)?;
+    credential_entry(&provider_id)?
+        .get_password()
+        .map_err(|_| "Salve uma credencial para testar a conexão.")?;
+    let endpoint = provider_endpoint(&provider_id, &base_url)?;
+    let mut stages = vec![
+        ConnectionStage {
+            id: "credential".into(),
+            status: "passed".into(),
+            message: "Credencial encontrada no Gerenciador do Windows.".into(),
+        },
+        ConnectionStage {
+            id: "host".into(),
+            status: "passed".into(),
+            message: format!(
+                "Host HTTPS permitido: {}.",
+                endpoint.host_str().unwrap_or("")
+            ),
+        },
+    ];
+    match fetch_models(&provider_id, &base_url).await {
+        Ok(models) => {
+            stages.push(ConnectionStage {
+                id: "network".into(),
+                status: "passed".into(),
+                message: "Conexão HTTPS concluída.".into(),
+            });
+            stages.push(ConnectionStage {
+                id: "authentication".into(),
+                status: "passed".into(),
+                message: "A API aceitou a credencial.".into(),
+            });
+            let exists = models.iter().any(|item| item.id == model);
+            stages.push(ConnectionStage {
+                id: "model".into(),
+                status: if exists { "passed" } else { "failed" }.into(),
+                message: if exists {
+                    "O modelo aparece na lista da conta."
+                } else {
+                    "O modelo não aparece na lista da conta; confira o identificador."
+                }
+                .into(),
+            });
+            Ok(ConnectionTest {
+                stages,
+                overall: if exists { "passed" } else { "failed" }.into(),
+            })
+        }
+        Err(message) if message.contains("não oferece listagem") => {
+            stages.extend([
+                ConnectionStage {
+                    id: "network".into(),
+                    status: "not_checked".into(),
+                    message: "Este endpoint não oferece uma verificação sem custo.".into(),
+                },
+                ConnectionStage {
+                    id: "authentication".into(),
+                    status: "not_checked".into(),
+                    message: "A autenticação só será confirmada ao enviar uma solicitação.".into(),
+                },
+                ConnectionStage {
+                    id: "model".into(),
+                    status: "not_checked".into(),
+                    message: "Não foi possível confirmar o modelo sem chamar a API de geração."
+                        .into(),
+                },
+            ]);
+            Ok(ConnectionTest {
+                stages,
+                overall: "partial".into(),
+            })
+        }
+        Err(message) => Err(message),
+    }
+}
+
+fn ping_body(provider_id: &str, model: &str) -> Option<Value> {
+    match provider_id {
+        "anthropic" => Some(
+            json!({ "model": model, "max_tokens": 1, "messages": [{"role":"user","content":"ping"}] }),
+        ),
+        "perplexity" => None,
+        _ => Some(
+            json!({ "model": model, "max_tokens": 1, "messages": [{"role":"user","content":"ping"}] }),
+        ),
+    }
+}
+
+#[tauri::command]
+pub async fn ping_provider(
+    caller: tauri::WebviewWindow,
+    provider_id: String,
+    base_url: String,
+    model: String,
+) -> Result<(), String> {
+    super::require_main(&caller)?;
+    let endpoint = provider_endpoint(&provider_id, &base_url)?;
+    let body = ping_body(&provider_id, &model)
+        .ok_or("O ping opcional não está disponível para este adaptador.")?;
+    let credential = credential_entry(&provider_id)?
+        .get_password()
+        .map_err(|_| "Salve uma credencial para testar a geração.")?;
+    let client = Client::builder()
+        .redirect(Policy::none())
+        .connect_timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|_| "Não foi possível preparar uma conexão segura.")?;
+    let mut request = client
+        .post(endpoint)
+        .pipe_auth(&provider_id, &credential)?
+        .json(&body);
+    if provider_id == "anthropic" {
+        request = request.header("anthropic-version", "2023-06-01");
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|error| safe_transport_error(&error))?;
+    if !response.status().is_success() {
+        return Err(provider_http_error(response.status().as_u16()));
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -249,6 +512,7 @@ async fn request_provider(
     messages: &[ProviderMessage],
     on_chunk: Option<Channel<String>>,
 ) -> Result<ProviderReply, String> {
+    let endpoint = provider_endpoint(provider_id, base_url)?;
     let entry = credential_entry(provider_id)?;
     let credential = entry.get_password().map_err(|error| match error {
         keyring::Error::NoEntry => {
@@ -256,7 +520,6 @@ async fn request_provider(
         }
         _ => "Não foi possível recuperar a credencial do Gerenciador do Windows.".to_string(),
     })?;
-    let endpoint = provider_endpoint(provider_id, base_url)?;
     let client = Client::builder()
         .redirect(Policy::none())
         .connect_timeout(Duration::from_secs(15))
@@ -307,15 +570,7 @@ async fn request_provider(
         .map_err(|error| safe_transport_error(&error))?;
     let status = response.status();
     if !status.is_success() {
-        return Err(match status.as_u16() {
-            401 | 403 => "O provedor recusou a credencial ou as permissões configuradas.".into(),
-            404 => "O endpoint ou modelo não foi encontrado. Confira a configuração.".into(),
-            429 => "O limite de solicitações do provedor foi atingido. Tente novamente mais tarde."
-                .into(),
-            400 => "O provedor rejeitou o modelo ou os parâmetros da solicitação.".into(),
-            500..=599 => "O serviço do provedor está indisponível no momento.".into(),
-            _ => format!("O provedor respondeu com HTTP {}.", status.as_u16()),
-        });
+        return Err(provider_http_error(status.as_u16()));
     }
     if let Some(channel) = on_chunk {
         if provider_id != "perplexity" {
@@ -428,6 +683,7 @@ fn provider_endpoint(provider_id: &str, base_url: &str) -> Result<Url, String> {
     let mut url =
         Url::parse(base_url.trim()).map_err(|_| "Informe um endpoint válido.".to_string())?;
     if url.scheme() != "https"
+        || url.port().is_some_and(|port| port != 443)
         || url.username() != ""
         || url.password().is_some()
         || url.query().is_some()
@@ -438,52 +694,71 @@ fn provider_endpoint(provider_id: &str, base_url: &str) -> Result<Url, String> {
         );
     }
     let host = url.host_str().unwrap_or_default().to_ascii_lowercase();
-    let allowed = match provider_id {
-        "openai" => host == "api.openai.com",
-        "anthropic" => host == "api.anthropic.com",
-        "gemini" => host == "generativelanguage.googleapis.com",
-        "xai" => host == "api.x.ai",
-        "mistral" => host == "api.mistral.ai",
-        "cohere" => host == "api.cohere.ai" || host == "api.cohere.com",
-        "groq" => host == "api.groq.com",
-        "deepseek" => host == "api.deepseek.com",
-        "perplexity" => host == "api.perplexity.ai",
-        "together" => host == "api.together.ai",
-        "openrouter" => host == "openrouter.ai",
-        "fireworks" => host == "api.fireworks.ai",
-        "azure-openai" => {
-            host.ends_with(".openai.azure.com") || host.ends_with(".services.ai.azure.com")
-        }
-        "bedrock" => {
-            (host.starts_with("bedrock-runtime.") && host.ends_with(".amazonaws.com"))
-                || (host.starts_with("bedrock-mantle.") && host.ends_with(".api.aws"))
-        }
-        _ => false,
-    };
+    let config =
+        catalog_entry(provider_id).ok_or("A configuração deste provedor não está cadastrada.")?;
+    let allowed = config.host_rule.as_deref().is_some_and(|rule| {
+        rule.split('|').any(|part| {
+            if let Some(suffix) = part.strip_prefix("*.") {
+                host.len() > suffix.len() + 1 && host.ends_with(&format!(".{suffix}"))
+            } else if part.contains("{region}") {
+                let (prefix, suffix) = part.split_once("{region}").unwrap();
+                host.strip_prefix(prefix)
+                    .and_then(|rest| rest.strip_suffix(suffix))
+                    .is_some_and(|region| {
+                        !region.is_empty()
+                            && region
+                                .bytes()
+                                .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+                    })
+            } else {
+                host == part
+            }
+        })
+    });
     if !allowed {
-        return Err("O domínio do endpoint não corresponde ao provedor selecionado.".into());
+        return Err(format!(
+            "Este host não corresponde a {provider_id}. Use o host HTTPS documentado: {}.",
+            config.host_rule.as_deref().unwrap_or("sem host cadastrado")
+        ));
     }
 
     let path = url.path().trim_end_matches('/');
-    let endpoint_path = match provider_id {
-        "anthropic" => "/v1/messages",
-        "perplexity" => "/v1/agent",
-        "azure-openai" if path.ends_with("/openai/v1") => "/chat/completions",
-        "bedrock" if path.ends_with("/openai/v1") => "/chat/completions",
-        "azure-openai" | "bedrock" => {
+    let base_path = Url::parse(&config.base_url)
+        .map(|value| value.path().trim_end_matches('/').to_string())
+        .unwrap_or_default();
+    if provider_id == "azure-openai" || provider_id == "bedrock" {
+        if !path.ends_with("/openai/v1") {
             return Err("O endpoint precisa terminar em /openai/v1.".into());
         }
-        _ => "/chat/completions",
-    };
-    let path = match provider_id {
-        "anthropic" if path.is_empty() || path == "/" => "/v1/messages".to_string(),
-        "anthropic" if path.ends_with("/v1/messages") => path.to_string(),
-        "anthropic" => return Err("O endpoint da Anthropic precisa ser a raiz da API.".into()),
-        "perplexity" => path.to_string(),
-        _ => format!("{path}{endpoint_path}"),
+    } else if path != base_path && !(provider_id == "anthropic" && path == "/v1/messages") {
+        return Err(format!("O caminho do endpoint não corresponde ao prefixo oficial de {provider_id}: {base_path}."));
+    }
+    let chat_path = config
+        .chat_path
+        .as_deref()
+        .ok_or("Este provedor ainda não possui um adaptador de chat ativo.")?;
+    let path = if chat_path.is_empty() || (provider_id == "anthropic" && path.ends_with(chat_path))
+    {
+        path.to_string()
+    } else {
+        format!("{path}{chat_path}")
     };
     url.set_path(&path);
     Ok(url)
+}
+
+fn provider_http_error(status: u16) -> String {
+    match status {
+        400 => {
+            format!("O provedor rejeitou o modelo ou os parâmetros da solicitação (HTTP {status}).")
+        }
+        401 | 403 => format!("A credencial é inválida ou não tem permissão (HTTP {status})."),
+        404 => "O endpoint ou modelo não foi encontrado (HTTP 404).".into(),
+        408 => "O provedor atingiu o tempo limite (HTTP 408). Tente novamente.".into(),
+        429 => "O limite de solicitações ou a cota foi atingido (HTTP 429).".into(),
+        500..=599 => format!("O serviço do provedor está indisponível (HTTP {status})."),
+        _ => format!("O provedor respondeu com HTTP {status}."),
+    }
 }
 
 fn header_value(value: &str) -> Result<header::HeaderValue, String> {
@@ -499,11 +774,16 @@ trait AuthRequest {
 
 impl AuthRequest for reqwest::RequestBuilder {
     fn pipe_auth(self, provider_id: &str, credential: &str) -> Result<Self, String> {
-        Ok(match provider_id {
-            "anthropic" => self.header("x-api-key", header_value(credential)?),
-            "azure-openai" => self.header("api-key", header_value(credential)?),
-            _ => self.header(header::AUTHORIZATION, bearer_value(credential)?),
-        })
+        let entry = catalog_entry(provider_id)
+            .ok_or("A autenticação deste provedor não está cadastrada.")?;
+        match entry.auth_header.as_deref() {
+            Some("x-api-key") => Ok(self.header("x-api-key", header_value(credential)?)),
+            Some("api-key") => Ok(self.header("api-key", header_value(credential)?)),
+            Some("Authorization") => {
+                Ok(self.header(header::AUTHORIZATION, bearer_value(credential)?))
+            }
+            _ => Err("O método de autenticação deste provedor ainda não está implementado.".into()),
+        }
     }
 }
 
@@ -658,6 +938,49 @@ mod tests {
         assert!(provider_endpoint("openai", "https://api.openai.com.attacker.invalid/v1").is_err());
         assert!(provider_endpoint("openai", "http://api.openai.com/v1").is_err());
         assert!(provider_endpoint("vertex-ai", "https://aiplatform.googleapis.com").is_err());
+        assert!(provider_endpoint("groq", "https://api.x.ai/v1").is_err());
+        assert!(provider_endpoint("groq", "https://api.groq.com/v1").is_err());
+        assert_eq!(
+            provider_endpoint("anthropic", "https://api.anthropic.com/v1/messages")
+                .unwrap()
+                .path(),
+            "/v1/messages"
+        );
+    }
+
+    #[test]
+    fn provider_catalog_deserializes_from_embedded_resource() {
+        let anthropic = catalog_entry("anthropic").unwrap();
+        assert_eq!(anthropic.auth_header.as_deref(), Some("x-api-key"));
+        assert_eq!(anthropic.chat_path.as_deref(), Some("/v1/messages"));
+        assert_eq!(anthropic.model_list_path.as_deref(), Some("/v1/models"));
+    }
+
+    #[test]
+    fn maps_provider_statuses_to_safe_portuguese_errors() {
+        for (status, expected) in [
+            (400, "HTTP 400"),
+            (401, "HTTP 401"),
+            (403, "HTTP 403"),
+            (404, "HTTP 404"),
+            (408, "HTTP 408"),
+            (429, "HTTP 429"),
+            (503, "HTTP 503"),
+        ] {
+            let message = provider_http_error(status);
+            assert!(message.contains(expected));
+            assert!(!message.contains("test-secret"));
+        }
+    }
+
+    #[test]
+    fn optional_ping_is_limited_to_one_output_token() {
+        for provider in ["openai", "anthropic", "groq", "azure-openai", "bedrock"] {
+            let body = ping_body(provider, "model").unwrap();
+            assert_eq!(body["max_tokens"], 1);
+            assert_eq!(body["messages"][0]["content"], "ping");
+        }
+        assert!(ping_body("perplexity", "model").is_none());
     }
 
     #[test]
@@ -679,43 +1002,90 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn sends_provider_specific_authentication_headers_to_mock_server() {
+    async fn sends_adapter_urls_headers_and_bodies_to_mock_server() {
         use std::io::{Read, Write};
-        for provider in ["anthropic", "azure-openai", "openai", "perplexity"] {
+        for entry in serde_json::from_str::<Vec<CatalogEntry>>(include_str!(
+            "../resources/provider-catalog.json"
+        ))
+        .unwrap()
+        {
+            let provider = entry.id.as_str();
+            if !supports_credentials(provider) {
+                continue;
+            }
+            let base_url = match provider {
+                "azure-openai" => "https://resource.openai.azure.com/openai/v1".to_string(),
+                _ => entry.base_url.clone(),
+            };
+            let endpoint = provider_endpoint(provider, &base_url).unwrap();
+            let body = if provider == "perplexity" {
+                json!({ "model": "test-model", "input": "ping" })
+            } else {
+                ping_body(provider, "test-model").unwrap()
+            };
             let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
             let address = listener.local_addr().unwrap();
+            let expected_path = endpoint.path().to_string();
             let server = std::thread::spawn(move || {
                 let (mut socket, _) = listener.accept().unwrap();
                 socket
                     .set_read_timeout(Some(Duration::from_secs(5)))
                     .unwrap();
-                let mut bytes = [0_u8; 4096];
-                let count = socket.read(&mut bytes).unwrap();
-                let request = String::from_utf8_lossy(&bytes[..count]).to_ascii_lowercase();
+                let mut bytes = Vec::new();
+                let mut chunk = [0_u8; 4096];
+                loop {
+                    let count = socket.read(&mut chunk).unwrap();
+                    if count == 0 {
+                        break;
+                    }
+                    bytes.extend_from_slice(&chunk[..count]);
+                    if let Some(header_end) = bytes.windows(4).position(|part| part == b"\r\n\r\n")
+                    {
+                        let headers =
+                            String::from_utf8_lossy(&bytes[..header_end]).to_ascii_lowercase();
+                        let content_length = headers
+                            .lines()
+                            .find_map(|line| line.strip_prefix("content-length: "))
+                            .and_then(|value| value.parse::<usize>().ok())
+                            .unwrap_or(0);
+                        if bytes.len() >= header_end + 4 + content_length {
+                            break;
+                        }
+                    }
+                }
+                let request = String::from_utf8_lossy(&bytes).to_ascii_lowercase();
                 socket
                     .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}")
                     .unwrap();
-                request
+                (request, expected_path)
             });
             let client = Client::new();
             client
-                .post(format!("http://{address}/"))
+                .post(format!("http://{address}{}", endpoint.path()))
                 .pipe_auth(provider, "test-secret")
                 .unwrap()
-                .header("anthropic-version", "2023-06-01")
-                .body("{}")
+                .json(&body)
                 .send()
                 .await
                 .unwrap();
-            let request = server.join().unwrap();
-            let expected = match provider {
-                "anthropic" => "x-api-key: test-secret",
-                "azure-openai" => "api-key: test-secret",
+            let (request, expected_path) = server.join().unwrap();
+            let first_line = request.lines().next().unwrap_or_default();
+            assert!(
+                first_line.contains(&expected_path),
+                "URL incorreta para {provider}: {first_line}"
+            );
+            let expected_header = match entry.auth_header.as_deref() {
+                Some("x-api-key") => "x-api-key: test-secret",
+                Some("api-key") => "api-key: test-secret",
                 _ => "authorization: bearer test-secret",
             };
             assert!(
-                request.contains(expected),
+                request.contains(expected_header),
                 "cabeçalho incorreto para {provider}"
+            );
+            assert!(
+                request.contains("\"model\":\"test-model\""),
+                "corpo incorreto para {provider}"
             );
             if provider == "anthropic" {
                 assert!(!request.contains("authorization:"));

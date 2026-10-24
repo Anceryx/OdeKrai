@@ -8,6 +8,8 @@
 - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`: formatação Rust.
 - `cargo check --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc`: compilação Rust para Windows.
 - `cargo test --manifest-path src-tauri/Cargo.toml --lib`: testes Rust, incluindo cabeçalhos de autenticação com servidor local simulado.
+- Testes Rust da validação do endpoint, mapeamento de status, recusa de formatos de imagem e normalização de avatar; sem chamadas às APIs reais.
+- Testes Vitest da migração v1 e isolamento de endpoint/modelo entre provedores.
 - `npm run tauri:build`: aplicação e instalador NSIS.
 - `git diff --check`: whitespace e marcadores de conflito.
 
@@ -39,6 +41,8 @@ Execute em uma sessão Windows com a janela visível. Registre sistema, escala D
 14. Edite `ODEKRAI.md` fora do aplicativo, volte à tela Identidade e memória e confira o diff. Confirme que o chat bloqueia a identidade alterada e só retoma após aprovação explícita.
 15. Crie, leia, edite e apague `memory/estilo.md` e outra nota. Apague toda a memória. Reinicie e confirme persistência. Não use dados reais sensíveis nesse ensaio.
 16. Crie duas conversas, apague uma e depois todo o histórico. Reinicie e confirme que nenhuma reaparece. Confira no provedor real, com conta de teste, o campo de sistema/instruções recebido; testes locais não comprovam essa integração.
+17. No perfil, salve nome e apelido, recarregue a aplicação e confirme persistência em SQLite. Tente SVG, GIF, arquivo corrompido, imagem acima do limite e PNG/JPEG/WebP válidos; confira recorte e dimensão 256 × 256.
+18. Troque entre provedores e confirme que endpoint/modelo não se misturam. Informe endpoint de outro provedor e confirme a recusa antes do salvamento da credencial. Carregue modelos somente nos provedores com endpoint documentado; confirme o estado parcial nos demais.
 
 ## Inspeção visual manual pendente
 

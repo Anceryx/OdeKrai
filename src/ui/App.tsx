@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { ChatMessage } from '../core/provider-messages';
-import { defaultSettings, loadSettings, saveSettings, type AppSettings } from '../core/settings';
+import {
+  activeProviderSettings,
+  defaultSettings,
+  loadSettings,
+  saveSettings,
+  type AppSettings,
+  type ProviderSettings,
+} from '../core/settings';
 import { emit } from '@tauri-apps/api/event';
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
 import {
@@ -20,8 +27,9 @@ import { OdekraiMascot, type MascotMetrics, type MascotMotionRequest } from './O
 import { AI_PROVIDERS, type AiProvider } from '../core/providers';
 import { ProviderCatalog } from './ProviderCatalog';
 import { AgentHome } from './AgentHome';
+import { Profile, initials, type ProfileData } from './Profile';
 
-type Section = 'overview' | 'chat' | 'providers' | 'companion' | 'settings' | 'agent';
+type Section = 'overview' | 'chat' | 'providers' | 'companion' | 'settings' | 'agent' | 'profile';
 type Conversation = { id: string; title: string };
 
 const nav: { id: Section; label: string; icon: string; group: string }[] = [
@@ -36,8 +44,14 @@ const nav: { id: Section; label: string; icon: string; group: string }[] = [
 export function App() {
   const [section, setSection] = useState<Section>('overview');
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
+  const [profile, setProfile] = useState<ProfileData>({
+    displayName: '',
+    nickname: '',
+    avatarDataUrl: null,
+  });
   const [keySavedForSession, setKeySavedForSession] = useState(false);
-  const [selectedProviderId, setSelectedProviderId] = useState(settings.provider.providerId);
+  const [selectedProviderId, setSelectedProviderId] = useState(settings.activeProviderId);
+  const activeProvider = activeProviderSettings(settings);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -52,6 +66,12 @@ export function App() {
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
+  useEffect(() => {
+    if (!isTauri()) return;
+    void invoke<ProfileData>('get_profile')
+      .then(setProfile)
+      .catch(() => undefined);
+  }, []);
   useEffect(() => {
     if (!isTauri()) return;
     void invoke<{ configured: boolean }>('agent_home_status')
@@ -75,7 +95,7 @@ export function App() {
       .catch(() => setError('Não foi possível abrir o histórico local.'));
   }, []);
   useEffect(() => {
-    const provider = AI_PROVIDERS.find((item) => item.id === settings.provider.providerId);
+    const provider = AI_PROVIDERS.find((item) => item.id === settings.activeProviderId);
     if (!provider || !isTauri()) {
       setKeySavedForSession(false);
       return;
@@ -83,7 +103,7 @@ export function App() {
     void invoke<boolean>('has_provider_credential', { providerId: provider.id })
       .then(setKeySavedForSession)
       .catch(() => setKeySavedForSession(false));
-  }, [settings.provider.providerId]);
+  }, [settings.activeProviderId]);
   useEffect(() => {
     const refreshSettings = () => setSettings(loadSettings());
     window.addEventListener('storage', refreshSettings);
@@ -139,6 +159,7 @@ export function App() {
       setKeySavedForSession(false);
     }
     setSelectedProviderId(provider.id);
+    setSettings((current) => ({ ...current, activeProviderId: provider.id }));
   }
 
   function beginChat() {
@@ -175,7 +196,7 @@ export function App() {
     const requestId = crypto.randomUUID();
     request.current = requestId;
     try {
-      const provider = AI_PROVIDERS.find((item) => item.id === settings.provider.providerId);
+      const provider = AI_PROVIDERS.find((item) => item.id === settings.activeProviderId);
       if (!provider) throw new Error('O provedor selecionado não possui adaptador conhecido.');
       await invoke('append_conversation_message', {
         conversationId: activeId,
@@ -195,8 +216,8 @@ export function App() {
         'stream_provider_message',
         {
           providerId: provider.id,
-          baseUrl: settings.provider.baseUrl,
-          model: settings.provider.model,
+          baseUrl: activeProvider.baseUrl,
+          model: activeProvider.model,
           messages: next,
           requestId,
           onChunk,
@@ -303,19 +324,28 @@ export function App() {
           <span className="brand-mark">O</span>
           <span>
             <strong>OdeKrai</strong>
-            <small>COMPANION DE IA PESSOAL</small>
           </span>
         </button>
-        <div className="profile-card">
+        <button
+          className="profile-card"
+          onClick={() => {
+            setSection('profile');
+            setChatMode(false);
+          }}
+        >
           <div className="avatar-small">
-            O<span className="online-dot" />
+            {profile.avatarDataUrl ? (
+              <img src={profile.avatarDataUrl} alt="" />
+            ) : (
+              initials(profile.displayName)
+            )}
+            <span className="online-dot" />
           </div>
           <div className="profile-copy">
-            <strong>Seu espaço</strong>
-            <span>Local neste dispositivo</span>
+            <strong>{profile.displayName || 'Seu perfil'}</strong>
+            <span>{profile.nickname || 'Local neste dispositivo'}</span>
           </div>
-          <span className="chevron">⌄</span>
-        </div>
+        </button>
         <nav className="nav-list" aria-label="Navegação principal">
           {(['ESPAÇO DE TRABALHO', 'INTELIGÊNCIA', 'PERSONALIZAÇÃO'] as const).map((group) => (
             <div className="nav-group" key={group}>
@@ -422,7 +452,8 @@ export function App() {
             error={error}
             submit={submitMessage}
             cancel={cancelRequest}
-            providerName={settings.provider.name}
+            providerName={activeProvider.name}
+            profile={profile}
           />
         ) : (
           <div className="content-scroll">
@@ -430,18 +461,23 @@ export function App() {
               <Overview
                 onChat={beginChat}
                 onOpen={(target) => setSection(target)}
-                provider={settings.provider}
+                provider={activeProvider}
                 keyReady={keySavedForSession}
+                profile={profile}
               />
             )}
             {section === 'providers' && (
               <ProviderCatalog
-                settings={settings.provider}
+                settings={settings}
                 keySaved={keySavedForSession}
                 selectedId={selectedProviderId}
                 onSelect={selectProvider}
                 onSave={(provider) => {
-                  setSettings((current) => ({ ...current, provider }));
+                  setSettings((current) => ({
+                    ...current,
+                    activeProviderId: provider.providerId,
+                    providers: { ...current.providers, [provider.providerId]: provider },
+                  }));
                   setKeySavedForSession(true);
                 }}
                 onChat={beginChat}
@@ -454,7 +490,10 @@ export function App() {
             {section === 'settings' && (
               <Settings settings={settings} update={(next) => setSettings(next)} />
             )}
-            {section === 'agent' && <AgentHome />}
+            {section === 'agent' && (
+              <AgentHome initialName={profile.displayName} initialNickname={profile.nickname} />
+            )}
+            {section === 'profile' && <Profile value={profile} onChange={setProfile} />}
           </div>
         )}
       </main>
@@ -472,11 +511,13 @@ function Overview({
   onOpen,
   provider,
   keyReady,
+  profile,
 }: {
   onChat: () => void;
   onOpen: (section: Section) => void;
-  provider: AppSettings['provider'];
+  provider: ProviderSettings;
   keyReady: boolean;
+  profile: ProfileData;
 }) {
   const today = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
     .format(new Date())
@@ -487,12 +528,17 @@ function Overview({
         <div>
           <span className="eyebrow">{today}</span>
           <h1>
-            Seu espaço, <em>suas ideias.</em>
+            {profile.displayName ? `Olá, ${profile.displayName}.` : 'Seu espaço,'}{' '}
+            <em>suas ideias.</em>
           </h1>
           <p>Um lugar para pensar, criar e conversar com a IA que você escolher.</p>
         </div>
         <div className="welcome-mark">
-          <span>O</span>
+          {profile.avatarDataUrl ? (
+            <img src={profile.avatarDataUrl} alt="Avatar do perfil" />
+          ) : (
+            <span>{initials(profile.displayName)}</span>
+          )}
           <i />
         </div>
       </div>
@@ -1107,7 +1153,11 @@ function Settings({
         <div className="panel-heading">
           <div>
             <h3>Preferências gerais</h3>
-            <p>Estas opções são armazenadas no navegador local do aplicativo.</p>
+            <p>
+              Preferências de aparência ficam no armazenamento local do aplicativo. Perfil e
+              histórico são salvos no banco SQLite local; credenciais ficam no Gerenciador do
+              Windows.
+            </p>
           </div>
           <span className="state-chip connected">
             <i /> SALVO LOCALMENTE
@@ -1172,6 +1222,7 @@ function ChatView({
   submit,
   cancel,
   providerName,
+  profile,
 }: {
   messages: ChatMessage[];
   conversations: Conversation[];
@@ -1187,6 +1238,7 @@ function ChatView({
   submit: (event: FormEvent) => void;
   cancel: () => void;
   providerName: string;
+  profile: ProfileData;
 }) {
   return (
     <div className="chat-view">
@@ -1251,10 +1303,18 @@ function ChatView({
           <div className="message-list">
             {messages.map((message, index) => (
               <article className={`message ${message.role}`} key={`${index}-${message.role}`}>
-                <span className="message-avatar">{message.role === 'user' ? 'D' : 'O'}</span>
+                <span className="message-avatar">
+                  {message.role === 'user' && profile.avatarDataUrl ? (
+                    <img src={profile.avatarDataUrl} alt="" />
+                  ) : message.role === 'user' ? (
+                    initials(profile.displayName)
+                  ) : (
+                    'O'
+                  )}
+                </span>
                 <div>
                   <span className="message-role">
-                    {message.role === 'user' ? 'VOCÊ' : 'OdeKrai'}
+                    {message.role === 'user' ? profile.displayName || 'Você' : 'OdeKrai'}
                   </span>
                   <p>{message.content}</p>
                   {message.citations?.length ? (

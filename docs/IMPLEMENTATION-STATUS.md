@@ -1,6 +1,6 @@
 # Estado da implementação
 
-Atualizado em 24/10/2026 para a Fase 2. Resultados anteriores não comprovam o estado atual.
+Atualizado em 24/10/2026 após implementação da Fase 2.1. Build e testes automatizados passaram; validações nativas e com provedores reais continuam pendentes.
 
 ## Implementado
 
@@ -10,11 +10,13 @@ Atualizado em 24/10/2026 para a Fase 2. Resultados anteriores não comprovam o e
 - A interface pode apagar uma conversa ou todo o histórico. A primeira execução oferece uma pasta pessoal local e gera `ODEKRAI.md` a partir de um template embutido. Identidade e memória manual são editáveis; alteração externa da identidade bloqueia seu uso até aprovação.
 - O Rust compõe o prompt com regras fixas, identidade aprovada e resumo limitado de `memory/estilo.md`. Anthropic usa `system`, Chat Completions usa a mensagem `system` e Perplexity usa `instructions`. O chat sem pasta configurada continua disponível.
 - A aplicação registra o plugin de instância única. A CSP de produção restringe conexões do WebView ao IPC, as capabilities da janela principal e das janelas auxiliares são separadas, e os comandos de janela verificam o chamador.
+- Fase 2.1 implementada: catálogo verificado com campos por provedor, configuração isolada por ID e migração local, validação de host/caminho, listagem documentada de modelos, teste de conexão sem prompt de geração, perfil SQLite e processamento de avatar no Rust. Manrope e DM Mono são carregadas localmente sob OFL 1.1.
 
 ## Limites e validação pendente
 
 - Um erro WebView2 `0x800700AA` ocorreu anteriormente ao abrir o executável. Nesta revisão, um `odekrai.exe` de release (PID 14572) continuava aberto com processos WebView2 filhos. A relação causal com instâncias simultâneas é hipótese; exige repetição com o binário atualizado em Windows com acesso à janela visível. O processo existente foi preservado.
 - Histórico SQLite não é criptografado pelo aplicativo. Proteção em repouso depende do dispositivo.
 - Ainda são necessários testes com contas e chaves reais dos provedores, Credential Manager do Windows, streaming com respostas reais, reinício do aplicativo e inspeção visual do Hub, ilha e mascote.
+- Fase 2.1 também requer validação visual nativa do perfil/avatar, tipografia, contraste, fluxo de configuração por provedor e chamadas de listagem em contas de teste. A integração de Vertex AI continua sem verificação completa de ADC.
 - DPI, múltiplos monitores, fullscreen, foco, click-through, WebGL, instalador e atualização não são comprovados pelos testes automatizados.
 - Agent loop, tools, motor de permissões, roteador, aprendizado automático e sons integrados continuam pendentes. Os modos no arquivo pessoal são apenas preferências; não há execução de ações. `logs/` está reservada, sem auditoria ativa.

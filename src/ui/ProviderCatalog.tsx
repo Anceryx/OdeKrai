@@ -10,8 +10,13 @@ import {
   siPerplexity,
   type SimpleIcon,
 } from 'simple-icons';
-import { AI_PROVIDERS, type AiProvider } from '../core/providers';
-import type { ProviderSettings } from '../core/settings';
+import { AI_PROVIDERS, providerCatalogEntry, type AiProvider } from '../core/providers';
+import {
+  activeProviderSettings,
+  defaultProviderSettings,
+  type AppSettings,
+  type ProviderSettings,
+} from '../core/settings';
 
 const logoMap: Record<string, SimpleIcon> = {
   anthropic: siAnthropic,
@@ -23,7 +28,7 @@ const logoMap: Record<string, SimpleIcon> = {
   perplexity: siPerplexity,
 };
 type Props = {
-  settings: ProviderSettings;
+  settings: AppSettings;
   keySaved: boolean;
   selectedId: string;
   onSelect: (provider: AiProvider) => void;
@@ -41,36 +46,35 @@ export function ProviderCatalog({
   onCredentialRemoved,
 }: Props) {
   const selected = AI_PROVIDERS.find((provider) => provider.id === selectedId) ?? AI_PROVIDERS[0];
-  const isActive = settings.providerId === selected.id;
-  const [draft, setDraft] = useState<ProviderSettings>(settings);
+  const catalogEntry = providerCatalogEntry(selected.id);
+  const active = activeProviderSettings(settings);
+  const isActive = settings.activeProviderId === selected.id;
+  const [draft, setDraft] = useState<ProviderSettings>(
+    settings.providers[selected.id] ?? defaultProviderSettings(selected.id),
+  );
   const [secret, setSecret] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [search, setSearch] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [credentialAvailable, setCredentialAvailable] = useState(keySaved);
+  const [models, setModels] = useState<{ id: string; name: string }[]>([]);
+  const [stages, setStages] = useState<{ id: string; status: string; message: string }[]>([]);
+  const [technicalError, setTechnicalError] = useState('');
   useEffect(() => {
-    setDraft(
-      isActive
-        ? settings
-        : {
-            providerId: selected.id,
-            name: selected.name,
-            baseUrl: selected.baseUrl ?? '',
-            model: '',
-            authMode: selected.authMode,
-            region: selected.region ? 'us-east-1' : undefined,
-          },
-    );
+    setDraft(settings.providers[selected.id] ?? defaultProviderSettings(selected.id));
     setSecret('');
     setNotice('');
+    setTechnicalError('');
+    setModels([]);
+    setStages([]);
     setCredentialAvailable(false);
     if (isTauri() && selected.integration !== 'guide') {
       void invoke<boolean>('has_provider_credential', { providerId: selected.id })
         .then(setCredentialAvailable)
         .catch(() => setCredentialAvailable(false));
     }
-  }, [selected.id]);
+  }, [selected.id, settings.providers[selected.id]]);
   const filtered = useMemo(
     () =>
       AI_PROVIDERS.filter((provider) =>
@@ -88,14 +92,17 @@ export function ProviderCatalog({
   function updateDraft(field: keyof ProviderSettings, value: string) {
     setDraft((current) => ({ ...current, [field]: value }));
   }
+  function endpointForDraft() {
+    return selected.region
+      ? `https://bedrock-runtime.${(draft.region ?? '').trim()}.amazonaws.com/openai/v1`
+      : draft.baseUrl.trim();
+  }
   async function configure(test: boolean) {
     if (!isTauri()) {
       setNotice('Use o aplicativo Windows para salvar credenciais com segurança.');
       return;
     }
-    const baseUrl = selected.region
-      ? `https://bedrock-runtime.${(draft.region ?? '').trim()}.amazonaws.com/openai/v1`
-      : draft.baseUrl.trim();
+    const baseUrl = endpointForDraft();
     const next = {
       ...draft,
       providerId: selected.id,
@@ -106,6 +113,7 @@ export function ProviderCatalog({
     setBusy(true);
     setNotice('');
     try {
+      await invoke('validate_provider_endpoint', { providerId: selected.id, baseUrl });
       if (secret.trim())
         await invoke('save_provider_credential', {
           providerId: selected.id,
@@ -115,17 +123,111 @@ export function ProviderCatalog({
       onSave(next);
       setSecret('');
       if (test) {
-        const result = await invoke<{ content: string }>('send_provider_message', {
-          providerId: selected.id,
-          baseUrl,
-          model: next.model,
-          messages: [{ role: 'user', content: 'Responda apenas: conexão validada.' }],
-          requestId: `test-${crypto.randomUUID()}`,
-        });
-        setNotice(`Conexão validada: ${result.content.slice(0, 100)}`);
+        const result = await invoke<{ stages: typeof stages; overall: string }>(
+          'test_provider_connection',
+          {
+            providerId: selected.id,
+            baseUrl,
+            model: next.model,
+          },
+        );
+        setStages(result.stages);
+        const status =
+          result.overall === 'passed'
+            ? 'passed'
+            : result.overall === 'partial'
+              ? 'partial'
+              : 'failed';
+        const saved = {
+          ...next,
+          lastTest: {
+            status: status as 'passed' | 'failed' | 'partial',
+            at: new Date().toISOString(),
+            message: result.overall,
+          },
+        };
+        setDraft(saved);
+        onSave(saved);
+        setNotice(
+          status === 'passed'
+            ? 'Conexão validada sem enviar texto ao modelo.'
+            : 'Verificação parcial; consulte as etapas abaixo.',
+        );
       } else setNotice('Credencial salva no Gerenciador do Windows. Ainda não validada.');
     } catch (error) {
-      setNotice(typeof error === 'string' ? error : 'Não foi possível configurar este provedor.');
+      const message =
+        typeof error === 'string' ? error : 'Não foi possível configurar este provedor.';
+      if (test) setTechnicalError(message);
+      if (test) {
+        const failed = {
+          ...next,
+          lastTest: { status: 'failed' as const, at: new Date().toISOString(), message },
+        };
+        setDraft(failed);
+        onSave(failed);
+      }
+      setNotice(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function loadModels() {
+    setBusy(true);
+    setNotice('');
+    try {
+      await invoke('validate_provider_endpoint', {
+        providerId: selected.id,
+        baseUrl: endpointForDraft(),
+      });
+      const result = await invoke<{ id: string; name: string }[]>('list_provider_models', {
+        providerId: selected.id,
+        baseUrl: endpointForDraft(),
+      });
+      setModels(result);
+      setNotice(`${result.length} modelos carregados.`);
+    } catch (error) {
+      setNotice(typeof error === 'string' ? error : 'Não foi possível carregar os modelos.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function ping() {
+    setBusy(true);
+    setNotice('');
+    setTechnicalError('');
+    try {
+      await invoke('validate_provider_endpoint', {
+        providerId: selected.id,
+        baseUrl: endpointForDraft(),
+      });
+      await invoke('ping_provider', {
+        providerId: selected.id,
+        baseUrl: endpointForDraft(),
+        model: draft.model,
+      });
+      const saved = {
+        ...draft,
+        baseUrl: endpointForDraft(),
+        lastTest: {
+          status: 'passed' as const,
+          at: new Date().toISOString(),
+          message: 'Ping de um token aceito.',
+        },
+      };
+      setDraft(saved);
+      onSave(saved);
+      setNotice('Ping de um token aceito pelo provedor. Esta solicitação pode gerar cobrança.');
+    } catch (error) {
+      const message = typeof error === 'string' ? error : 'Não foi possível concluir o ping.';
+      const failed = {
+        ...draft,
+        baseUrl: endpointForDraft(),
+        lastTest: { status: 'failed' as const, at: new Date().toISOString(), message },
+      };
+      setDraft(failed);
+      onSave(failed);
+      setNotice(message);
+      setTechnicalError(message);
     } finally {
       setBusy(false);
     }
@@ -150,7 +252,7 @@ export function ProviderCatalog({
         <span className={`connection-orb ${keySaved ? 'ready' : ''}`} />
         <div>
           <strong>
-            {keySaved ? `${settings.name} tem credencial salva` : 'Nenhum provedor configurado'}
+            {keySaved ? `${active.name} tem credencial salva` : 'Nenhum provedor configurado'}
           </strong>
           <span>
             {keySaved
@@ -204,15 +306,15 @@ export function ProviderCatalog({
                           : 'Chat Completions'}
                   </small>
                 </span>
-                {settings.providerId === provider.id && (
+                {settings.activeProviderId === provider.id && (
                   <span className="provider-active-dot" title="Selecionado no aplicativo" />
                 )}
               </button>
             ))}
           </div>
           <p className="provider-compat-note">
-            Teste de conexão envia uma solicitação real ao serviço e pode gerar cobrança. Os modelos
-            são informados conforme sua conta.
+            O teste sem geração consulta a lista de modelos da conta quando o provedor oferece esse
+            endpoint. O ping de um token é opcional e pode gerar cobrança.
           </p>
         </section>
         <aside className="provider-detail" aria-label={`Detalhes de ${selected.name}`}>
@@ -228,6 +330,13 @@ export function ProviderCatalog({
             </div>
           </div>
           <p className="provider-description">{selected.description}</p>
+          {catalogEntry && (
+            <p className="provider-key-note">
+              {catalogEntry.verification === 'verified'
+                ? `Documentação conferida em ${catalogEntry.verifiedAt}.`
+                : 'Detalhes de integração ainda não verificados na documentação oficial.'}
+            </p>
+          )}
           <div className="provider-requirements">
             <h3>O que você precisa</h3>
             <ul>
@@ -267,6 +376,34 @@ export function ProviderCatalog({
                   readOnly={Boolean(selected.region)}
                 />
               </label>
+              {catalogEntry?.modelListPath && (
+                <button
+                  className="text-button"
+                  type="button"
+                  disabled={!credentialAvailable || busy}
+                  onClick={() => void loadModels()}
+                >
+                  Carregar modelos da conta
+                </button>
+              )}
+              {models.length > 0 && (
+                <label className="field-label">
+                  Modelos disponíveis
+                  <select
+                    value={models.some((item) => item.id === draft.model) ? draft.model : ''}
+                    onChange={(event) =>
+                      event.target.value && updateDraft('model', event.target.value)
+                    }
+                  >
+                    <option value="">Selecionar um modelo…</option>
+                    {models.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <label className="field-label">
                 {selected.id === 'azure-openai'
                   ? 'Nome do deployment'
@@ -319,8 +456,18 @@ export function ProviderCatalog({
                 disabled={!ready || busy}
                 onClick={() => void configure(true)}
               >
-                Testar conexão
+                Testar conexão sem gerar resposta
               </button>
+              {selected.id !== 'perplexity' && (
+                <button
+                  className="text-button"
+                  disabled={!credentialAvailable || !draft.model.trim() || busy}
+                  onClick={() => void ping()}
+                  title="Envia um ping com limite de uma saída. Pode gerar cobrança."
+                >
+                  Ping de 1 token (pode gerar cobrança)
+                </button>
+              )}
               {credentialAvailable && (
                 <button
                   className="text-button"
@@ -342,6 +489,42 @@ export function ProviderCatalog({
                 <p className="provider-key-note" role="status">
                   {notice}
                 </p>
+              )}
+              {stages.length > 0 && (
+                <ol className="connection-stages">
+                  {stages.map((stage) => (
+                    <li key={stage.id} data-status={stage.status}>
+                      <strong>
+                        {stage.status === 'passed' ? '✓' : stage.status === 'failed' ? '×' : '–'}{' '}
+                        {{
+                          credential: 'Credencial',
+                          host: 'Host permitido',
+                          network: 'Rede e TLS',
+                          authentication: 'Autenticação',
+                          model: 'Modelo',
+                        }[stage.id] ?? stage.id}
+                      </strong>
+                      <span>{stage.message}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+              {draft.lastTest && (
+                <p className="provider-key-note">
+                  Último teste:{' '}
+                  {draft.lastTest.status === 'passed'
+                    ? 'aprovado'
+                    : draft.lastTest.status === 'partial'
+                      ? 'parcial'
+                      : 'falhou'}{' '}
+                  · {new Date(draft.lastTest.at).toLocaleString('pt-BR')}
+                </p>
+              )}
+              {technicalError && (
+                <details className="provider-key-note">
+                  <summary>Detalhes técnicos</summary>
+                  <code>{technicalError.slice(0, 500)}</code>
+                </details>
               )}
               {isActive && credentialAvailable && (
                 <button className="secondary-button provider-chat-button" onClick={onChat}>

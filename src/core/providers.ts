@@ -18,7 +18,26 @@ export type AiProvider = {
   region?: boolean;
 };
 
-export const AI_PROVIDERS: AiProvider[] = [
+export type ProviderCatalogEntry = {
+  id: string;
+  baseUrl: string;
+  chatPath: string | null;
+  authHeader: string | null;
+  modelListPath: string | null;
+  modelListShape: string | null;
+  hostRule: string | null;
+  docsUrl: string;
+  verifiedAt: string | null;
+  verification: 'verified' | 'unverified';
+  fields: string[];
+};
+
+import rawCatalog from '../../src-tauri/resources/provider-catalog.json';
+export const PROVIDER_CATALOG = rawCatalog as ProviderCatalogEntry[];
+export const providerCatalogEntry = (id: string) =>
+  PROVIDER_CATALOG.find((entry) => entry.id === id);
+
+const providerDefinitions: AiProvider[] = [
   {
     id: 'openai',
     name: 'OpenAI',
@@ -247,6 +266,24 @@ export const AI_PROVIDERS: AiProvider[] = [
     color: '#4285F4',
   },
 ];
+
+export const AI_PROVIDERS = providerDefinitions.map((provider) => {
+  const entry = PROVIDER_CATALOG.find((item) => item.id === provider.id);
+  if (!entry) return provider;
+  const authMode: ProviderAuthMode =
+    entry.authHeader === 'x-api-key'
+      ? 'x-api-key'
+      : entry.authHeader === 'api-key'
+        ? 'api-key'
+        : 'bearer';
+  return {
+    ...provider,
+    docsUrl: entry.docsUrl,
+    baseUrl: entry.baseUrl,
+    authMode,
+    modelHint: 'ID do modelo habilitado na sua conta',
+  };
+});
 
 export function providerById(id: string): AiProvider | undefined {
   return AI_PROVIDERS.find((provider) => provider.id === id);

@@ -2,7 +2,9 @@
 
 Preferências de aparência, Companion e configuração não secreta do provedor são salvas no armazenamento local do WebView. Credenciais suportadas são guardadas pelo processo Tauri no Gerenciador de Credenciais do Windows e não entram em `localStorage`.
 
-Ao conversar ou testar conexão, o texto da conversa é enviado ao provedor selecionado. As mensagens do chat são salvas em SQLite na pasta de dados local do aplicativo para permitir retomar conversas. Esse arquivo não é criptografado pelo OdeKrai; a proteção em repouso depende do Windows e da configuração do dispositivo. A política de retenção e uso do conteúdo enviado depende do provedor e da conta do usuário. Não envie dados que não deseja compartilhar com esse serviço.
+O perfil (nome e apelido) fica em `profile.sqlite3` dentro dos dados locais do aplicativo. O avatar é reprocessado pelo Rust e salvo como PNG quadrado de 256 × 256 na mesma pasta. Esses arquivos ficam em texto simples; o aplicativo não os criptografa. O avatar não é adicionado ao histórico nem enviado aos provedores; o nome e o apelido só saem do dispositivo se o usuário os inserir numa mensagem. A escolha de atualizar o nome em `ODEKRAI.md` exige ação e aprovação explícitas.
+
+Ao conversar, o texto enviado pelo usuário é encaminhado ao provedor selecionado. O teste de conexão consulta somente a lista de modelos documentada, quando disponível; o ping opcional envia apenas “ping” com limite de uma saída e pode gerar cobrança. As mensagens do chat são salvas em SQLite na pasta de dados local do aplicativo para permitir retomar conversas. Esse arquivo não é criptografado pelo OdeKrai; a proteção em repouso depende do Windows e da configuração do dispositivo. A política de retenção e uso do conteúdo enviado depende do provedor e da conta do usuário. Não envie dados que não deseja compartilhar com esse serviço.
 
 A integração de credenciais depende do aplicativo nativo Windows. A prévia web não encaminha chamadas de IA.
 

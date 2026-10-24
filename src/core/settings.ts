@@ -1,5 +1,5 @@
 import { normalizeSoundPreferences } from './sounds';
-import { AI_PROVIDERS, type ProviderAuthMode } from './providers';
+import { AI_PROVIDERS, providerById, type ProviderAuthMode } from './providers';
 
 export type ProviderSettings = {
   providerId: string;
@@ -8,12 +8,14 @@ export type ProviderSettings = {
   model: string;
   authMode: ProviderAuthMode;
   region?: string;
+  lastTest?: { status: 'passed' | 'failed' | 'partial'; at: string; message: string };
 };
 
 export type AppSettings = {
   language: 'pt-BR' | 'en';
   reduceMotion: boolean;
-  provider: ProviderSettings;
+  activeProviderId: string;
+  providers: Record<string, ProviderSettings>;
   companion: {
     enabled: boolean;
     position: 'top-right' | 'bottom-right' | 'top-left' | 'bottom-left';
@@ -32,18 +34,33 @@ export type AppSettings = {
   };
 };
 
-const STORAGE_KEY = 'odekrai.settings.v1';
+const STORAGE_KEY = 'odekrai.settings.v2';
+const LEGACY_STORAGE_KEY = 'odekrai.settings.v1';
+
+export function defaultProviderSettings(providerId: string): ProviderSettings {
+  const provider = providerById(providerId) ?? AI_PROVIDERS[0];
+  return {
+    providerId: provider.id,
+    name: provider.name,
+    baseUrl: provider.baseUrl ?? '',
+    model: '',
+    authMode: provider.authMode,
+    region: provider.region ? 'us-east-1' : undefined,
+  };
+}
+
+export function activeProviderSettings(settings: AppSettings): ProviderSettings {
+  return (
+    settings.providers[settings.activeProviderId] ??
+    defaultProviderSettings(settings.activeProviderId)
+  );
+}
 
 export const defaultSettings: AppSettings = {
   language: 'pt-BR',
   reduceMotion: false,
-  provider: {
-    providerId: 'openai',
-    name: 'OpenAI compatível',
-    baseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-4o-mini',
-    authMode: 'bearer',
-  },
+  activeProviderId: 'openai',
+  providers: {},
   companion: {
     enabled: false,
     position: 'bottom-right',
@@ -60,7 +77,7 @@ export const defaultSettings: AppSettings = {
 
 export function loadSettings(): AppSettings {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return defaultSettings;
     const value: unknown = JSON.parse(raw);
     if (!isAppSettings(value)) return defaultSettings;
@@ -89,21 +106,52 @@ export function loadSettings(): AppSettings {
       Math.abs(companion.desktopCoordinates.y) <= 100_000
         ? { x: companion.desktopCoordinates.x, y: companion.desktopCoordinates.y }
         : null;
+    const legacy = 'provider' in value ? (value.provider as Partial<ProviderSettings>) : undefined;
+    const oldId =
+      legacy && typeof legacy === 'object'
+        ? typeof legacy.providerId === 'string' && providerById(legacy.providerId)
+          ? legacy.providerId
+          : (AI_PROVIDERS.find((provider) => provider.name === legacy.name)?.id ?? 'openai')
+        : undefined;
+    const rawProviders =
+      'providers' in value && value.providers && typeof value.providers === 'object'
+        ? (value.providers as Record<string, unknown>)
+        : {};
+    const providers: Record<string, ProviderSettings> = {};
+    for (const provider of AI_PROVIDERS) {
+      const candidate = rawProviders[provider.id];
+      if (candidate && typeof candidate === 'object') {
+        const saved = candidate as Partial<ProviderSettings>;
+        providers[provider.id] = {
+          ...defaultProviderSettings(provider.id),
+          baseUrl: typeof saved.baseUrl === 'string' ? saved.baseUrl : (provider.baseUrl ?? ''),
+          model: typeof saved.model === 'string' ? saved.model : '',
+          region: typeof saved.region === 'string' ? saved.region : undefined,
+          lastTest: validTest(saved.lastTest) ? saved.lastTest : undefined,
+        };
+      }
+    }
+    if (oldId && legacy && !providers[oldId]) {
+      providers[oldId] = {
+        ...defaultProviderSettings(oldId),
+        baseUrl: typeof legacy.baseUrl === 'string' ? legacy.baseUrl : '',
+        model: typeof legacy.model === 'string' ? legacy.model : '',
+        region: typeof legacy.region === 'string' ? legacy.region : undefined,
+      };
+    }
+    const activeProviderId =
+      'activeProviderId' in value &&
+      typeof value.activeProviderId === 'string' &&
+      providerById(value.activeProviderId)
+        ? value.activeProviderId
+        : (oldId ?? 'openai');
+    const migrated = { ...value } as Record<string, unknown>;
+    delete migrated.provider;
     return {
       ...defaultSettings,
-      ...value,
-      provider: {
-        ...defaultSettings.provider,
-        ...value.provider,
-        providerId: AI_PROVIDERS.some((provider) => provider.id === value.provider.providerId)
-          ? value.provider.providerId
-          : (AI_PROVIDERS.find((provider) => provider.name === value.provider.name)?.id ??
-            'openai'),
-        authMode:
-          AI_PROVIDERS.find((provider) => provider.id === value.provider.providerId)?.authMode ??
-          AI_PROVIDERS.find((provider) => provider.name === value.provider.name)?.authMode ??
-          'bearer',
-      },
+      ...migrated,
+      activeProviderId,
+      providers,
       companion: {
         ...defaultSettings.companion,
         ...value.companion,
@@ -138,13 +186,24 @@ export function saveSettings(settings: AppSettings): boolean {
 
 function isAppSettings(value: unknown): value is AppSettings {
   if (!value || typeof value !== 'object') return false;
-  const candidate = value as Partial<AppSettings>;
+  const candidate = value as Partial<AppSettings> & { provider?: Partial<ProviderSettings> };
   return (
     (candidate.language === 'pt-BR' || candidate.language === 'en') &&
     typeof candidate.reduceMotion === 'boolean' &&
-    !!candidate.provider &&
-    typeof candidate.provider.baseUrl === 'string' &&
-    typeof candidate.provider.model === 'string' &&
-    typeof candidate.provider.name === 'string'
+    ((!!candidate.providers && typeof candidate.providers === 'object') ||
+      (!!candidate.provider &&
+        typeof candidate.provider.baseUrl === 'string' &&
+        typeof candidate.provider.model === 'string' &&
+        typeof candidate.provider.name === 'string'))
+  );
+}
+
+function validTest(value: unknown): value is ProviderSettings['lastTest'] {
+  if (!value || typeof value !== 'object') return false;
+  const test = value as ProviderSettings['lastTest'];
+  return (
+    ['passed', 'failed', 'partial'].includes(test?.status ?? '') &&
+    typeof test?.at === 'string' &&
+    typeof test?.message === 'string'
   );
 }

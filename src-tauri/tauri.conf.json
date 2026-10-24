@@ -29,7 +29,7 @@
     "active": true,
     "targets": ["nsis"],
     "category": "Productivity",
-    "shortDescription": "Seu assistente pessoal de IA",
-    "longDescription": "Hub local-first do OdeKrai para Windows."
+    "shortDescription": "OdeKrai",
+    "longDescription": "OdeKrai para Windows."
   }
 }

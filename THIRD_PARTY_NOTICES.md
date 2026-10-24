@@ -11,3 +11,10 @@ Nenhum som Kenney foi baixado ou incorporado. As páginas de [Interface Sounds](
 ## Dependências
 
 As dependências declaradas em `package.json` mantêm suas próprias licenças e avisos. Antes de distribuir binários, gerar e revisar um inventário das dependências efetivamente empacotadas e incluir os avisos exigidos por cada licença.
+
+### Fontes
+
+- Manrope, pacote `@fontsource-variable/manrope` 5.3.0. Autores: The Manrope Project Authors. Licença SIL Open Font License 1.1; arquivo `node_modules/@fontsource-variable/manrope/LICENSE`. Pacote local: https://www.npmjs.com/package/@fontsource-variable/manrope.
+- DM Mono, pacote `@fontsource/dm-mono` 5.3.0. Autores: The DM Mono Project Authors. Licença SIL Open Font License 1.1; arquivo `node_modules/@fontsource/dm-mono/LICENSE`. Pacote local: https://www.npmjs.com/package/@fontsource/dm-mono.
+
+Os arquivos das fontes são empacotados localmente pelo Vite; não há carregamento por CDN.

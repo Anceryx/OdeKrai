@@ -3,6 +3,8 @@
 - Chaves de provedor são salvas pelo backend Tauri via `keyring` no Gerenciador de Credenciais do Windows. O frontend mantém o texto digitado apenas durante a configuração e não recupera segredos já salvos.
 - O chat chama comandos Tauri; não envia chaves diretamente do WebView. Preview web não oferece conexão com provedores.
 - O backend limita provedores conhecidos, HTTPS, hosts por provedor, URLs sem credenciais/parâmetros, redirecionamentos, tamanho de mensagens e tempo de resposta. Erros de transporte não incluem conteúdo da chave.
+- Endpoint e caminho são validados no Rust para o provedor selecionado antes de guardar ou enviar a credencial. O catálogo documenta quais provedores oferecem uma lista de modelos sem geração. Respostas de erro expostas ao usuário são mapeadas por status; corpo bruto do provedor não é exibido nem registrado.
+- O avatar é decodificado no Rust apenas após validar PNG/JPEG/WebP por magic bytes, arquivo até 5 MiB e dimensões/pixels limitados; é centralizado, reduzido a 256 × 256 e reencodado em PNG para remover metadados. A CSP da janela principal permite `data:` em `img-src` para exibir o avatar processado.
 - O envio de prompts é uma ação real ao provedor selecionado e pode gerar custos. Confira permissões, preços e retenção do fornecedor.
 - Vertex ADC/OAuth e AWS IAM/SigV4 não estão disponíveis. Bedrock aceita apenas o fluxo de chave de API compatível descrito pela AWS.
 - O `keyring` ainda precisa ser validado com execução Windows atualizada; teste unitário não comprova persistência real no Credential Manager.

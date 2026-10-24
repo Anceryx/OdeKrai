@@ -2,6 +2,7 @@ use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewW
 
 mod agent_home;
 mod history;
+mod profile;
 mod providers;
 
 fn require_main(window: &tauri::WebviewWindow) -> Result<(), String> {
@@ -296,6 +297,14 @@ pub fn run() {
             providers::send_provider_message,
             providers::cancel_provider_request,
             providers::stream_provider_message,
+            providers::validate_provider_endpoint,
+            providers::list_provider_models,
+            providers::test_provider_connection,
+            providers::ping_provider,
+            profile::get_profile,
+            profile::save_profile,
+            profile::save_profile_avatar,
+            profile::remove_profile_avatar,
             history::list_conversations,
             history::load_conversation,
             history::append_conversation_message,

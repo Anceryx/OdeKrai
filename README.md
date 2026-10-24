@@ -1,6 +1,6 @@
 # OdeKrai
 
-Assistente pessoal de inteligência artificial para Windows, desenvolvido com React, TypeScript e Tauri 2. O nome do aplicativo é **OdeKrai**. O projeto está em desenvolvimento: o build do frontend e os testes automatizados não comprovam a inspeção visual nem a validação dos adaptadores com contas reais.
+Aplicativo OdeKrai para Windows, desenvolvido com React, TypeScript e Tauri 2. O projeto está em desenvolvimento: o build do frontend e os testes automatizados não comprovam a inspeção visual nem a validação dos adaptadores com contas reais.
 
 ## Recursos implementados
 
@@ -10,6 +10,7 @@ Assistente pessoal de inteligência artificial para Windows, desenvolvido com Re
 - Armazenamento de credenciais via Gerenciador de Credenciais do Windows e envio de mensagens pelo processo Rust.
 - Histórico de conversas em SQLite local, com retomada da conversa e respostas incrementais para Anthropic e adaptadores Chat Completions. A Perplexity ainda retorna a resposta completa.
 - Pasta pessoal escolhida na primeira execução, identidade `ODEKRAI.md` e memória manual editáveis. O histórico pode ser apagado na interface. Modos de permissão ainda são apenas preferências registradas.
+- Perfil local em SQLite, com avatar reprocessado no Rust e nunca enviado aos provedores.
 - Instância única, CSP de produção restrita e permissões separadas para as janelas auxiliares.
 - Adaptadores para 12 APIs Chat Completions, Anthropic Messages e Perplexity Agent API. Vertex AI continua como guia pendente de ADC/OAuth.
 - Modelo 3D oficial local ignorado pelo Git; checkouts sem o asset usam fallback.
@@ -20,7 +21,7 @@ Assistente pessoal de inteligência artificial para Windows, desenvolvido com Re
 - `npm install`, `npm run dev`, `npm run build`, `npm test`.
 - `npm run tauri:dev` inicia o aplicativo; `npm run tauri:build` gera os artefatos Windows.
 
-No catálogo, informe o endpoint permitido, o ID do modelo e a credencial. Salvar não valida o acesso. **Testar conexão** envia uma solicitação real e pode gerar cobrança. As chaves compatíveis ficam no Gerenciador de Credenciais do Windows. Vertex AI, autenticação AWS IAM/SigV4 e listagem automática de modelos não estão implementados.
+No catálogo, cada provedor mantém seu endpoint e modelo. A validação de endpoint acontece antes de salvar a credencial; a listagem de modelos só aparece quando documentada para esse endpoint. **Testar conexão** usa essa listagem sem enviar um prompt de geração; para provedores sem listagem, o resultado é parcial. Vertex AI e autenticação AWS IAM/SigV4 não estão integrados.
 
 ## Capturas de tela
 

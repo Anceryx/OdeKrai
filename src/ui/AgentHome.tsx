@@ -16,12 +16,20 @@ type CoreRead = {
 };
 type Profile = { name: string; nickname: string; language: string; tone: string; mode: string };
 
-export function AgentHome({ onStatus }: { onStatus?: (status: HomeStatus) => void }) {
+export function AgentHome({
+  onStatus,
+  initialName = '',
+  initialNickname = '',
+}: {
+  onStatus?: (status: HomeStatus) => void;
+  initialName?: string;
+  initialNickname?: string;
+}) {
   const [status, setStatus] = useState<HomeStatus | null>(null);
   const [path, setPath] = useState('');
   const [profile, setProfile] = useState<Profile>({
-    name: '',
-    nickname: '',
+    name: initialName,
+    nickname: initialNickname,
     language: 'pt-BR',
     tone: 'direto e cordial',
     mode: 'sempre_perguntar',
@@ -53,6 +61,13 @@ export function AgentHome({ onStatus }: { onStatus?: (status: HomeStatus) => voi
   useEffect(() => {
     if (isTauri()) void refresh().catch((cause) => setError(String(cause)));
   }, []);
+  useEffect(() => {
+    setProfile((current) => ({
+      ...current,
+      name: current.name || initialName,
+      nickname: current.nickname || initialNickname,
+    }));
+  }, [initialName, initialNickname]);
   async function run(action: () => Promise<void>) {
     setBusy(true);
     setError('');
