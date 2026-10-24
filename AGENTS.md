@@ -30,7 +30,10 @@ Consulte `docs/IMPLEMENTATION-STATUS.md` e `docs/ROADMAP.md` antes de planejar.
    conferido na documentação atual. Se não tiver certeza, diga e pergunte.
 2. **Escopo mínimo.** Faça só a fase/tarefa pedida. Não refatore o que funciona. Não altere
    arquivos que a tarefa não exige.
-3. **Commits pequenos**, um por tarefa, mensagem descritiva. Não faça push, release nem publicação.
+3. **Um commit por mudança lógica**, com mensagem descritiva (por exemplo,
+   `fix(layout): remove segunda barra de rolagem`), para localizar exatamente onde cada alteração
+   foi feita. Nenhuma mudança concluída fica sem commit. No relatório final, inclua uma tabela
+   `item → hash do commit → arquivos principais`. Não faça push, release nem publicação.
 4. **Verifique antes de declarar pronto.** Rode `npm run build`, `npm test`, `npm run format:check`,
    `cargo fmt --check` e `cargo test` (em `src-tauri`). Relate o que passou, o que falhou e o que
    NÃO foi possível validar (ex.: visual, DPI, multi-monitor, Credential Manager real).
