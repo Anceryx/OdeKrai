@@ -1,5 +1,8 @@
 ﻿import { useEffect, useState, type FormEvent } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
+
+const TONE_PRESETS = ['direto e cordial', 'acolhedor', 'formal'];
 
 type HomeStatus = {
   configured: boolean;
@@ -27,6 +30,7 @@ export function AgentHome({
 }) {
   const [status, setStatus] = useState<HomeStatus | null>(null);
   const [path, setPath] = useState('');
+  const [customTone, setCustomTone] = useState(false);
   const [profile, setProfile] = useState<Profile>({
     name: initialName,
     nickname: initialNickname,
@@ -148,6 +152,16 @@ export function AgentHome({
             Pasta local
             <input value={path} onChange={(e) => setPath(e.target.value)} required />
           </label>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={async () => {
+              const selected = await open({ directory: true, multiple: false });
+              if (typeof selected === 'string') setPath(selected);
+            }}
+          >
+            Escolher pasta
+          </button>
           <label>
             Seu nome
             <input
@@ -168,22 +182,43 @@ export function AgentHome({
           </label>
           <label>
             Idioma
-            <input
+            <select
               value={profile.language}
               onChange={(e) => setProfile({ ...profile, language: e.target.value })}
-              maxLength={20}
-              required
-            />
+            >
+              <option value="pt-BR">Português (Brasil)</option>
+              <option value="en">English</option>
+            </select>
           </label>
           <label>
             Tom
-            <input
-              value={profile.tone}
-              onChange={(e) => setProfile({ ...profile, tone: e.target.value })}
-              maxLength={80}
-              required
-            />
+            <select
+              value={customTone ? 'personalizado' : profile.tone}
+              onChange={(e) => {
+                setCustomTone(e.target.value === 'personalizado');
+                if (e.target.value !== 'personalizado')
+                  setProfile({ ...profile, tone: e.target.value });
+              }}
+            >
+              {TONE_PRESETS.map((tone) => (
+                <option key={tone} value={tone}>
+                  {tone[0].toLocaleUpperCase('pt-BR') + tone.slice(1)}
+                </option>
+              ))}
+              <option value="personalizado">Personalizado</option>
+            </select>
           </label>
+          {customTone && (
+            <label>
+              Tom personalizado
+              <input
+                value={profile.tone}
+                onChange={(e) => setProfile({ ...profile, tone: e.target.value })}
+                maxLength={80}
+                required
+              />
+            </label>
+          )}
           <label>
             Modo preferido para a fase futura
             <select

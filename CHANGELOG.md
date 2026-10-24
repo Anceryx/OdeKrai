@@ -9,6 +9,7 @@
 - Endpoints salvos em domínio de outro provedor são restaurados ao padrão e exibem aviso; o catálogo também permite restaurar endpoint e modelo.
 - Removido o cartão de perfil duplicado no rodapé da barra lateral; o caminho superior abre o Perfil, identificado no breadcrumb.
 - Conversas anteriores exibem título e data do SQLite e permanecem selecionáveis.
+- A primeira execução permite escolher uma pasta pelo diálogo nativo; idioma e tom usam opções estruturadas com tom personalizado.
 
 ### Revisão de fechamento da Fase 3.1
 

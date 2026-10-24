@@ -75,12 +75,13 @@ Execute em uma sessão Windows com a janela visível. Registre sistema, escala D
 19. Em Configurações → Permissões, troque cada modo e confirme a caixa nativa antes de salvar. Confira que o modo exibido em `ODEKRAI.md` não altera o modo efetivo do SQLite.
 20. Em build de desenvolvimento, teste leitura, gravação com backup, mover para `.trash`, envio simulado e bloqueio financeiro. Confirme que só a janela `approval` pode aprovar, que Negar e fechar negam, que parâmetros adulterados/replay/expiração/fila cheia falham fechados e que conteúdo externo pede aprovação.
 21. Confirme que a inicialização abre apenas `main`; habilite e desabilite island/mascote e resolva/expire aprovações, observando que as janelas correspondentes são criadas sob demanda e fechadas no fim do uso.
-21. Ao mudar modo ou habilitar override, confirme que a caixa Win32 aparece sem congelar a janela principal enquanto permanece aberta; confirme Cancelar e Sim retornando à interface.
-22. Execute `npm run build` e confirme que o mascote fica em chunk lazy separado. O chunk Three.js ainda pode superar 500 kB bruto; registre o tamanho e gzip, sem elevar o limite de aviso para ocultá-lo.
-23. Teste `npm run check:release-assets` com um `dist/` de fixture limpo (passa) e com o GLB/uma referência oficial (falha com os caminhos detectados). Não publique artefatos locais que contenham o GLB.
-24. Teste `Ctrl+Shift+F12` e um atalho em conflito. Confirme que Parar tudo cancela uma resposta em streaming, nega aprovações pendentes, bloqueia novas ações e persiste após reiniciar; Retomar exige uma auditoria gravada.
-25. Na tela Atividade, confirme a cadeia, exporte JSONL e altere uma cópia de teste para verificar a detecção. Não edite os logs reais durante o ensaio.
-26. Repita a janela de aprovação em 100%, 125% e 150% de DPI, monitores distintos, foco alternado e telas menores; verifique texto longo sem renderização de Markdown/HTML.
+22. Na primeira execução com a janela visível, abra o seletor de pasta nativo, escolha um diretório local e confirme que o Rust ainda valida o caminho antes de criar a pasta do agente; teste os selects de idioma e tom.
+23. Ao mudar modo ou habilitar override, confirme que a caixa Win32 aparece sem congelar a janela principal enquanto permanece aberta; confirme Cancelar e Sim retornando à interface.
+24. Execute `npm run build` e confirme que o mascote fica em chunk lazy separado. O chunk Three.js ainda pode superar 500 kB bruto; registre o tamanho e gzip, sem elevar o limite de aviso para ocultá-lo.
+25. Teste `npm run check:release-assets` com um `dist/` de fixture limpo (passa) e com o GLB/uma referência oficial (falha com os caminhos detectados). Não publique artefatos locais que contenham o GLB.
+26. Teste `Ctrl+Shift+F12` e um atalho em conflito. Confirme que Parar tudo cancela uma resposta em streaming, nega aprovações pendentes, bloqueia novas ações e persiste após reiniciar; Retomar exige uma auditoria gravada.
+27. Na tela Atividade, confirme a cadeia, exporte JSONL e altere uma cópia de teste para verificar a detecção. Não edite os logs reais durante o ensaio.
+28. Repita a janela de aprovação em 100%, 125% e 150% de DPI, monitores distintos, foco alternado e telas menores; verifique texto longo sem renderização de Markdown/HTML.
 
 ## Inspeção visual manual pendente
 
