@@ -38,6 +38,7 @@ island/mascote.
 - `lib.rs`: teste de isolamento do chamador da aprovação (`approval` somente).
 - `lib.rs`: teste das transições de criação/fechamento das janelas opcionais (`feature_window_lifecycle_tests`).
 - `settings.test.ts`: rejeição de endpoint cujo host não pertence ao provedor salvo, incluindo Groq com endpoint da xAI.
+- `history.rs`: listagem do SQLite inclui título e `created_at` (`conversation_list_includes_title_and_creation_time`).
 - Todas as ferramentas desta fase são simuladas e os testes não fazem chamadas de rede reais.
 - A confirmação de modo e exceção usa caixa nativa Win32 em execução interativa; não é exercitada por teste automatizado.
 

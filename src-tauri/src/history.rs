@@ -6,6 +6,7 @@ use tauri::Manager;
 pub struct Conversation {
     id: String,
     title: String,
+    created_at: i64,
 }
 
 #[derive(Serialize)]
@@ -43,9 +44,13 @@ pub fn list_conversations(
 ) -> Result<Vec<Conversation>, String> {
     super::require_main(&caller)?;
     let db = database(&app)?;
+    read_conversations(&db)
+}
+
+fn read_conversations(db: &Connection) -> Result<Vec<Conversation>, String> {
     let mut stmt = db
         .prepare(
-            "SELECT id, title FROM conversations ORDER BY created_at DESC, rowid DESC LIMIT 100",
+            "SELECT id, title, created_at FROM conversations ORDER BY created_at DESC, rowid DESC LIMIT 100",
         )
         .map_err(|_| "Não foi possível ler o histórico local.".to_string())?;
     let rows = stmt
@@ -53,6 +58,7 @@ pub fn list_conversations(
             Ok(Conversation {
                 id: row.get(0)?,
                 title: row.get(1)?,
+                created_at: row.get(2)?,
             })
         })
         .map_err(|_| "Não foi possível ler o histórico local.".to_string())?;
@@ -190,5 +196,20 @@ mod tests {
             .query_row("SELECT count(*) FROM messages", [], |row| row.get(0))
             .unwrap();
         assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn conversation_list_includes_title_and_creation_time() {
+        let db = Connection::open_in_memory().unwrap();
+        init_schema(&db).unwrap();
+        db.execute(
+            "INSERT INTO conversations (id, title, created_at) VALUES ('one', 'Teste', 1798000000)",
+            [],
+        )
+        .unwrap();
+        let items = read_conversations(&db).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].title, "Teste");
+        assert_eq!(items[0].created_at, 1798000000);
     }
 }

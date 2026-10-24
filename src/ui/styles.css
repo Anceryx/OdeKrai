@@ -2437,6 +2437,23 @@ html.island-window-html {
   white-space: nowrap;
 }
 
+.chat-history-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.chat-history-entry > button:first-child {
+  display: grid;
+  gap: 0.2rem;
+  text-align: left;
+}
+
+.chat-history-entry small {
+  color: #9696a0;
+  font-size: 0.68rem;
+}
+
 .chat-history button[aria-current='page'] {
   font-weight: 700;
 }

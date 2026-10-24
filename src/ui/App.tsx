@@ -41,7 +41,7 @@ type Section =
   | 'activity'
   | 'agent'
   | 'profile';
-type Conversation = { id: string; title: string };
+type Conversation = { id: string; title: string; created_at: number };
 
 const nav: { id: Section; label: string; icon: string; group: string }[] = [
   { id: 'overview', label: 'Visão geral', icon: '⌂', group: 'ESPAÇO DE TRABALHO' },
@@ -253,7 +253,10 @@ function MainApp() {
       });
       setConversationId(activeId);
       if (!conversationId)
-        setConversations((items) => [{ id: activeId, title: text.slice(0, 80) }, ...items]);
+        setConversations((items) => [
+          { id: activeId, title: text.slice(0, 80), created_at: Math.floor(Date.now() / 1000) },
+          ...items,
+        ]);
       const onChunk = new Channel<string>();
       let streamed = '';
       onChunk.onmessage = (chunk) => {
@@ -1316,14 +1319,15 @@ function ChatView({
           Nova conversa
         </button>
         {conversations.map((item) => (
-          <span key={item.id}>
+          <span className="chat-history-entry" key={item.id}>
             <button
               type="button"
               onClick={() => onConversation(item.id)}
               disabled={busy}
               aria-current={conversationId === item.id ? 'page' : undefined}
             >
-              {item.title}
+              <span>{item.title}</span>
+              <small>{new Date(item.created_at * 1000).toLocaleDateString()}</small>
             </button>
             <button
               type="button"
