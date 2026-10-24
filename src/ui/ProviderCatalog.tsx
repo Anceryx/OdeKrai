@@ -376,6 +376,22 @@ export function ProviderCatalog({
                   readOnly={Boolean(selected.region)}
                 />
               </label>
+              <button
+                className="text-button"
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  const restored = {
+                    ...defaultProviderSettings(selected.id),
+                    model: '',
+                  };
+                  setDraft(restored);
+                  onSave(restored);
+                  setNotice('Endpoint e modelo restaurados ao padrão do provedor.');
+                }}
+              >
+                Restaurar padrão do provedor
+              </button>
               {catalogEntry?.modelListPath && (
                 <button
                   className="text-button"

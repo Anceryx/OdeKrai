@@ -4,6 +4,7 @@ import {
   activeProviderSettings,
   defaultSettings,
   loadSettings,
+  loadSettingsWithWarnings,
   saveSettings,
   type AppSettings,
   type ProviderSettings,
@@ -58,8 +59,9 @@ export function App() {
 }
 
 function MainApp() {
+  const [initialSettingsLoad] = useState(loadSettingsWithWarnings);
   const [section, setSection] = useState<Section>('overview');
-  const [settings, setSettings] = useState<AppSettings>(loadSettings);
+  const [settings, setSettings] = useState<AppSettings>(initialSettingsLoad.settings);
   const [permissionIndicator, setPermissionIndicator] = useState<{
     mode: string;
     halted: boolean;
@@ -78,7 +80,7 @@ function MainApp() {
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [toast, setToast] = useState('');
+  const [toast, setToast] = useState(initialSettingsLoad.warnings.join(' '));
   const [chatMode, setChatMode] = useState(false);
   const request = useRef<string | null>(null);
   const companionStateTimer = useRef<number | undefined>(undefined);

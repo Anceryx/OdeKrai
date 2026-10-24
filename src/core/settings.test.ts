@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadSettings, saveSettings } from './settings';
+import { loadSettings, loadSettingsWithWarnings, saveSettings } from './settings';
 
 describe('preferências persistidas', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -26,7 +26,7 @@ describe('preferências persistidas', () => {
     });
     expect(migrated.providers.openai.authMode).toBe('bearer');
     expect(migrated.providers.openai.providerId).toBe('openai');
-    expect(migrated.providers.openai.baseUrl).toBe('http://localhost:11434/v1');
+    expect(migrated.providers.openai.baseUrl).toBe('https://api.openai.com/v1');
     expect(migrated.providers.openai.model).toBe('local');
     saveSettings(migrated);
     expect(JSON.parse(storage.get('odekrai.settings.v2') ?? '{}')).not.toHaveProperty('provider');
@@ -94,5 +94,28 @@ describe('preferências persistidas', () => {
     expect(loaded.activeProviderId).toBe('groq');
     expect(loaded.providers.groq.model).toBe('llama-3.3-70b-versatile');
     expect(loaded.providers.openai).toBeUndefined();
+  });
+
+  it('restaura endpoint salvo de outro provedor e informa o usuário', () => {
+    const value = JSON.stringify({
+      language: 'pt-BR',
+      reduceMotion: false,
+      activeProviderId: 'groq',
+      providers: {
+        groq: {
+          providerId: 'groq',
+          name: 'Groq',
+          baseUrl: 'https://api.x.ai/v1/responses',
+          model: 'modelo-customizado',
+          authMode: 'bearer',
+        },
+      },
+    });
+    vi.stubGlobal('localStorage', { getItem: () => value, setItem: () => undefined });
+    const result = loadSettingsWithWarnings();
+    expect(result.settings.providers.groq.baseUrl).toBe('https://api.groq.com/openai/v1');
+    expect(result.settings.providers.groq.model).toBe('modelo-customizado');
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain('Groq');
   });
 });

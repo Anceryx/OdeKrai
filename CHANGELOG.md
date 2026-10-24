@@ -6,6 +6,7 @@
 
 - Ajustadas as dimensões iniciais e mínimas da janela principal; teste Rust protege a configuração.
 - Janelas auxiliares de ilha, mascote e aprovação são criadas sob demanda e fechadas quando deixam de ser necessárias.
+- Endpoints salvos em domínio de outro provedor são restaurados ao padrão e exibem aviso; o catálogo também permite restaurar endpoint e modelo.
 
 ### Revisão de fechamento da Fase 3.1
 

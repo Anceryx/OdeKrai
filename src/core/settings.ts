@@ -1,5 +1,10 @@
 import { normalizeSoundPreferences } from './sounds';
-import { AI_PROVIDERS, providerById, type ProviderAuthMode } from './providers';
+import {
+  AI_PROVIDERS,
+  providerById,
+  providerCatalogEntry,
+  type ProviderAuthMode,
+} from './providers';
 
 export type ProviderSettings = {
   providerId: string;
@@ -76,11 +81,16 @@ export const defaultSettings: AppSettings = {
 };
 
 export function loadSettings(): AppSettings {
+  return loadSettingsWithWarnings().settings;
+}
+
+export function loadSettingsWithWarnings(): { settings: AppSettings; warnings: string[] } {
+  const warnings: string[] = [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (!raw) return defaultSettings;
+    if (!raw) return { settings: defaultSettings, warnings };
     const value: unknown = JSON.parse(raw);
-    if (!isAppSettings(value)) return defaultSettings;
+    if (!isAppSettings(value)) return { settings: defaultSettings, warnings };
     const companion =
       value.companion && typeof value.companion === 'object'
         ? (value.companion as Partial<AppSettings['companion']>)
@@ -122,9 +132,19 @@ export function loadSettings(): AppSettings {
       const candidate = rawProviders[provider.id];
       if (candidate && typeof candidate === 'object') {
         const saved = candidate as Partial<ProviderSettings>;
+        const savedBaseUrl =
+          typeof saved.baseUrl === 'string' ? saved.baseUrl : (provider.baseUrl ?? '');
+        const hostRule = providerCatalogEntry(provider.id)?.hostRule;
+        const baseUrl =
+          hostRule && !providerEndpointHostAllowed(savedBaseUrl, hostRule)
+            ? (warnings.push(
+                `O endpoint salvo para ${provider.name} foi restaurado ao padrão por não pertencer aos domínios permitidos.`,
+              ),
+              provider.baseUrl ?? '')
+            : savedBaseUrl;
         providers[provider.id] = {
           ...defaultProviderSettings(provider.id),
-          baseUrl: typeof saved.baseUrl === 'string' ? saved.baseUrl : (provider.baseUrl ?? ''),
+          baseUrl,
           model: typeof saved.model === 'string' ? saved.model : '',
           region: typeof saved.region === 'string' ? saved.region : undefined,
           lastTest: validTest(saved.lastTest) ? saved.lastTest : undefined,
@@ -132,9 +152,19 @@ export function loadSettings(): AppSettings {
       }
     }
     if (oldId && legacy && !providers[oldId]) {
+      const defaultUrl = providerById(oldId)?.baseUrl ?? '';
+      const candidateUrl = typeof legacy.baseUrl === 'string' ? legacy.baseUrl : defaultUrl;
+      const hostRule = providerCatalogEntry(oldId)?.hostRule;
+      const baseUrl =
+        hostRule && !providerEndpointHostAllowed(candidateUrl, hostRule)
+          ? (warnings.push(
+              `O endpoint salvo para ${providerById(oldId)?.name ?? oldId} foi restaurado ao padrão por não pertencer aos domínios permitidos.`,
+            ),
+            defaultUrl)
+          : candidateUrl;
       providers[oldId] = {
         ...defaultProviderSettings(oldId),
-        baseUrl: typeof legacy.baseUrl === 'string' ? legacy.baseUrl : '',
+        baseUrl,
         model: typeof legacy.model === 'string' ? legacy.model : '',
         region: typeof legacy.region === 'string' ? legacy.region : undefined,
       };
@@ -148,29 +178,62 @@ export function loadSettings(): AppSettings {
     const migrated = { ...value } as Record<string, unknown>;
     delete migrated.provider;
     return {
-      ...defaultSettings,
-      ...migrated,
-      activeProviderId,
-      providers,
-      companion: {
-        ...defaultSettings.companion,
-        ...value.companion,
-        enabled: typeof companion.enabled === 'boolean' ? companion.enabled : false,
-        position,
-        size: Number.isFinite(companion.size) ? Math.max(0.75, Math.min(1.5, companion.size!)) : 1,
-        alwaysOnTop: typeof companion.alwaysOnTop === 'boolean' ? companion.alwaysOnTop : true,
-        openOnHover: typeof companion.openOnHover === 'boolean' ? companion.openOnHover : false,
-        collapseSeconds: [8, 15, 30, 60].includes(Number(companion.collapseSeconds))
-          ? Number(companion.collapseSeconds)
-          : 15,
-        coordinates,
-        freeMode: typeof companion.freeMode === 'boolean' ? companion.freeMode : false,
-        desktopCoordinates,
-        sounds: normalizeSoundPreferences(companion.sounds),
+      settings: {
+        ...defaultSettings,
+        ...migrated,
+        activeProviderId,
+        providers,
+        companion: {
+          ...defaultSettings.companion,
+          ...value.companion,
+          enabled: typeof companion.enabled === 'boolean' ? companion.enabled : false,
+          position,
+          size: Number.isFinite(companion.size)
+            ? Math.max(0.75, Math.min(1.5, companion.size!))
+            : 1,
+          alwaysOnTop: typeof companion.alwaysOnTop === 'boolean' ? companion.alwaysOnTop : true,
+          openOnHover: typeof companion.openOnHover === 'boolean' ? companion.openOnHover : false,
+          collapseSeconds: [8, 15, 30, 60].includes(Number(companion.collapseSeconds))
+            ? Number(companion.collapseSeconds)
+            : 15,
+          coordinates,
+          freeMode: typeof companion.freeMode === 'boolean' ? companion.freeMode : false,
+          desktopCoordinates,
+          sounds: normalizeSoundPreferences(companion.sounds),
+        },
       },
+      warnings,
     };
   } catch {
-    return defaultSettings;
+    return { settings: defaultSettings, warnings };
+  }
+}
+
+function providerEndpointHostAllowed(endpoint: string, hostRule: string): boolean {
+  try {
+    const url = new URL(endpoint);
+    if (url.protocol !== 'https:' || url.username || url.password) return false;
+    return hostRule.split('|').some((rule) => {
+      const normalized = rule.toLowerCase();
+      const host = url.hostname.toLowerCase();
+      if (normalized.startsWith('*.')) {
+        const suffix = normalized.slice(1);
+        return host.endsWith(suffix) && host.length > suffix.length;
+      }
+      if (normalized.includes('{region}')) {
+        const expected = normalized.split('.');
+        const actual = host.split('.');
+        return (
+          expected.length === actual.length &&
+          expected.every((part, index) =>
+            part === '{region}' ? /^[a-z0-9-]+$/.test(actual[index]) : part === actual[index],
+          )
+        );
+      }
+      return host === normalized;
+    });
+  } catch {
+    return false;
   }
 }
 
