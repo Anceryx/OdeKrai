@@ -12,7 +12,7 @@ use std::{
     path::{Component, Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Mutex,
+        Mutex, MutexGuard,
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -75,6 +75,13 @@ impl SecurityState {
     pub fn set_initial_halted(&self, halted: bool) {
         self.halted.store(halted, Ordering::SeqCst);
     }
+}
+
+fn lock_pending(state: &SecurityState) -> Result<MutexGuard<'_, VecDeque<PendingAction>>, String> {
+    state.pending.lock().map_err(|_| {
+        log::error!("Fila de aprovação indisponível: mutex envenenado; operação bloqueada.");
+        "Fila de aprovação indisponível.".to_string()
+    })
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -747,7 +754,7 @@ fn take_pending_approval(
     if !display_hash_matches(&item.action, &item.digest, display_hash) {
         return Err("approval_parameters_changed");
     }
-    Ok(queue.pop_front().expect("front exists"))
+    queue.pop_front().ok_or("approval_unavailable")
 }
 
 fn now_secs() -> u64 {
@@ -1404,10 +1411,7 @@ fn submit_action(
             })
         }
         Decision::AskUser(rule) => {
-            let mut pending = state
-                .pending
-                .lock()
-                .map_err(|_| "Fila de aprovação indisponível.".to_string())?;
+            let mut pending = lock_pending(state)?;
             if !queue_has_capacity(&pending) {
                 drop(pending);
                 record(
@@ -1475,8 +1479,11 @@ fn submit_action(
             });
             drop(pending);
             if let Err(error) = open_approval(app) {
-                if let Ok(mut pending) = state.pending.lock() {
-                    pending.retain(|item| item.id != id);
+                match lock_pending(state) {
+                    Ok(mut pending) => pending.retain(|item| item.id != id),
+                    Err(_) => log::error!(
+                        "Não foi possível limpar a aprovação após falha ao abrir a janela."
+                    ),
                 }
                 let _ = record(
                     app,
@@ -1534,13 +1541,19 @@ fn open_approval(app: &tauri::AppHandle) -> Result<(), String> {
             let Some(state) = handle.try_state::<SecurityState>() else {
                 return;
             };
-            let item = state.pending.lock().ok().and_then(|mut queue| {
-                let item = queue.pop_front();
-                if !queue.is_empty() {
-                    api.prevent_close();
+            let item = match lock_pending(&state) {
+                Ok(mut queue) => {
+                    let item = queue.pop_front();
+                    if !queue.is_empty() {
+                        api.prevent_close();
+                    }
+                    item
                 }
-                item
-            });
+                Err(_) => {
+                    api.prevent_close();
+                    return;
+                }
+            };
             if let Some(item) = item {
                 let _ = record(
                     &handle,
@@ -1557,14 +1570,11 @@ fn open_approval(app: &tauri::AppHandle) -> Result<(), String> {
                     "denied",
                     None,
                 );
-                if state
-                    .pending
-                    .lock()
-                    .map(|queue| !queue.is_empty())
-                    .unwrap_or(false)
-                {
+                if lock_pending(&state).is_ok_and(|queue| !queue.is_empty()) {
                     let _ = handle.emit("approval-updated", ());
                     let _ = close_window.set_focus();
+                } else {
+                    api.prevent_close();
                 }
             }
         }
@@ -1579,15 +1589,15 @@ pub fn get_pending_approval(
     state: State<'_, SecurityState>,
 ) -> Result<Option<PendingView>, String> {
     super::require_caller(&caller, &["approval"])?;
-    let mut pending = state
-        .pending
-        .lock()
-        .map_err(|_| "Fila de aprovação indisponível.".to_string())?;
+    let mut pending = lock_pending(&state)?;
     while pending
         .front()
         .is_some_and(|item| is_expired(item.expires, Instant::now()))
     {
-        let expired = pending.pop_front().expect("front exists");
+        let Some(expired) = pending.pop_front() else {
+            log::error!("A fila de aprovação mudou durante a expiração; consulta bloqueada.");
+            return Err("Fila de aprovação indisponível.".into());
+        };
         let tool = tool_for(&expired.action).name();
         record(
             &app,
@@ -1638,10 +1648,7 @@ pub fn get_full_approval_preview(
     display_hash: String,
 ) -> Result<String, String> {
     super::require_caller(&caller, &["approval"])?;
-    let pending = state
-        .pending
-        .lock()
-        .map_err(|_| "Fila de aprovação indisponível.".to_string())?;
+    let pending = lock_pending(&state)?;
     let item = pending
         .front()
         .ok_or("A aprovação não está mais disponível.")?;
@@ -1668,10 +1675,7 @@ pub fn approval_respond(
     approve: bool,
 ) -> Result<ActionResult, String> {
     super::require_caller(&caller, &["approval"])?;
-    let mut pending = state
-        .pending
-        .lock()
-        .map_err(|_| "Fila de aprovação indisponível.".to_string())?;
+    let mut pending = lock_pending(&state)?;
     let Some(item) = pending.front() else {
         return Err("A aprovação não está mais disponível.".into());
     };
@@ -1758,12 +1762,8 @@ pub fn approval_respond(
         error.clone(),
     )?;
     close_approval_if_empty(&app, &state);
-    let next_activity = if state
-        .pending
-        .lock()
-        .map(|queue| !queue.is_empty())
-        .unwrap_or(true)
-    {
+    let has_pending = lock_pending(&state).map_or_else(|_| true, |queue| !queue.is_empty());
+    let next_activity = if has_pending {
         "awaiting_approval"
     } else if status == "completed" {
         "completed"
@@ -1783,7 +1783,7 @@ pub fn approval_respond(
 }
 
 fn close_approval_if_empty(app: &tauri::AppHandle, state: &SecurityState) {
-    if state.pending.lock().map(|p| p.is_empty()).unwrap_or(false) {
+    if lock_pending(state).is_ok_and(|pending| pending.is_empty()) {
         if let Some(window) = app.get_webview_window("approval") {
             let _ = window.close();
         }
@@ -1994,6 +1994,30 @@ mod tests {
             queue.iter().all(|item| item.id != consumed.id),
             "an approval cannot be replayed after it is consumed"
         );
+        let mut empty_queue = VecDeque::new();
+        assert!(matches!(
+            take_pending_approval(&mut empty_queue, "missing", &expected),
+            Err("approval_unavailable")
+        ));
+    }
+
+    #[test]
+    fn poisoned_approval_queue_fails_closed() {
+        let state = SecurityState::new(false);
+        let poisoned = std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    let _guard = state
+                        .pending
+                        .lock()
+                        .expect("test lock should start healthy");
+                    panic!("poison the test mutex");
+                })
+                .join()
+                .is_err()
+        });
+        assert!(poisoned);
+        assert!(lock_pending(&state).is_err());
     }
 
     #[test]

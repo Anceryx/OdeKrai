@@ -2617,6 +2617,7 @@ dependencies = [
  "base64 0.22.1",
  "image",
  "keyring",
+ "log",
  "reqwest",
  "rusqlite",
  "serde",

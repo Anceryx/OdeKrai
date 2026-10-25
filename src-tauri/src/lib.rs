@@ -261,7 +261,9 @@ fn set_island_visible(
     let existing = app.get_webview_window("island");
     match visibility_action(visible, existing.is_some()) {
         VisibilityAction::CreateOrShow => ensure_island_window(&app)?.show(),
-        VisibilityAction::Close => existing.expect("window exists").close(),
+        VisibilityAction::Close => existing
+            .ok_or("Janela do assistente indisponível para fechar.")?
+            .close(),
         VisibilityAction::Noop => Ok(()),
     }
     .map_err(|error| error.to_string())
@@ -341,7 +343,9 @@ fn set_character_visible(
     let existing = app.get_webview_window("mascot");
     match visibility_action(visible, existing.is_some()) {
         VisibilityAction::CreateOrShow => ensure_mascot_window(&app)?.show(),
-        VisibilityAction::Close => existing.expect("window exists").close(),
+        VisibilityAction::Close => existing
+            .ok_or("Janela do mascote indisponível para fechar.")?
+            .close(),
         VisibilityAction::Noop => Ok(()),
     }
     .map_err(|error| error.to_string())
@@ -378,7 +382,7 @@ fn set_character_position(
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
+pub fn run() -> Result<(), tauri::Error> {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -470,5 +474,4 @@ pub fn run() {
             agent_home::agent_memory_delete_all,
         ])
         .run(tauri::generate_context!())
-        .expect("falha ao iniciar o OdeKrai");
 }

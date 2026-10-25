@@ -24,8 +24,7 @@ pub(super) fn provider_endpoint(provider_id: &str, base_url: &str) -> Result<Url
         rule.split('|').any(|part| {
             if let Some(suffix) = part.strip_prefix("*.") {
                 host.len() > suffix.len() + 1 && host.ends_with(&format!(".{suffix}"))
-            } else if part.contains("{region}") {
-                let (prefix, suffix) = part.split_once("{region}").unwrap();
+            } else if let Some((prefix, suffix)) = part.split_once("{region}") {
                 host.strip_prefix(prefix)
                     .and_then(|rest| rest.strip_suffix(suffix))
                     .is_some_and(|region| {
