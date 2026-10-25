@@ -23,3 +23,5 @@ assets/odekrai/sounds/**
 assets/odekrai/animations/**
 assets/odekrai/previews/**
 !assets/odekrai/**/README.md
+
+assets-src/
