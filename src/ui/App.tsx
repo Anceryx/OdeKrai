@@ -1439,7 +1439,7 @@ function ChatView({
                 onClick={() => setOpenMenuId(openMenuId === item.id ? null : item.id)}
                 disabled={busy}
               >
-                ⋯
+                <Icon name="more" />
               </button>
               {openMenuId === item.id && (
                 <div className="conversation-menu" role="menu">
@@ -1522,13 +1522,13 @@ function ChatView({
                   type="button"
                   onClick={() => setDraft('Ajude-me a organizar minhas prioridades de hoje.')}
                 >
-                  Organizar meu dia <span>↗</span>
+                  Organizar meu dia <Icon name="external-link" />
                 </button>
                 <button type="button" onClick={() => setDraft('Quero explorar uma ideia nova: ')}>
-                  Explorar uma ideia <span>↗</span>
+                  Explorar uma ideia <Icon name="external-link" />
                 </button>
                 <button type="button" onClick={() => setDraft('Explique de forma simples: ')}>
-                  Entender algo novo <span>↗</span>
+                  Entender algo novo <Icon name="external-link" />
                 </button>
               </div>
             </div>
