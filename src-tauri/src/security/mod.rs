@@ -19,7 +19,27 @@ use std::{
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
-const DEFAULT_SHORTCUT: &str = "Ctrl+Shift+F12";
+mod kill_switch;
+pub use kill_switch::{init_shortcut, load_halted, on_global_shortcut};
+
+#[tauri::command]
+pub fn halt_all(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    state: State<'_, SecurityState>,
+) -> Result<(), String> {
+    kill_switch::halt_all_inner(app, caller, state)
+}
+
+#[tauri::command]
+pub fn resume_all(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    state: State<'_, SecurityState>,
+) -> Result<(), String> {
+    kill_switch::resume_all_inner(app, caller, state)
+}
+
 const DEFAULT_APPROVAL_TTL: u64 = 120;
 const MIN_APPROVAL_TTL: u64 = 30;
 const MAX_APPROVAL_TTL: u64 = 600;
@@ -1848,134 +1868,6 @@ pub fn verify_audit(
         .lock()
         .map_err(|_| "Trava da auditoria indisponível.".to_string())?;
     verify_audit_path(&agent_home::audit_logs_path(&app)?).map(|_| true)
-}
-
-fn set_halted(
-    app: &tauri::AppHandle,
-    state: &SecurityState,
-    halted: bool,
-    reason: &'static str,
-) -> Result<(), String> {
-    if halted {
-        state.halted.store(true, Ordering::SeqCst);
-        let persistence = set_db_setting(app, "halted", "true");
-        crate::providers::cancel_all(app);
-        let mut pending = state
-            .pending
-            .lock()
-            .map_err(|_| "Fila de aprovação indisponível.".to_string())?;
-        while let Some(item) = pending.pop_front() {
-            let _ = record(
-                app,
-                state,
-                &item.id,
-                tool_for(&item.action).name(),
-                item.risk,
-                &item.origin,
-                "deny",
-                "kill_switch",
-                "cancelled",
-                item.created_at.elapsed().as_millis() as u64,
-                audit_params(&item.action),
-                "denied",
-                Some("Interrompido pelo kill switch".into()),
-            );
-        }
-        drop(pending);
-        if let Some(window) = app.get_webview_window("approval") {
-            let _ = window.close();
-        }
-        let _ = app.emit("companion-state",serde_json::json!({"type":"activity","state":"paused","message":"Parado pelo kill switch"}));
-        let _ = app.emit("security-halted", ());
-        let request_id = id();
-        let origin = Origin::User;
-        let audit = record(
-            app,
-            state,
-            &request_id,
-            "security.kill_switch",
-            Risk::Leitura,
-            &origin,
-            "halt",
-            reason,
-            "not_required",
-            0,
-            "{}".into(),
-            "halted",
-            None,
-        );
-        return persistence.and(audit);
-    }
-    if !state.is_halted() {
-        return Ok(());
-    }
-    let request_id = id();
-    let origin = Origin::User;
-    record(
-        app,
-        state,
-        &request_id,
-        "security.kill_switch",
-        Risk::Leitura,
-        &origin,
-        "resume",
-        reason,
-        "not_required",
-        0,
-        "{}".into(),
-        "resumed",
-        None,
-    )?;
-    set_db_setting(app, "halted", "false")?;
-    state.halted.store(false, Ordering::SeqCst);
-    let _ = app.emit("companion-state", serde_json::json!({"type":"reveal"}));
-    let _ = app.emit("security-resumed", ());
-    Ok(())
-}
-
-#[tauri::command]
-pub fn halt_all(
-    app: tauri::AppHandle,
-    caller: tauri::WebviewWindow,
-    state: State<'_, SecurityState>,
-) -> Result<(), String> {
-    super::require_main(&caller)?;
-    set_halted(&app, &state, true, "user_halt")
-}
-
-#[tauri::command]
-pub fn resume_all(
-    app: tauri::AppHandle,
-    caller: tauri::WebviewWindow,
-    state: State<'_, SecurityState>,
-) -> Result<(), String> {
-    super::require_main(&caller)?;
-    set_halted(&app, &state, false, "user_resume")
-}
-
-pub fn on_global_shortcut(app: &tauri::AppHandle) {
-    if let Some(state) = app.try_state::<SecurityState>() {
-        if let Err(error) = set_halted(app, &state, true, "global_shortcut") {
-            let _ = app.emit("security-error", error);
-        }
-    }
-}
-
-pub fn init_shortcut(app: &tauri::AppHandle) {
-    let shortcut = db_setting(app, "shortcut").unwrap_or_else(|_| DEFAULT_SHORTCUT.into());
-    if let Err(error) = app.global_shortcut().register(shortcut.as_str()) {
-        if let Some(state) = app.try_state::<SecurityState>() {
-            if let Ok(mut status) = state.shortcut_error.lock() {
-                *status = Some(format!("Atalho não registrado: {error}"));
-            }
-        }
-    }
-}
-
-pub fn load_halted(app: &tauri::AppHandle) -> bool {
-    db_setting(app, "halted")
-        .map(|value| value == "true")
-        .unwrap_or(true)
 }
 
 #[cfg(test)]
