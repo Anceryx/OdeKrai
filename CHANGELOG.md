@@ -8,6 +8,10 @@
 - Ao fechar a janela, a preferência padrão encerra o aplicativo; a opção alternativa minimiza para a bandeja com ações para abrir e sair.
 - As configurações agora estão organizadas em Geral, Janela, Aparência e Dados e privacidade.
 
+### Tipografia
+
+- Unificada a fonte sans-serif em Inter Variable, empacotada localmente sob a licença OFL 1.1; trechos de código mantêm fonte monoespaçada do sistema.
+
 ### Personagens Kenney em alta resolução
 
 - Substituídos os previews 64×64 por renderizações transparentes 512×512 dos 12 modelos Kenney CC0; agora também há imagem para `character-female-a`.

@@ -12,12 +12,10 @@ Nenhum som Kenney foi baixado ou incorporado. As páginas de [Interface Sounds](
 
 As dependências declaradas em `package.json` mantêm suas próprias licenças e avisos. Antes de distribuir binários, gerar e revisar um inventário das dependências efetivamente empacotadas e incluir os avisos exigidos por cada licença.
 
-### Fontes
+### Fonte Inter
 
-- Manrope, pacote `@fontsource-variable/manrope` 5.3.0. Autores: The Manrope Project Authors. Licença SIL Open Font License 1.1; arquivo `node_modules/@fontsource-variable/manrope/LICENSE`. Pacote local: https://www.npmjs.com/package/@fontsource-variable/manrope.
-- DM Mono, pacote `@fontsource/dm-mono` 5.3.0. Autores: The DM Mono Project Authors. Licença SIL Open Font License 1.1; arquivo `node_modules/@fontsource/dm-mono/LICENSE`. Pacote local: https://www.npmjs.com/package/@fontsource/dm-mono.
-
-Os arquivos das fontes são empacotados localmente pelo Vite; não há carregamento por CDN.
+- Inter Variable, pacote `@fontsource-variable/inter` 5.3.0. Autoria: The Inter Project Authors, liderado por Rasmus Andersson. Licença SIL Open Font License 1.1 (OFL); o texto integral acompanha o pacote em `node_modules/@fontsource-variable/inter/LICENSE`. Projeto: https://github.com/rsms/inter. Pacote: https://fontsource.org/fonts/inter.
+- Os arquivos da fonte são empacotados localmente pelo Vite; não há carregamento por CDN. A fonte monoespaçada usada em trechos de código usa fontes do sistema e não adiciona arquivos de terceiros.
 
 ## Personagens 2D
 

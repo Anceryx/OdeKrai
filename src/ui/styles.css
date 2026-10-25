@@ -31,6 +31,12 @@ select,
 textarea {
   font: inherit;
 }
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--font-mono);
+}
 button {
   appearance: none;
   border: 1px solid transparent;
@@ -90,9 +96,7 @@ select:focus-visible {
   display: grid;
   place-items: center;
   font:
-    700 13px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    700 13px var(--font-sans);
   position: relative;
 }
 .avatar-small img,
@@ -126,9 +130,7 @@ select:focus-visible {
   background: #25170f;
   color: #fdba74;
   font:
-    700 34px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    700 34px var(--font-sans);
 }
 .welcome-mark img {
   width: 100%;
@@ -202,8 +204,7 @@ select:focus-visible {
 .nav-heading,
 .eyebrow {
   font:
-    10px 'DM Mono',
-    monospace;
+    10px var(--font-sans);
   letter-spacing: 1.2px;
   color: #a0a0a8;
 }
@@ -243,9 +244,7 @@ select:focus-visible {
 }
 .nav-icon {
   font:
-    16px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    16px var(--font-sans);
   width: 16px;
   text-align: center;
   color: #92929a;
@@ -280,9 +279,7 @@ select:focus-visible {
   background: #343035;
   color: #ded4d1;
   font:
-    600 11px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    600 11px var(--font-sans);
 }
 .user-row span:nth-child(2) {
   flex: 1;
@@ -324,8 +321,7 @@ select:focus-visible {
   align-items: center;
   gap: 10px;
   font:
-    10px 'DM Mono',
-    monospace;
+    10px var(--font-sans);
   letter-spacing: 0.7px;
   color: #a0a0a8;
 }
@@ -337,7 +333,7 @@ select:focus-visible {
   font-weight: 400;
   color: #ceced2;
   letter-spacing: 0.1px;
-  font-family: 'Manrope Variable', Manrope, sans-serif;
+  font-family: var(--font-sans);
 }
 .top-actions {
   display: flex;
@@ -417,6 +413,20 @@ select:focus-visible {
   margin: 0 auto;
   padding: 35px 53px 25px;
 }
+.page p,
+.page-heading p,
+.welcome-row p,
+.feature-copy p,
+.panel-heading p,
+.page .preference-row div span,
+.settings-description {
+  font-size: 13px;
+}
+.nav-heading,
+.eyebrow {
+  font-family: var(--font-sans);
+  letter-spacing: 0.35px;
+}
 .welcome-row {
   display: flex;
   align-items: center;
@@ -452,9 +462,7 @@ select:focus-visible {
   margin-right: 32px;
   color: #a0a0a8;
   font:
-    600 23px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    600 23px var(--font-sans);
 }
 .welcome-mark:before {
   content: '';
@@ -499,8 +507,7 @@ select:focus-visible {
   border-radius: 30px;
   padding: 5px 9px;
   font:
-    10px 'DM Mono',
-    monospace;
+    10px var(--font-sans);
   letter-spacing: 0.8px;
 }
 .pill-label i {
@@ -609,9 +616,7 @@ select:focus-visible {
   place-items: center;
   color: #fdba74;
   font:
-    700 34px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    700 34px var(--font-sans);
   box-shadow: 0 10px 35px #f9731624;
   transform: rotate(-8deg);
 }
@@ -647,8 +652,7 @@ select:focus-visible {
   justify-content: space-between;
   color: #a0a0a8;
   font:
-    10px 'DM Mono',
-    monospace;
+    10px var(--font-sans);
   letter-spacing: 0.7px;
 }
 .hero-footer span:first-child {
@@ -670,9 +674,7 @@ select:focus-visible {
 }
 .section-title h3 {
   font:
-    600 16px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    600 16px var(--font-sans);
   color: #eee;
   margin: 5px 0 0;
 }
@@ -737,9 +739,7 @@ select:focus-visible {
 }
 .feature-copy h4 {
   font:
-    600 11px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    600 11px var(--font-sans);
   margin: 4px 0 3px;
   color: #e7e5e7;
 }
@@ -786,9 +786,7 @@ select:focus-visible {
   place-items: center;
   color: #a0a0a8;
   font:
-    600 22px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    600 22px var(--font-sans);
   box-shadow: 0 0 30px #f973161c;
 }
 .privacy-note {
@@ -833,8 +831,7 @@ select:focus-visible {
   margin: 20px 0 0;
   color: #a0a0a8;
   font:
-    10px 'DM Mono',
-    monospace;
+    10px var(--font-sans);
   letter-spacing: 0.7px;
 }
 .home-footer b {
@@ -896,9 +893,7 @@ select:focus-visible {
 }
 .panel-heading h3 {
   font:
-    600 13px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    600 13px var(--font-sans);
   margin: 0 0 4px;
   color: #ecebed;
 }
@@ -909,8 +904,7 @@ select:focus-visible {
 }
 .state-chip {
   font:
-    10px 'DM Mono',
-    monospace;
+    10px var(--font-sans);
   letter-spacing: 0.5px;
   color: #c18756;
   border: 1px solid #e8791633;
@@ -940,8 +934,7 @@ select:focus-visible {
   display: block;
   margin: 0 0 13px;
   font:
-    10px 'DM Mono',
-    monospace;
+    10px var(--font-sans);
   letter-spacing: 0.3px;
   color: #a6a3a8;
 }
@@ -957,9 +950,7 @@ select:focus-visible {
   align-items: center;
   color: #e5e3e5;
   font:
-    11px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    11px var(--font-sans);
   padding: 0 10px;
   transition: border-color 0.15s;
 }
@@ -980,9 +971,7 @@ select:focus-visible {
   flex: 1;
   height: 100%;
   font:
-    11px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    11px var(--font-sans);
 }
 .secret-input button {
   border: 0;
@@ -1099,8 +1088,7 @@ select:focus-visible {
   bottom: 18px;
   color: #a0a0a8;
   font:
-    10px 'DM Mono',
-    monospace;
+    10px var(--font-sans);
   letter-spacing: 1px;
 }
 .island-label i {
@@ -1234,8 +1222,7 @@ select:focus-visible {
   padding-top: 9px;
   color: #8f8a92;
   font:
-    10px 'DM Mono',
-    monospace;
+    10px var(--font-sans);
 }
 .mascot-preview-metrics strong {
   width: 100%;
@@ -1355,9 +1342,7 @@ select:focus-visible {
 }
 .chat-header h2 {
   font:
-    600 17px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    600 17px var(--font-sans);
   color: #f0eef0;
   margin: 5px 0;
 }
@@ -1388,17 +1373,13 @@ select:focus-visible {
   place-items: center;
   color: #fb923c;
   font:
-    600 24px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    600 24px var(--font-sans);
   box-shadow: 0 0 40px #e8791620;
   margin-bottom: 15px;
 }
 .empty-chat > strong {
   font:
-    600 15px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    600 15px var(--font-sans);
   color: #eae8eb;
 }
 .empty-chat > p {
@@ -1447,9 +1428,7 @@ select:focus-visible {
   border: 1px solid #f9731630;
   color: #fdba74;
   font:
-    600 11px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    600 11px var(--font-sans);
 }
 .message.user .message-avatar {
   background: #242227;
@@ -1457,8 +1436,7 @@ select:focus-visible {
 }
 .message-role {
   font:
-    10px 'DM Mono',
-    monospace;
+    10px var(--font-sans);
   letter-spacing: 0.7px;
   color: #88858d;
 }
@@ -1543,8 +1521,7 @@ select:focus-visible {
 }
 .composer-bottom > span {
   font:
-    10px 'DM Mono',
-    monospace;
+    10px var(--font-sans);
   letter-spacing: 0.3px;
   color: #a0a0a8;
 }
@@ -1685,8 +1662,7 @@ html.island-window-html {
 }
 .island-copy strong {
   font:
-    800 10px 'DM Mono',
-    monospace;
+    800 10px var(--font-sans);
   letter-spacing: 1.6px;
 }
 .island-copy span {
@@ -1801,9 +1777,7 @@ html.island-window-html {
   place-items: center;
   color: #fdba74;
   font:
-    700 28px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    700 28px var(--font-sans);
   pointer-events: none;
 }
 .odekrai-renderer.is-loaded .odekrai-renderer-fallback {
@@ -1991,9 +1965,7 @@ html.island-window-html {
 .provider-count strong {
   color: #fb923c;
   font:
-    700 21px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    700 21px var(--font-sans);
 }
 .provider-summary,
 .provider-privacy {
@@ -2063,9 +2035,7 @@ html.island-window-html {
   margin: 0;
   color: #f5f5f5;
   font:
-    600 15px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    600 15px var(--font-sans);
 }
 .provider-browser-heading p {
   margin: 4px 0 0;
@@ -2137,9 +2107,7 @@ html.island-window-html {
   background: color-mix(in srgb, var(--provider-color), transparent 92%);
   color: var(--provider-color);
   font:
-    700 11px 'Manrope Variable',
-    Manrope,
-    sans-serif;
+    700 11px var(--font-sans);
   letter-spacing: -0.3px;
 }
 .provider-logo svg {
@@ -2204,8 +2172,7 @@ html.island-window-html {
   margin-bottom: 4px;
   color: #fdba74;
   font:
-    10px 'DM Mono',
-    monospace;
+    10px var(--font-sans);
   letter-spacing: 0.5px;
 }
 .provider-status.guide {
@@ -2817,8 +2784,7 @@ html.island-window-html {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font:
-    12px/1.55 'DM Mono',
-    monospace;
+    12px/1.55 var(--font-mono);
 }
 .audit-status {
   color: var(--color-accent-soft) !important;
