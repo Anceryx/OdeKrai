@@ -11,6 +11,7 @@ import {
   type ProviderDirectoryTab,
 } from '../core/provider-directory';
 import { PageHeader } from './DesignSystem';
+import { Icon } from './Icon';
 import {
   activeProviderSettings,
   defaultProviderSettings,
@@ -293,7 +294,7 @@ export function ProviderCatalog({
         </div>
         {keySaved && isActive && (
           <button className="text-button" onClick={onChat}>
-            Abrir conversas ↗
+            Abrir conversas <Icon name="external-link" />
           </button>
         )}
       </div>
@@ -305,7 +306,7 @@ export function ProviderCatalog({
               <p>Escolha um provedor para ver as etapas de configuração.</p>
             </div>
             <label className="provider-search">
-              <span aria-hidden="true">⌕</span>
+              <Icon name="search" />
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
@@ -455,7 +456,7 @@ export function ProviderCatalog({
               aria-label="Fechar detalhes"
               onClick={() => setDetailsOpen(false)}
             >
-              ×
+              <Icon name="close" />
             </button>
             <div className="provider-detail-top">
               <ProviderLogo provider={selected} large />
@@ -483,7 +484,7 @@ export function ProviderCatalog({
                   href={selected.freePlan.limitsUrl}
                   onError={setExternalLinkError}
                 >
-                  Consultar limites oficiais ↗
+                  Consultar limites oficiais <Icon name="external-link" />
                 </ProviderExternalLink>
                 <p>
                   Alguns provedores podem usar dados do plano gratuito. Leia os termos antes de
@@ -512,13 +513,13 @@ export function ProviderCatalog({
                   <li>
                     <strong>1. Crie sua conta</strong>
                     <ProviderExternalLink href={selected.signupUrl} onError={setExternalLinkError}>
-                      Criar conta ↗
+                      Criar conta <Icon name="external-link" />
                     </ProviderExternalLink>
                   </li>
                   <li>
                     <strong>2. Gere uma chave de API</strong>
                     <ProviderExternalLink href={selected.consoleUrl} onError={setExternalLinkError}>
-                      Gerar chave ↗
+                      Gerar chave <Icon name="external-link" />
                     </ProviderExternalLink>
                   </li>
                   <li>
@@ -689,7 +690,15 @@ export function ProviderCatalog({
                     {stages.map((stage) => (
                       <li key={stage.id} data-status={stage.status}>
                         <strong>
-                          {stage.status === 'passed' ? '✓' : stage.status === 'failed' ? '×' : '–'}{' '}
+                          <Icon
+                            name={
+                              stage.status === 'passed'
+                                ? 'success'
+                                : stage.status === 'failed'
+                                  ? 'error'
+                                  : 'pending'
+                            }
+                          />{' '}
                           {{
                             credential: 'Credencial',
                             host: 'Host permitido',
@@ -732,20 +741,20 @@ export function ProviderCatalog({
             )}
             <div className="provider-detail-links">
               <ProviderExternalLink href={selected.docsUrl} onError={setExternalLinkError}>
-                Documentação oficial ↗
+                Documentação oficial <Icon name="external-link" />
               </ProviderExternalLink>
               <ProviderExternalLink href={selected.consoleUrl} onError={setExternalLinkError}>
                 {selected.integration === 'guide'
                   ? 'Abrir console do provedor'
                   : 'Obter chave ou credenciais'}{' '}
-                ↗
+                <Icon name="external-link" />
               </ProviderExternalLink>
             </div>
           </aside>
         )}
       </div>
       <div className="provider-privacy">
-        <span>◈</span>
+        <Icon name="shield" />
         <p>
           <strong>Controle seus custos e credenciais.</strong> Mensagens são enviadas pelo processo
           nativo ao provedor configurado. Confira preços, permissões e retenção antes de enviar.
