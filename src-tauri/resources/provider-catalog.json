@@ -46,7 +46,7 @@
     "modelListPath": "/models",
     "modelListShape": "data",
     "hostRule": "api.x.ai",
-    "docsUrl": "https://docs.x.ai/developers/rest-api-reference/inference/models",
+    "docsUrl": "https://docs.x.ai/developers/rest-api-reference/inference/chat-completions",
     "verifiedAt": "2026-10-24",
     "verification": "verified",
     "fields": []
@@ -137,7 +137,7 @@
     "modelListPath": null,
     "modelListShape": null,
     "hostRule": "api.together.ai",
-    "docsUrl": "https://docs.together.ai/docs/openai-compatibility",
+    "docsUrl": "https://docs.together.ai/docs/inference/openai-compatibility",
     "verifiedAt": null,
     "verification": "unverified",
     "fields": []

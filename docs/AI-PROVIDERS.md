@@ -38,6 +38,8 @@ O catálogo versionado em `src-tauri/resources/provider-catalog.json` registra e
 
 Credenciais ficam no Gerenciador de Credenciais do Windows pelo crate `keyring`. O frontend nunca lê a credencial já armazenada. Essa integração exige execução nativa Windows; preview web não envia chamadas com chaves.
 
+Nos detalhes de cada conector, “Criar conta” abre a página de cadastro ou entrada do provedor e “Gerar chave” abre o console de credenciais apropriado. O app usa o plugin oficial Tauri Opener e limita os domínios externos aos endereços dos provedores catalogados. Os consoles podem exigir autenticação ou encaminhar para uma etapa adicional dentro do painel.
+
 O filtro “Conectados” consulta as credenciais em sequência para evitar consultas concorrentes ao Gerenciador do Windows. Se alguma consulta falhar, a tela informa que o resultado pode estar incompleto em vez de afirmar que não há credenciais.
 
 ## Fontes oficiais consultadas

@@ -8,7 +8,39 @@
     "dialog:allow-open",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://*" }]
+      "allow": [
+        { "url": "https://platform.openai.com/**" },
+        { "url": "https://developers.openai.com/**" },
+        { "url": "https://platform.claude.com/**" },
+        { "url": "https://ai.google.dev/**" },
+        { "url": "https://aistudio.google.com/**" },
+        { "url": "https://console.x.ai/**" },
+        { "url": "https://docs.x.ai/**" },
+        { "url": "https://console.mistral.ai/**" },
+        { "url": "https://docs.mistral.ai/**" },
+        { "url": "https://dashboard.cohere.com/**" },
+        { "url": "https://docs.cohere.com/**" },
+        { "url": "https://console.groq.com/**" },
+        { "url": "https://platform.deepseek.com/**" },
+        { "url": "https://api-docs.deepseek.com/**" },
+        { "url": "https://console.perplexity.ai/**" },
+        { "url": "https://docs.perplexity.ai/**" },
+        { "url": "https://cloud.cerebras.ai/**" },
+        { "url": "https://inference-docs.cerebras.ai/**" },
+        { "url": "https://api.together.ai/**" },
+        { "url": "https://docs.together.ai/**" },
+        { "url": "https://openrouter.ai/**" },
+        { "url": "https://app.fireworks.ai/**" },
+        { "url": "https://fireworks.ai/**" },
+        { "url": "https://docs.fireworks.ai/**" },
+        { "url": "https://ai.azure.com/**" },
+        { "url": "https://learn.microsoft.com/**" },
+        { "url": "https://console.aws.amazon.com/**" },
+        { "url": "https://signin.aws.amazon.com/**" },
+        { "url": "https://docs.aws.amazon.com/**" },
+        { "url": "https://console.cloud.google.com/**" },
+        { "url": "https://docs.cloud.google.com/**" }
+      ]
     }
   ]
 }

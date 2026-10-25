@@ -1,7 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
+import { AI_PROVIDERS } from './providers';
 import { openProviderLink } from './provider-links';
 
 describe('openProviderLink', () => {
+  it('mantém links de cadastro e console HTTPS para todos os conectores', () => {
+    expect(AI_PROVIDERS.length).toBe(16);
+    for (const provider of AI_PROVIDERS) {
+      expect(new URL(provider.signupUrl).protocol, provider.id).toBe('https:');
+      expect(new URL(provider.consoleUrl).protocol, provider.id).toBe('https:');
+    }
+    expect(AI_PROVIDERS.find((provider) => provider.id === 'perplexity')?.consoleUrl).toBe(
+      'https://console.perplexity.ai/project/keys',
+    );
+    expect(AI_PROVIDERS.find((provider) => provider.id === 'fireworks')?.consoleUrl).toBe(
+      'https://app.fireworks.ai/account/home',
+    );
+  });
+
   it('opens HTTPS addresses through the supplied system opener', async () => {
     const opener = vi.fn(async (_url: string) => undefined);
 

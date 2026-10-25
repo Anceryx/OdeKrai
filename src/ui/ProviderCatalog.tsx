@@ -511,7 +511,7 @@ export function ProviderCatalog({
                 <ol className="provider-steps">
                   <li>
                     <strong>1. Crie sua conta</strong>
-                    <ProviderExternalLink href={selected.docsUrl} onError={setExternalLinkError}>
+                    <ProviderExternalLink href={selected.signupUrl} onError={setExternalLinkError}>
                       Criar conta ↗
                     </ProviderExternalLink>
                   </li>
