@@ -82,3 +82,7 @@ O plugin Tauri `global-shortcut` registra o atalho no processo nativo. O kill sw
 - A nitidez dos sprites, as animações, o recorte dos avatares e o hit-testing das janelas auxiliares precisam de validação visual no Windows.
 - Escalas DPI, monitores adicionais, reconexão, fullscreen e hit-testing ainda precisam de validação manual.
 - Nenhum áudio Kenney foi integrado.
+
+## Inicialização do painel
+
+Comandos nativos de leitura usados durante a abertura (pasta do agente, credenciais, perfil, permissões, mascote e histórico) são assíncronos no Tauri para não executar trabalho de disco ou do Gerenciador de Credenciais na thread principal da janela.

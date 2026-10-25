@@ -378,7 +378,7 @@ fn memory_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 #[tauri::command]
-pub fn agent_home_status(
+pub async fn agent_home_status(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
 ) -> Result<HomeStatus, String> {

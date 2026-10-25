@@ -57,7 +57,7 @@ fn shutdown(app: &AppHandle) {
 }
 
 #[tauri::command]
-pub fn set_close_behavior(
+pub async fn set_close_behavior(
     app: AppHandle,
     caller: WebviewWindow,
     minimize_to_tray: bool,

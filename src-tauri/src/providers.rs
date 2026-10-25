@@ -141,7 +141,7 @@ pub fn save_provider_credential(
 }
 
 #[tauri::command]
-pub fn has_provider_credential(
+pub async fn has_provider_credential(
     caller: tauri::WebviewWindow,
     provider_id: String,
 ) -> Result<bool, String> {

@@ -61,7 +61,7 @@ fn read(app: &tauri::AppHandle) -> Result<UserProfile, String> {
 }
 
 #[tauri::command]
-pub fn get_profile(
+pub async fn get_profile(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
 ) -> Result<UserProfile, String> {

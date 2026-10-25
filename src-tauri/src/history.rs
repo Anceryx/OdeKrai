@@ -99,7 +99,7 @@ fn selected_pet_from_db(db: &Connection, manifest: &str) -> Result<String, Strin
 }
 
 #[tauri::command]
-pub fn get_selected_pet(
+pub async fn get_selected_pet(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
 ) -> Result<String, String> {
@@ -125,7 +125,7 @@ pub fn set_selected_pet(
 }
 
 #[tauri::command]
-pub fn list_conversations(
+pub async fn list_conversations(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
 ) -> Result<Vec<Conversation>, String> {

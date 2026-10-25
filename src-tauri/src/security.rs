@@ -832,7 +832,7 @@ fn override_enabled(app: &tauri::AppHandle, tool: &str) -> Result<bool, String> 
 }
 
 #[tauri::command]
-pub fn get_permission_settings(
+pub async fn get_permission_settings(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
     state: State<'_, SecurityState>,
