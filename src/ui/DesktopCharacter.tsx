@@ -6,6 +6,7 @@ import { normalizeSoundPreferences, playSound } from '../core/sounds';
 import { initialIslandSnapshot, transitionIsland, type IslandEvent } from '../core/island';
 import { petAnimationForIslandState, type PetAnimationState } from '../core/pets';
 import { PetSprite } from './PetSprite';
+import { Icon } from './Icon';
 
 export function DesktopCharacter() {
   const [settings, setSettings] = useState(loadSettings);
@@ -96,7 +97,7 @@ export function DesktopCharacter() {
         onClick={() => void returnHome()}
         aria-label="Retornar o OdeKrai à posição inicial"
       >
-        ↩
+        <Icon name="home" />
       </button>
       <span className="desktop-tooltip">Voltar à posição inicial</span>
       {error && (

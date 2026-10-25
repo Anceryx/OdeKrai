@@ -12,6 +12,7 @@ import { loadSettings, saveSettings } from '../core/settings';
 import { normalizeSoundPreferences, playSound } from '../core/sounds';
 import { petAnimationForIslandState } from '../core/pets';
 import { PetSprite } from './PetSprite';
+import { Icon } from './Icon';
 
 export function IslandWindow() {
   const [snapshot, setSnapshot] = useState<IslandSnapshot>(initialIslandSnapshot);
@@ -125,7 +126,7 @@ export function IslandWindow() {
             )
           }
         >
-          {state === 'expanded' ? '−' : '+'}
+          <Icon name={state === 'expanded' ? 'minus' : 'plus'} />
         </button>
         {state === 'expanded' && (
           <div className="island-expanded">

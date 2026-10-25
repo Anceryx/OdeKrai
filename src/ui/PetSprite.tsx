@@ -7,6 +7,7 @@ import {
   petMotionDisabled,
   type PetAnimationState,
 } from '../core/pets';
+import { Icon, type IconName } from './Icon';
 
 export function PetSprite({
   estado,
@@ -77,28 +78,22 @@ export function PetSprite({
         </span>
       )}
       <span className="pet-overlay" aria-hidden="true">
-        {estado === 'thinking' && (
-          <i className="pet-thinking-dots">
-            <b />
-            <b />
-            <b />
-          </i>
-        )}
-        {estado === 'working' && (
-          <i className="pet-working-mark">
-            <b />
-            <b />
-            <b />
-          </i>
-        )}
-        {estado === 'awaiting_approval' && <i className="pet-approval-mark">!</i>}
-        {estado === 'success' && <i className="pet-success-mark" />}
-        {estado === 'error' && <i className="pet-error-mark" />}
-        {estado === 'paused' && (
-          <i className="pet-pause-mark">
-            <b />
-            <b />
-          </i>
+        {estado !== 'idle' && (
+          <Icon
+            name={
+              (
+                {
+                  thinking: 'pending',
+                  working: 'activity',
+                  awaiting_approval: 'pending',
+                  success: 'success',
+                  error: 'error',
+                  paused: 'stop',
+                } as Partial<Record<PetAnimationState, IconName>>
+              )[estado] ?? 'activity'
+            }
+            size={20}
+          />
         )}
       </span>
     </span>

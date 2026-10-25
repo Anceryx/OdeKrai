@@ -1637,7 +1637,6 @@ html.island-window-html {
   border: 1px solid #ffffff20;
   border-radius: 50%;
   background: #ffffff09;
-  font-size: 17px;
 }
 .island-expanded {
   z-index: 1;
@@ -3437,105 +3436,33 @@ html.island-window-html {
   z-index: 2;
   top: 4%;
   right: 7%;
-  width: 22px;
-  height: 22px;
-  pointer-events: none;
-}
-.pet-thinking-dots {
-  display: flex;
-  gap: 3px;
-  align-items: center;
-  height: 100%;
-}
-.pet-thinking-dots b {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: #fff;
-  animation: pet-dot 1s ease-in-out infinite;
-}
-.pet-thinking-dots b:nth-child(2) {
-  animation-delay: 0.16s;
-}
-.pet-thinking-dots b:nth-child(3) {
-  animation-delay: 0.32s;
-}
-.pet-working-mark {
-  display: grid;
-  gap: 2px;
-  transform: rotate(-35deg);
-}
-.pet-working-mark b {
-  width: 15px;
-  height: 2px;
-  border-radius: 2px;
-  background: #fdba74;
-}
-.pet-working-mark b:nth-child(2) {
-  width: 11px;
-  margin-left: 4px;
-}
-.pet-working-mark b:nth-child(3) {
-  width: 7px;
-  margin-left: 8px;
-}
-.pet-approval-mark {
   display: grid;
   place-items: center;
+  width: 24px;
+  height: 24px;
+  pointer-events: none;
+}
+.pet-overlay svg {
   width: 20px;
   height: 20px;
-  border: 2px solid #fb923c;
-  border-radius: 50%;
-  color: #fff;
-  font: 700 12px/1 sans-serif;
+}
+.pet-state-thinking .pet-overlay,
+.pet-state-working .pet-overlay {
+  color: #fdba74;
+}
+.pet-state-awaiting_approval .pet-overlay {
+  color: #fb923c;
   animation: pet-pulse 1.1s ease-in-out infinite;
 }
-.pet-success-mark {
-  display: block;
-  width: 10px;
-  height: 6px;
-  margin: 5px;
-  border-left: 2px solid #86efac;
-  border-bottom: 2px solid #86efac;
-  transform: rotate(-45deg);
+.pet-state-success .pet-overlay {
+  color: #86efac;
   filter: drop-shadow(0 0 3px #22c55e);
 }
-.pet-error-mark {
-  display: block;
-  width: 15px;
-  height: 15px;
-  margin: 3px;
-  position: relative;
+.pet-state-error .pet-overlay {
+  color: #ef4444;
 }
-.pet-error-mark::before,
-.pet-error-mark::after {
-  content: '';
-  position: absolute;
-  left: 6px;
-  top: 0;
-  width: 2px;
-  height: 16px;
-  background: #ef4444;
-}
-.pet-error-mark::before {
-  transform: rotate(45deg);
-}
-.pet-error-mark::after {
-  transform: rotate(-45deg);
-}
-.pet-pause-mark {
-  display: flex;
-  gap: 3px;
-  padding: 4px;
-  border-radius: 5px;
-  background: #27272a;
-}
-.pet-pause-mark b {
-  display: block;
-  width: 3px;
-  height: 11px;
-  border-radius: 2px;
-  background: #d4d4d8;
+.pet-state-paused .pet-overlay {
+  color: #d4d4d8;
 }
 .pet-fallback {
   position: relative;
@@ -3729,12 +3656,6 @@ html.island-window-html {
 @keyframes pet-pulse {
   50% {
     box-shadow: 0 0 0 5px #fb923c38;
-  }
-}
-@keyframes pet-dot {
-  50% {
-    opacity: 0.35;
-    transform: translateY(-2px);
   }
 }
 @media (max-width: 900px) {
