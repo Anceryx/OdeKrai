@@ -35,6 +35,7 @@ import { PetSprite } from './PetSprite';
 import appIcon from '../assets/odekrai-app-icon.png';
 import { MessageMarkdown } from './MessageMarkdown';
 import { HistoryDeletionSettings } from './HistoryDeletionSettings';
+import { Icon, type IconName } from './Icon';
 import { setPrimaryProviderSettings, toggleProviderSettings } from '../core/provider-directory';
 import { profileFromApprovedCore } from '../core/identity';
 
@@ -49,15 +50,15 @@ type Section =
   | 'agent';
 type Conversation = ConversationSummary;
 
-const nav: { id: Section; label: string; icon: string; group: string }[] = [
-  { id: 'overview', label: 'Visão geral', icon: '⌂', group: 'ESPAÇO DE TRABALHO' },
-  { id: 'chat', label: 'Conversas', icon: '◌', group: 'ESPAÇO DE TRABALHO' },
-  { id: 'agent', label: 'Identidade e memória', icon: '◇', group: 'ESPAÇO DE TRABALHO' },
-  { id: 'providers', label: 'Conectores de IA', icon: '✳', group: 'INTELIGÊNCIA' },
-  { id: 'companion', label: 'Assistente do OdeKrai', icon: '◇', group: 'PERSONALIZAÇÃO' },
-  { id: 'settings', label: 'Configurações', icon: '⚙', group: 'PERSONALIZAÇÃO' },
-  { id: 'permissions', label: 'Permissões', icon: '⛨', group: 'PERSONALIZAÇÃO' },
-  { id: 'activity', label: 'Atividade', icon: '≡', group: 'PERSONALIZAÇÃO' },
+const nav: { id: Section; label: string; icon: IconName; group: string }[] = [
+  { id: 'overview', label: 'Visão geral', icon: 'home', group: 'ESPAÇO DE TRABALHO' },
+  { id: 'chat', label: 'Conversas', icon: 'chat', group: 'ESPAÇO DE TRABALHO' },
+  { id: 'agent', label: 'Identidade e memória', icon: 'memory', group: 'ESPAÇO DE TRABALHO' },
+  { id: 'providers', label: 'Conectores de IA', icon: 'connectors', group: 'INTELIGÊNCIA' },
+  { id: 'companion', label: 'Assistente do OdeKrai', icon: 'pet', group: 'PERSONALIZAÇÃO' },
+  { id: 'settings', label: 'Configurações', icon: 'settings', group: 'PERSONALIZAÇÃO' },
+  { id: 'permissions', label: 'Permissões', icon: 'shield', group: 'PERSONALIZAÇÃO' },
+  { id: 'activity', label: 'Atividade', icon: 'activity', group: 'PERSONALIZAÇÃO' },
 ];
 
 export function App() {
@@ -505,7 +506,9 @@ function MainApp() {
                       setChatMode(false);
                     }}
                   >
-                    <span className="nav-icon">{item.icon}</span>
+                    <span className="nav-icon">
+                      <Icon name={item.icon} size={20} />
+                    </span>
                     {item.label}
                     {item.id === 'providers' && (
                       <span

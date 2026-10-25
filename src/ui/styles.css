@@ -324,9 +324,12 @@ select:focus-visible {
   margin-left: -10px;
 }
 .nav-icon {
-  font: 16px var(--font-sans);
-  width: 16px;
-  text-align: center;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 20px;
   color: #92929a;
 }
 .active .nav-icon {
