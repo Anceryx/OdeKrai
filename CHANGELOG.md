@@ -2,6 +2,12 @@
 
 ## Não lançado
 
+### Conversas
+
+- A área de Conversas agora tem lista pesquisável com título, data, prévia e opções de renomear/apagar; o cabeçalho da conversa permite editar o título e mostra o modelo ativo.
+- Mensagens do usuário ficam à direita e respostas à esquerda, com avatares, horário e opção de usar o mascote como avatar do OdeKrai. Respostas mostram Markdown básico sem interpretar HTML bruto.
+- O campo cresce com o texto; Enter envia e Shift+Enter cria uma nova linha. A resposta em andamento pode ser parada ou tentada novamente após erro.
+
 ### Janela e preferências
 
 - O tamanho inicial da janela considera o fator de escala e a área útil do monitor, incluindo a barra de tarefas.

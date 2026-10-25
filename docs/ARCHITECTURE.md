@@ -45,14 +45,20 @@ O pet padrão é o sprite CSS de `assets/pets/kenney-mini-characters/`, escolhid
 persistido na tabela `pet_preferences` do SQLite local. O catálogo `pets.json` é validado no
 frontend e no Rust; nomes de arquivo aceitos são apenas nomes simples `.png`. Estados da FSM são
 convertidos em animações CSS, que ficam estáticas quando a preferência do aplicativo ou do sistema
-reduz movimento está ativa. O catálogo inclui o ID feminino A solicitado como padrão, mas o PNG
-correspondente não foi fornecido; essa entrada exibe um fallback CSS.
+reduz movimento está ativa.
 
 O componente `PetSprite` renderiza o PNG selecionado e animações CSS associadas aos estados da FSM. Ele é usado na Visão geral, no chat, na prévia do Assistente e nas janelas auxiliares. A preferência `reduzir animações` e `prefers-reduced-motion` mantêm o sprite estático. Three.js é usado somente pelo script de desenvolvimento `scripts/render-pets.mjs`; não é importado pelo frontend nem pelo runtime Tauri. Modelos proprietários não são necessários para compilar ou executar o aplicativo.
 
 ## Ilha, áudio e armazenamento
 
 `src/core/island.ts` implementa transições e prioridades. `src/core/sounds.ts` carrega sons sob demanda, mantém cache, limita repetições, aplica volume e ignora arquivos ausentes ou inválidos. Preferências não secretas ficam no armazenamento local do WebView; chaves de API não são salvas. O histórico de conversas fica em SQLite na pasta de dados do aplicativo, acessado somente pelos comandos Rust da janela principal.
+
+Conversas apresenta uma lista pesquisável com título, data e prévia; o SQLite armazena título e
+mensagens com horário. A tela permite selecionar, renomear e apagar uma conversa. O painel da
+conversa mostra mensagens do usuário à direita e respostas à esquerda; o avatar das respostas usa
+o ícone do aplicativo por padrão, com uma preferência para usar o mascote. As respostas usam um
+renderizador Markdown que cria elementos React a partir de texto, sem interpretar HTML. Links só
+aceitam `http` e `https`.
 
 No Windows, a janela do mascote recebe região Win32 retangular no limite do sprite; a ilha mantém a região arredondada para acomodar seus controles. As regiões são atualizadas no redimensionamento e na alteração de DPI. Isso ainda exige teste de desktop real para confirmar o encaminhamento de cliques nas áreas transparentes.
 

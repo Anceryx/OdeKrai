@@ -10,12 +10,14 @@ pub struct Conversation {
     id: String,
     title: String,
     created_at: i64,
+    preview: String,
 }
 
 #[derive(Serialize)]
 pub struct StoredMessage {
     role: String,
     content: String,
+    created_at: i64,
 }
 
 fn database(app: &tauri::AppHandle) -> Result<Connection, String> {
@@ -135,7 +137,7 @@ pub fn list_conversations(
 fn read_conversations(db: &Connection) -> Result<Vec<Conversation>, String> {
     let mut stmt = db
         .prepare(
-            "SELECT id, title, created_at FROM conversations ORDER BY created_at DESC, rowid DESC LIMIT 100",
+            "SELECT c.id, c.title, c.created_at, COALESCE((SELECT substr(content, 1, 240) FROM messages WHERE conversation_id = c.id ORDER BY id DESC LIMIT 1), '') FROM conversations c ORDER BY c.created_at DESC, c.rowid DESC LIMIT 100",
         )
         .map_err(|_| "Não foi possível ler o histórico local.".to_string())?;
     let rows = stmt
@@ -144,6 +146,7 @@ fn read_conversations(db: &Connection) -> Result<Vec<Conversation>, String> {
                 id: row.get(0)?,
                 title: row.get(1)?,
                 created_at: row.get(2)?,
+                preview: row.get(3)?,
             })
         })
         .map_err(|_| "Não foi possível ler o histórico local.".to_string())?;
@@ -159,9 +162,13 @@ pub fn load_conversation(
 ) -> Result<Vec<StoredMessage>, String> {
     super::require_main(&caller)?;
     let db = database(&app)?;
+    read_messages(&db, &conversation_id)
+}
+
+fn read_messages(db: &Connection, conversation_id: &str) -> Result<Vec<StoredMessage>, String> {
     let mut stmt = db
         .prepare(
-            "SELECT role, content FROM messages WHERE conversation_id = ?1 ORDER BY id LIMIT 100",
+            "SELECT role, content, created_at FROM messages WHERE conversation_id = ?1 ORDER BY id LIMIT 100",
         )
         .map_err(|_| "Não foi possível ler a conversa.".to_string())?;
     let rows = stmt
@@ -169,6 +176,7 @@ pub fn load_conversation(
             Ok(StoredMessage {
                 role: row.get(0)?,
                 content: row.get(1)?,
+                created_at: row.get(2)?,
             })
         })
         .map_err(|_| "Não foi possível ler a conversa.".to_string())?;
@@ -234,6 +242,31 @@ pub fn delete_conversation(
 }
 
 #[tauri::command]
+pub fn rename_conversation(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    conversation_id: String,
+    title: String,
+) -> Result<(), String> {
+    super::require_main(&caller)?;
+    let title = title.trim();
+    if !valid_id(&conversation_id) || !valid_title(title) {
+        return Err("O título da conversa é inválido.".into());
+    }
+    let db = database(&app)?;
+    let changed = db
+        .execute(
+            "UPDATE conversations SET title = ?2 WHERE id = ?1",
+            params![conversation_id, title],
+        )
+        .map_err(|_| "Não foi possível renomear a conversa.".to_string())?;
+    if changed != 1 {
+        return Err("A conversa não foi encontrada.".into());
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub fn delete_all_conversations(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
@@ -248,6 +281,10 @@ pub fn delete_all_conversations(
 
 fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 80 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+}
+
+fn valid_title(title: &str) -> bool {
+    !title.trim().is_empty() && title.chars().count() <= 120
 }
 
 #[cfg(test)]
@@ -296,6 +333,53 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].title, "Teste");
         assert_eq!(items[0].created_at, 1798000000);
+        assert_eq!(items[0].preview, "");
+    }
+
+    #[test]
+    fn loading_selected_conversation_returns_its_messages_and_timestamps() {
+        let db = Connection::open_in_memory().unwrap();
+        init_schema(&db).unwrap();
+        db.execute(
+            "INSERT INTO conversations (id, title) VALUES ('one', 'Uma conversa')",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO messages (conversation_id, role, content, created_at) VALUES ('one', 'user', 'Minha mensagem', 1798000000)",
+            [],
+        )
+        .unwrap();
+        let items = read_conversations(&db).unwrap();
+        assert_eq!(items[0].preview, "Minha mensagem");
+        let messages = read_messages(&db, "one").unwrap();
+        assert_eq!(messages[0].content, "Minha mensagem");
+        assert_eq!(messages[0].created_at, 1798000000);
+    }
+
+    #[test]
+    fn conversation_title_can_be_renamed_without_changing_its_messages() {
+        let db = Connection::open_in_memory().unwrap();
+        init_schema(&db).unwrap();
+        db.execute(
+            "INSERT INTO conversations (id, title) VALUES ('one', 'Original')",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "UPDATE conversations SET title = ?2 WHERE id = ?1",
+            params!["one", "Título novo"],
+        )
+        .unwrap();
+        let items = read_conversations(&db).unwrap();
+        assert_eq!(items[0].title, "Título novo");
+    }
+
+    #[test]
+    fn conversation_titles_reject_empty_or_oversized_values() {
+        assert!(!valid_title("  "));
+        assert!(!valid_title(&"a".repeat(121)));
+        assert!(valid_title(&"a".repeat(120)));
     }
 
     #[test]

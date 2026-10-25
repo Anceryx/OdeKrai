@@ -437,6 +437,7 @@ pub fn run() {
             history::load_conversation,
             history::append_conversation_message,
             history::delete_conversation,
+            history::rename_conversation,
             history::delete_all_conversations,
             history::get_selected_pet,
             history::set_selected_pet,

@@ -73,6 +73,19 @@ describe('preferências persistidas', () => {
     expect(loadSettings().closeBehavior).toBe('minimize_to_tray');
   });
 
+  it('mantém a preferência de usar o mascote como avatar do OdeKrai', () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    });
+    const settings = loadSettings();
+    expect(settings.useMascotAsAssistantAvatar).toBe(false);
+    settings.useMascotAsAssistantAvatar = true;
+    saveSettings(settings);
+    expect(loadSettings().useMascotAsAssistantAvatar).toBe(true);
+  });
+
   it('migra o ID pelo nome antigo e preserva um ID válido quando o nome muda', () => {
     let value = JSON.stringify({
       language: 'pt-BR',

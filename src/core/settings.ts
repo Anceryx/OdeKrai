@@ -19,6 +19,7 @@ export type ProviderSettings = {
 export type AppSettings = {
   language: 'pt-BR' | 'en';
   reduceMotion: boolean;
+  useMascotAsAssistantAvatar: boolean;
   closeBehavior: 'minimize_to_tray' | 'exit';
   activeProviderId: string;
   providers: Record<string, ProviderSettings>;
@@ -65,6 +66,7 @@ export function activeProviderSettings(settings: AppSettings): ProviderSettings 
 export const defaultSettings: AppSettings = {
   language: 'pt-BR',
   reduceMotion: false,
+  useMascotAsAssistantAvatar: false,
   closeBehavior: 'exit',
   activeProviderId: 'openai',
   providers: {},
@@ -189,6 +191,10 @@ export function loadSettingsWithWarnings(): { settings: AppSettings; warnings: s
       settings: {
         ...defaultSettings,
         ...migrated,
+        useMascotAsAssistantAvatar:
+          typeof value.useMascotAsAssistantAvatar === 'boolean'
+            ? value.useMascotAsAssistantAvatar
+            : false,
         closeBehavior: value.closeBehavior === 'minimize_to_tray' ? 'minimize_to_tray' : 'exit',
         activeProviderId,
         providers,

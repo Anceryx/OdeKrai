@@ -53,6 +53,10 @@ island/mascote.
 - `lib.rs`: teste das transições de criação/fechamento das janelas opcionais (`feature_window_lifecycle_tests`).
 - `settings.test.ts`: rejeição de endpoint cujo host não pertence ao provedor salvo, incluindo Groq com endpoint da xAI.
 - `history.rs`: listagem do SQLite inclui título e `created_at` (`conversation_list_includes_title_and_creation_time`).
+- `history.rs`: prévia, horário de mensagens, renomeação e leitura da conversa selecionada.
+- `chat.test.ts`: busca, seleção válida, ordem das mensagens e alinhamento conforme o autor.
+- `markdown.test.ts`: texto HTML não interpretado e esquemas executáveis recusados em links.
+- `settings.test.ts`: persistência da preferência do mascote como avatar das respostas.
 - Todas as ferramentas desta fase são simuladas e os testes não fazem chamadas de rede reais.
 - A confirmação de modo e exceção usa caixa nativa Win32 em execução interativa; não é exercitada por teste automatizado.
 
@@ -83,7 +87,7 @@ Execute em uma sessão Windows com a janela visível. Registre sistema, escala D
 13. Em perfil Windows novo, confirme a sugestão `%USERPROFILE%\OdeKrai`, escolha outra pasta local, confira o aviso OneDrive e verifique a estrutura criada. Tente UNC, raiz de unidade, pasta do sistema, pasta do aplicativo, `..`, nome reservado e junction; confirme as recusas.
 14. Edite `ODEKRAI.md` fora do aplicativo, volte à tela Identidade e memória e confira o diff. Confirme que o chat bloqueia a identidade alterada e só retoma após aprovação explícita.
 15. Crie, leia, edite e apague `memory/estilo.md` e outra nota. Apague toda a memória. Reinicie e confirme persistência. Não use dados reais sensíveis nesse ensaio.
-16. Crie duas conversas, apague uma e depois todo o histórico. Reinicie e confirme que nenhuma reaparece. Confira no provedor real, com conta de teste, o campo de sistema/instruções recebido; testes locais não comprovam essa integração.
+16. Crie duas conversas, selecione e renomeie uma, apague uma e depois apague todo o histórico em Configurações → Dados e privacidade após as duas confirmações. Reinicie e confirme que nenhuma reaparece. Confira no provedor real, com conta de teste, o campo de sistema/instruções recebido; testes locais não comprovam essa integração.
 17. No perfil, salve nome e apelido, recarregue a aplicação e confirme persistência em SQLite. Tente SVG, GIF, arquivo corrompido, imagem acima do limite e PNG/JPEG/WebP válidos; confira recorte e dimensão 256 × 256.
 18. Troque entre provedores e confirme que endpoint/modelo não se misturam. Informe endpoint de outro provedor e confirme a recusa antes do salvamento da credencial. Carregue modelos somente nos provedores com endpoint documentado; confirme o estado parcial nos demais.
 19. Em Configurações → Permissões, troque cada modo e confirme a caixa nativa antes de salvar. Confira que o modo exibido em `ODEKRAI.md` não altera o modo efetivo do SQLite.
