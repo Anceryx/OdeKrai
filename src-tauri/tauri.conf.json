@@ -28,6 +28,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "icon": ["icons/icon.png", "icons/icon.ico"],
     "category": "Productivity",
     "shortDescription": "OdeKrai",
     "longDescription": "OdeKrai para Windows."
