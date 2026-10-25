@@ -11,6 +11,7 @@ use tokio_util::sync::CancellationToken;
 
 mod anthropic;
 mod cancellation;
+mod catalog;
 mod chat_completions;
 mod credentials;
 mod endpoint;
@@ -19,6 +20,9 @@ use endpoint::provider_endpoint;
 mod perplexity;
 mod stream;
 mod types;
+#[cfg(test)]
+use catalog::{capabilities_with_model_cache, CatalogEntry};
+use catalog::{catalog_entry, effective_capabilities};
 use credentials::{credential_entry, supports_credentials};
 use llm_provider::{AnthropicProvider, ChatCompletionsProvider, LlmProvider, PerplexityProvider};
 use stream::StreamState;
@@ -55,26 +59,6 @@ pub struct ConnectionTest {
     pub overall: String,
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CatalogEntry {
-    id: String,
-    base_url: String,
-    chat_path: Option<String>,
-    auth_header: Option<String>,
-    model_list_path: Option<String>,
-    model_list_shape: Option<String>,
-    host_rule: Option<String>,
-    capabilities: ProviderCapabilities,
-}
-
-fn catalog_entry(provider_id: &str) -> Option<CatalogEntry> {
-    serde_json::from_str::<Vec<CatalogEntry>>(include_str!("../../resources/provider-catalog.json"))
-        .ok()?
-        .into_iter()
-        .find(|entry| entry.id == provider_id)
-}
-
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ProviderMessage {
     pub role: String,
@@ -99,32 +83,6 @@ pub struct ProviderReply {
 
 #[derive(Default)]
 pub struct ProviderRequests(Mutex<HashMap<String, CancellationToken>>);
-
-fn effective_capabilities(
-    app: &tauri::AppHandle,
-    provider_id: &str,
-    model: &str,
-) -> Result<ProviderCapabilities, String> {
-    let capabilities = catalog_entry(provider_id)
-        .ok_or("O catálogo deste provedor não está disponível.")?
-        .capabilities;
-    if !capabilities.tools {
-        return Ok(capabilities);
-    }
-    let cached =
-        crate::history::cached_tool_support(app, provider_id, model).unwrap_or(Some(false));
-    Ok(capabilities_with_model_cache(capabilities, cached))
-}
-
-fn capabilities_with_model_cache(
-    mut capabilities: ProviderCapabilities,
-    cached_tools_supported: Option<bool>,
-) -> ProviderCapabilities {
-    if cached_tools_supported == Some(false) {
-        capabilities.tools = false;
-    }
-    capabilities
-}
 
 #[tauri::command]
 pub fn get_provider_capabilities(
