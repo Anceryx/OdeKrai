@@ -91,6 +91,19 @@
     "fields": []
   },
   {
+    "id": "cerebras",
+    "baseUrl": "https://api.cerebras.ai/v1",
+    "chatPath": "/chat/completions",
+    "authHeader": "Authorization",
+    "modelListPath": "/models",
+    "modelListShape": "data",
+    "hostRule": "api.cerebras.ai",
+    "docsUrl": "https://inference-docs.cerebras.ai/api-reference/chat-completions",
+    "verifiedAt": "2026-10-25",
+    "verification": "verified",
+    "fields": []
+  },
+  {
     "id": "deepseek",
     "baseUrl": "https://api.deepseek.com",
     "chatPath": "/chat/completions",

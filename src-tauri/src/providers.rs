@@ -105,6 +105,7 @@ fn supports_credentials(provider_id: &str) -> bool {
             | "mistral"
             | "cohere"
             | "groq"
+            | "cerebras"
             | "deepseek"
             | "perplexity"
             | "together"
@@ -871,7 +872,7 @@ fn provider_http_error(status: u16) -> String {
         401 | 403 => format!("A credencial é inválida ou não tem permissão (HTTP {status})."),
         404 => "O endpoint ou modelo não foi encontrado (HTTP 404).".into(),
         408 => "O provedor atingiu o tempo limite (HTTP 408). Tente novamente.".into(),
-        429 => "O limite de solicitações ou a cota foi atingido (HTTP 429).".into(),
+        429 => "O limite de uso deste provedor foi atingido (HTTP 429). Consulte os limites do seu plano e tente novamente mais tarde.".into(),
         500..=599 => format!("O serviço do provedor está indisponível (HTTP {status})."),
         _ => format!("O provedor respondeu com HTTP {status}."),
     }
@@ -1102,6 +1103,7 @@ mod tests {
             assert!(message.contains(expected));
             assert!(!message.contains("test-secret"));
         }
+        assert!(provider_http_error(429).contains("limite de uso"));
     }
 
     #[test]

@@ -17,20 +17,22 @@ Referências oficiais: [Anthropic tool use](https://platform.claude.com/docs/en/
 
 ## Adaptadores no código
 
-O catálogo tem 15 itens: 12 usam o formato Chat Completions; Anthropic usa Messages API; Perplexity usa Agent API; Vertex AI permanece sem autenticação ADC/OAuth e aparece como guia. A presença de um adaptador não comprova chave, modelo, conta ou serviço.
+O catálogo tem 16 itens: 13 usam o formato Chat Completions; Anthropic usa Messages API; Perplexity usa Agent API; Vertex AI permanece sem autenticação ADC/OAuth e aparece como guia. A presença de um adaptador não comprova chave, modelo, conta ou serviço.
 
-| Provedor                                                               | Adaptador                                 | Autenticação e limites conhecidos                                                                         |
-| ---------------------------------------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| OpenAI                                                                 | Chat Completions                          | Bearer; ID de modelo manual                                                                               |
-| Anthropic                                                              | Messages API                              | `x-api-key` e `anthropic-version`; modelo manual                                                          |
-| Gemini                                                                 | Endpoint OpenAI compatível                | Chave do Google AI Studio; modelo manual                                                                  |
-| xAI, Mistral, Cohere, Groq, DeepSeek, Together, OpenRouter e Fireworks | Chat Completions                          | Bearer; modelo manual                                                                                     |
-| Perplexity                                                             | Agent API `/v1/agent`                     | Bearer; resposta `output[].content[].output_text`; modelo manual; busca web não é habilitada pelo ODEKRAI |
-| Azure OpenAI                                                           | Endpoint v1 `/openai/v1/chat/completions` | Cabeçalho `api-key`; nome do deployment enviado como modelo                                               |
-| AWS Bedrock                                                            | Chat Completions regional                 | Chave de API Bedrock; IAM/SigV4 não implementado                                                          |
-| Vertex AI                                                              | Guia                                      | ADC/OAuth ainda não integrado                                                                             |
+| Provedor                                                                         | Adaptador                                 | Autenticação e limites conhecidos                                                                         |
+| -------------------------------------------------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| OpenAI                                                                           | Chat Completions                          | Bearer; ID de modelo manual                                                                               |
+| Anthropic                                                                        | Messages API                              | `x-api-key` e `anthropic-version`; modelo manual                                                          |
+| Gemini                                                                           | Endpoint OpenAI compatível                | Chave do Google AI Studio; modelo manual                                                                  |
+| xAI, Mistral, Cohere, Groq, DeepSeek, Cerebras, Together, OpenRouter e Fireworks | Chat Completions                          | Bearer; modelo selecionado da lista oficial quando disponível                                             |
+| Perplexity                                                                       | Agent API `/v1/agent`                     | Bearer; resposta `output[].content[].output_text`; modelo manual; busca web não é habilitada pelo ODEKRAI |
+| Azure OpenAI                                                                     | Endpoint v1 `/openai/v1/chat/completions` | Cabeçalho `api-key`; nome do deployment enviado como modelo                                               |
+| AWS Bedrock                                                                      | Chat Completions regional                 | Chave de API Bedrock; IAM/SigV4 não implementado                                                          |
+| Vertex AI                                                                        | Guia                                      | ADC/OAuth ainda não integrado                                                                             |
 
 O processo Tauri valida HTTPS, host e caminho por provedor antes de enviar a chave, desativa redirecionamentos e não registra credenciais. Endpoint, modelo e região ficam separados por `providerId`; a migração v1 preserva a configuração existente. A listagem de modelos é habilitada apenas para endpoints cuja documentação foi verificada. Provedores sem endpoint de listagem são identificados no catálogo; seu teste de conexão fica parcial e não envia geração. O chat usa streaming para Anthropic e adaptadores Chat Completions; a Agent API da Perplexity ainda usa resposta completa. Não há failover nem medição de uso.
+
+Na tela de conectores, as abas filtram credenciais salvas, provedores com plano gratuito confirmado e o catálogo completo. Groq, Google Gemini, Mistral, Cerebras e OpenRouter mostram o selo de plano gratuito com links para as páginas oficiais de limites ou preços; no OpenRouter, o selo se refere aos modelos marcados com `:free`. As condições e os modelos podem variar por conta e mudar conforme o provedor. A interface não exibe limites numéricos fixos. Ao abrir os detalhes de um plano gratuito, o app avisa que alguns provedores podem usar os dados enviados nesses planos.
 
 O catálogo versionado em `src-tauri/resources/provider-catalog.json` registra endpoint, caminho, cabeçalho de autenticação, forma de listar modelos, campos específicos, URL de documentação e data de conferência. Entradas sem confirmação documental permanecem `unverified` e não recebem botão de listagem. Modelos são selecionados da conta quando possível ou podem ser digitados manualmente; não há modelo padrão preenchido.
 
@@ -42,7 +44,9 @@ Credenciais ficam no Gerenciador de Credenciais do Windows pelo crate `keyring`.
 - [Anthropic Messages](https://platform.claude.com/docs/en/api/messages/create)
 - [Gemini OpenAI compatibility](https://ai.google.dev/gemini-api/docs/openai)
 - [Cohere Compatibility API](https://docs.cohere.com/docs/compatibility-api)
-- [Perplexity Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart)
+- [Perplexity Agent API](https://docs.perplexity.ai/api-reference/agent-post)
+- [Cerebras Chat Completions](https://inference-docs.cerebras.ai/api-reference/chat-completions) e [lista de modelos](https://inference-docs.cerebras.ai/api-reference/models/list-models)
+- [Limites do Groq](https://console.groq.com/docs/rate-limits), [Gemini](https://ai.google.dev/gemini-api/docs/rate-limits), [Mistral](https://docs.mistral.ai/admin/billing-usage/usage-limits), [preços do Cerebras](https://inference-docs.cerebras.ai/support/pricing) e [preços/modelos gratuitos do OpenRouter](https://openrouter.ai/pricing)
 - [Azure OpenAI v1](https://learn.microsoft.com/en-us/azure/foundry/openai/latest)
 - [Amazon Bedrock Chat Completions](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html)
 - [Vertex AI ADC](https://docs.cloud.google.com/docs/authentication/application-default-credentials)

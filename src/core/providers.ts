@@ -16,6 +16,7 @@ export type AiProvider = {
   logo?: string;
   color: string;
   region?: boolean;
+  freePlan?: { limitsUrl: string; note?: string };
 };
 
 export type ProviderCatalogEntry = {
@@ -83,6 +84,10 @@ const providerDefinitions: AiProvider[] = [
     requirements: ['Chave da API Gemini no Google AI Studio', 'ID de modelo compatível'],
     logo: 'gemini',
     color: '#8E75B2',
+    freePlan: {
+      limitsUrl: 'https://ai.google.dev/gemini-api/docs/rate-limits',
+      note: 'O acesso gratuito depende do modelo selecionado.',
+    },
   },
   {
     id: 'xai',
@@ -110,6 +115,10 @@ const providerDefinitions: AiProvider[] = [
     requirements: ['Chave da API Mistral', 'Modelo habilitado na conta'],
     logo: 'mistral',
     color: '#FA520F',
+    freePlan: {
+      limitsUrl: 'https://docs.mistral.ai/admin/billing-usage/usage-limits',
+      note: 'O modo gratuito tem limites de uso.',
+    },
   },
   {
     id: 'cohere',
@@ -136,6 +145,10 @@ const providerDefinitions: AiProvider[] = [
     authMode: 'bearer',
     requirements: ['Chave de API Groq', 'Modelo disponível na conta'],
     color: '#F5F5F5',
+    freePlan: {
+      limitsUrl: 'https://console.groq.com/docs/rate-limits',
+      note: 'Os limites variam conforme o modelo e a conta.',
+    },
   },
   {
     id: 'deepseek',
@@ -156,7 +169,7 @@ const providerDefinitions: AiProvider[] = [
     name: 'Perplexity',
     description: 'Agent API com modelos, ferramentas e busca web configurável.',
     integration: 'perplexity-agent',
-    docsUrl: 'https://docs.perplexity.ai/docs/agent-api/quickstart',
+    docsUrl: 'https://docs.perplexity.ai/api-reference/agent-post',
     consoleUrl: 'https://docs.perplexity.ai/docs/admin/api-key-management',
     baseUrl: 'https://api.perplexity.ai/v1/agent',
     modelHint: 'ID de modelo aceito pela Agent API',
@@ -168,6 +181,23 @@ const providerDefinitions: AiProvider[] = [
     ],
     logo: 'perplexity',
     color: '#20B8CD',
+  },
+  {
+    id: 'cerebras',
+    name: 'Cerebras',
+    description: 'Inferência pela API de Chat Completions compatível com OpenAI.',
+    integration: 'openai-chat',
+    docsUrl: 'https://inference-docs.cerebras.ai/api-reference/chat-completions',
+    consoleUrl: 'https://cloud.cerebras.ai/platform',
+    baseUrl: 'https://api.cerebras.ai/v1',
+    modelHint: 'ID do modelo Cerebras',
+    authMode: 'bearer',
+    requirements: ['Chave de API Cerebras', 'Modelo habilitado na conta'],
+    color: '#F5F5F5',
+    freePlan: {
+      limitsUrl: 'https://inference-docs.cerebras.ai/support/pricing',
+      note: 'O plano gratuito tem limites próprios de uso.',
+    },
   },
   {
     id: 'together',
@@ -195,6 +225,10 @@ const providerDefinitions: AiProvider[] = [
     requirements: ['Chave de API OpenRouter', 'ID do modelo no catálogo OpenRouter'],
     logo: 'openrouter',
     color: '#94A3B8',
+    freePlan: {
+      limitsUrl: 'https://openrouter.ai/pricing',
+      note: 'Modelos com sufixo :free e limites menores.',
+    },
   },
   {
     id: 'fireworks',
