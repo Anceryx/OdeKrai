@@ -794,7 +794,7 @@ function Overview({
             Credenciais do Windows.
           </p>
           <button className="primary-button" onClick={onChat}>
-            Iniciar conversa <span>↗</span>
+            Iniciar conversa <Icon name="external-link" />
           </button>
         </div>
         <div className="hero-footer">
@@ -810,12 +810,14 @@ function Overview({
           <h3>Conheça o OdeKrai</h3>
         </div>
         <button className="text-button" onClick={() => onOpen('settings')}>
-          Personalizar <span>↗</span>
+          Personalizar <Icon name="external-link" />
         </button>
       </div>
       <div className="cards-grid">
         <button className="feature-card provider-card" onClick={() => onOpen('providers')}>
-          <div className="card-icon red-icon">✳</div>
+          <div className="card-icon red-icon">
+            <Icon name="connectors" />
+          </div>
           <div className="feature-copy">
             <span className="eyebrow">INTELIGÊNCIA</span>
             <h4>{keyReady ? 'Provedor configurado' : 'Escolha sua IA'}</h4>
@@ -825,26 +827,32 @@ function Overview({
                 : 'Conecte uma IA para habilitar conversas.'}
             </p>
           </div>
-          <span className="card-arrow">↗</span>
+          <span className="card-arrow">
+            <Icon name="external-link" />
+          </span>
         </button>
         <button className="feature-card companion-card" onClick={() => onOpen('companion')}>
-          <div className="card-icon neutral-icon">◇</div>
+          <div className="card-icon neutral-icon">
+            <Icon name="pet" />
+          </div>
           <div className="feature-copy">
             <span className="eyebrow">PERSONALIZAÇÃO</span>
             <h4>Seu espaço de presença</h4>
             <p>Conheça o OdeKrai e configure seu pet.</p>
           </div>
-          <span className="card-arrow">↗</span>
+          <span className="card-arrow">
+            <Icon name="external-link" />
+          </span>
         </button>
       </div>
       <div className="privacy-note">
-        <span>◈</span>
+        <Icon name="shield" />
         <p>
           <strong>Privacidade desde o primeiro passo.</strong> Preferências são salvas localmente. O
           conteúdo da conversa é enviado apenas ao provedor que você configurar.
         </p>
         <button onClick={() => onOpen('settings')}>
-          Saiba mais <span>↗</span>
+          Saiba mais <Icon name="external-link" />
         </button>
       </div>
       <div className="home-footer">
