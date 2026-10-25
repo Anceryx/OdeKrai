@@ -1,5 +1,9 @@
 # OdeKrai
 
+[Português (Brasil)](README.md) · [English](README.en.md)
+
+![Banner do OdeKrai](banner.png)
+
 Aplicativo OdeKrai para Windows, desenvolvido com React, TypeScript e Tauri 2. O projeto está em desenvolvimento: o build do frontend e os testes automatizados não comprovam a inspeção visual nem a validação dos adaptadores com contas reais.
 
 ## Recursos implementados

@@ -1,5 +1,9 @@
 # OdeKrai
 
+[Português (Brasil)](README.md) · [English](README.en.md)
+
+![OdeKrai banner](banner.png)
+
 A personal AI assistant for Windows, built with React, TypeScript, and Tauri 2. The application is named **OdeKrai**. This project is under development: a frontend build and automated tests do not prove visual inspection or live provider validation.
 
 ## Implemented features
