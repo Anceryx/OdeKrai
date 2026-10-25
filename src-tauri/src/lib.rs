@@ -8,6 +8,7 @@ mod policy;
 mod profile;
 mod providers;
 mod security;
+mod tray;
 mod window_sizing;
 
 fn require_main(window: &tauri::WebviewWindow) -> Result<(), String> {
@@ -397,9 +398,11 @@ pub fn run() {
         )
         .manage(providers::ProviderRequests::default())
         .manage(security::SecurityState::new(true))
+        .manage(tray::CloseBehaviorState::default())
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 window_sizing::fit_main_window(&window).map_err(std::io::Error::other)?;
+                tray::install_main_close_handler(app.handle(), &window);
             }
             let halted = security::load_halted(app.handle());
             if let Some(state) = app.try_state::<security::SecurityState>() {
@@ -415,6 +418,7 @@ pub fn run() {
             set_island_height,
             set_character_visible,
             set_character_position,
+            tray::set_close_behavior,
             providers::save_provider_credential,
             providers::has_provider_credential,
             providers::remove_provider_credential,

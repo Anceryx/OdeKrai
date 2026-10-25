@@ -871,6 +871,21 @@ select:focus-visible {
   background: linear-gradient(130deg, #121215, #101013);
   padding: 21px 22px;
 }
+.settings-section + .settings-section {
+  margin-top: 14px;
+}
+.settings-section > h2 {
+  margin: 0 0 10px;
+  color: #f0eff1;
+  font-size: 16px;
+  font-weight: 600;
+}
+.settings-description {
+  margin: 0 0 10px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
 .panel-heading {
   display: flex;
   justify-content: space-between;

@@ -52,6 +52,22 @@ describe('preferências persistidas', () => {
     expect(storage.get('odekrai.settings.v2')).not.toContain('chave');
   });
 
+  it('usa Encerrar por padrão e restaura valores inválidos de fechamento', () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    });
+    expect(loadSettings().closeBehavior).toBe('exit');
+    storage.set('odekrai.settings.v2', JSON.stringify({ ...loadSettings(), closeBehavior: 'other' }));
+    expect(loadSettings().closeBehavior).toBe('exit');
+    storage.set(
+      'odekrai.settings.v2',
+      JSON.stringify({ ...loadSettings(), closeBehavior: 'minimize_to_tray' }),
+    );
+    expect(loadSettings().closeBehavior).toBe('minimize_to_tray');
+  });
+
   it('migra o ID pelo nome antigo e preserva um ID válido quando o nome muda', () => {
     let value = JSON.stringify({
       language: 'pt-BR',

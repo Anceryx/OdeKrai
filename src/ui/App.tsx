@@ -136,6 +136,12 @@ function MainApp() {
   }, [settings]);
   useEffect(() => {
     if (!isTauri()) return;
+    void invoke('set_close_behavior', {
+      minimizeToTray: settings.closeBehavior === 'minimize_to_tray',
+    }).catch(() => setToast('Não foi possível atualizar o comportamento ao fechar.'));
+  }, [settings.closeBehavior]);
+  useEffect(() => {
+    if (!isTauri()) return;
     void invoke<ProfileData>('get_profile')
       .then(setProfile)
       .catch(() => undefined);
@@ -1298,33 +1304,51 @@ function Settings({
   return (
     <div className="page subpage">
       <PageHeader
-        eyebrow="PERSONALIZAÇÃO"
+        eyebrow="PREFERÊNCIAS"
         title="Configurações"
-        subtitle="Ajuste a experiência do OdeKrai neste dispositivo."
+        subtitle="Ajuste como o OdeKrai se comporta neste dispositivo."
       />
-      <section className="settings-panel">
+      <section className="settings-panel settings-section">
+        <h2>Geral</h2>
         <div className="panel-heading">
           <div>
-            <h3>Preferências gerais</h3>
-            <p>
-              Preferências de aparência ficam no armazenamento local do aplicativo. Perfil e
-              histórico são salvos no banco de dados local; credenciais ficam no Gerenciador do
-              Windows.
-            </p>
+            <h3>Idioma da interface</h3>
+            <p>O idioma disponível nesta versão é Português (Brasil).</p>
           </div>
-          <span className="state-chip connected">
-            <i /> SALVO LOCALMENTE
-          </span>
         </div>
         <div className="preference-row">
           <div>
-            <strong>Idioma da interface</strong>
-            <span>Mais idiomas serão adicionados em uma próxima etapa.</span>
+            <strong>Idioma</strong>
           </div>
-          <select value="pt-BR" disabled aria-label="Idioma disponível">
+          <select value="pt-BR" disabled aria-label="Idioma da interface">
             <option value="pt-BR">Português (Brasil)</option>
           </select>
         </div>
+      </section>
+      <section className="settings-panel settings-section">
+        <h2>Janela</h2>
+        <div className="preference-row">
+          <div>
+            <strong>Ao fechar a janela</strong>
+            <span>Escolha se o botão X minimiza para a bandeja ou encerra o aplicativo.</span>
+          </div>
+          <select
+            aria-label="Ação ao fechar a janela"
+            value={settings.closeBehavior}
+            onChange={(event) =>
+              update({
+                ...settings,
+                closeBehavior: event.target.value as AppSettings['closeBehavior'],
+              })
+            }
+          >
+            <option value="minimize_to_tray">Minimizar para a bandeja</option>
+            <option value="exit">Encerrar</option>
+          </select>
+        </div>
+      </section>
+      <section className="settings-panel settings-section">
+        <h2>Aparência</h2>
         <div className="preference-row">
           <div>
             <strong>Reduzir animações</strong>
@@ -1336,6 +1360,13 @@ function Settings({
             onClick={() => update({ ...settings, reduceMotion: !settings.reduceMotion })}
           />
         </div>
+      </section>
+      <section className="settings-panel settings-section">
+        <h2>Dados e privacidade</h2>
+        <p className="settings-description">
+          Preferências ficam neste dispositivo. Perfil e conversas são salvos no banco de dados
+          local; credenciais ficam no Gerenciador de Credenciais do Windows.
+        </p>
         <div className="preference-row">
           <div>
             <strong>Restaurar preferências</strong>
@@ -1347,10 +1378,8 @@ function Settings({
         </div>
       </section>
       <div className="provider-footnote">
-        <span>◈</span>
         <p>
-          As preferências podem ser removidas limpando os dados locais do aplicativo. A chave de API
-          não é incluída nelas.
+          A restauração volta ao padrão Encerrar e não remove perfil, histórico ou credenciais.
         </p>
       </div>
     </div>

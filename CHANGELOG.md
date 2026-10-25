@@ -2,6 +2,12 @@
 
 ## Não lançado
 
+### Janela e preferências
+
+- O tamanho inicial da janela considera o fator de escala e a área útil do monitor, incluindo a barra de tarefas.
+- Ao fechar a janela, a preferência padrão encerra o aplicativo; a opção alternativa minimiza para a bandeja com ações para abrir e sair.
+- As configurações agora estão organizadas em Geral, Janela, Aparência e Dados e privacidade.
+
 ### Personagens Kenney em alta resolução
 
 - Substituídos os previews 64×64 por renderizações transparentes 512×512 dos 12 modelos Kenney CC0; agora também há imagem para `character-female-a`.

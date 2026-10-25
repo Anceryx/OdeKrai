@@ -141,3 +141,7 @@ O teste `window_sizing::tests` usa uma área útil sintética de 1.920 × 1.040 
 ## Entrada e cabeçalho
 
 O estado inicial é a Visão geral; a falta de identidade é apresentada por um cartão dispensável nessa tela. O chip do cabeçalho abre Conectores e mostra o provedor/modelo quando há credencial disponível. A disposição precisa de conferência visual em Windows.
+
+## Fechamento e bandeja do Windows
+
+O padrão é Encerrar. Em Minimizar para a bandeja, o X oculta a janela principal e o menu nativo oferece Abrir e Sair. Sair cancela solicitações registradas de provedor, destrói as janelas auxiliares e encerra o processo. O teste unitário cobre a escolha entre ocultar e encerrar; a interação real com a bandeja, reabertura por segunda instância e encerramento de WebView2 ainda requer teste visual/nativo em Windows.
