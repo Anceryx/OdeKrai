@@ -58,7 +58,7 @@
 - Centralizados os tokens visuais e adicionados componentes compartilhados para controles e cabeçalhos; a seleção usa o acento laranja e a interface respeita movimento reduzido.
 - Padronizadas as telas principais, os controles da barra de conversas e o espaço reservado para o pet na Visão geral.
 - Revisados textos visíveis para remover “COMPANION”, substituir “Ilha” por “Pet” e explicar permissões e identidade em linguagem direta.
-- Ícones Iconly aguardam os SVGs e a licença exportados para `assets-src/iconly/`.
+- Substituídos os glifos usados como ícones por Phosphor Icons Light, com importações nomeadas e componente compartilhado.
 
 ### UI-1
 

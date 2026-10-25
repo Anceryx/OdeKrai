@@ -2,7 +2,7 @@
 
 ## Requisitos
 
-- Node.js 20.19+ ou 22.12+ e npm para a interface.
+- Node.js 22.12 ou superior e npm para a interface, conforme `package.json`.
 - Rust estável, Microsoft C++ Build Tools e WebView2 para compilar Tauri no Windows.
 
 ## Comandos
