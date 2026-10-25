@@ -8,7 +8,7 @@ export async function buildSoundManifest(directory) {
   const files = await readdir(directory, { withFileTypes: true });
   const sounds = [];
   for (const entry of files) {
-    if (!entry.isFile() || entry.name.startsWith('.') || entry.name === 'License.txt') continue;
+    if (!entry.isFile() || entry.name === '.gitkeep' || entry.name === 'License.txt') continue;
     if (!/^[a-z0-9_-]+\.(wav|ogg|mp3)$/i.test(entry.name)) {
       throw new Error(`Nome ou formato de áudio inválido: ${entry.name}`);
     }

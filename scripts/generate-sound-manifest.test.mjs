@@ -27,9 +27,12 @@ describe('manifesto de sons', () => {
     ]);
   });
 
-  it.each(['som com espaço.wav', 'som.aiff'])('rejeita arquivo não permitido: %s', async (file) => {
-    temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'odekrai-sounds-'));
-    await writeFile(path.join(temporaryDirectory, file), '');
-    await expect(buildSoundManifest(temporaryDirectory)).rejects.toThrow('inválido');
-  });
+  it.each(['som com espaço.wav', 'som.aiff', '.arquivo.ogg'])(
+    'rejeita arquivo não permitido: %s',
+    async (file) => {
+      temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'odekrai-sounds-'));
+      await writeFile(path.join(temporaryDirectory, file), '');
+      await expect(buildSoundManifest(temporaryDirectory)).rejects.toThrow('inválido');
+    },
+  );
 });
