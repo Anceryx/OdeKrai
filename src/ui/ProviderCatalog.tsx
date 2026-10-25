@@ -732,7 +732,9 @@ export function ProviderCatalog({
               </div>
             ) : (
               <div className="provider-unavailable">
-                <span className="guide-mark">i</span>
+                <span className="guide-mark">
+                  <Icon name="help" />
+                </span>
                 <div>
                   <strong>Este conector ainda não está ativo no chat.</strong>
                   <p>O fluxo OAuth/ADC ainda precisa de integração nativa e validação.</p>
