@@ -2643,6 +2643,52 @@ html.island-window-html {
     padding-left: 14px;
   }
 }
+.history-confirm-backdrop {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: #000a;
+}
+.history-confirm-dialog {
+  width: min(100%, 430px);
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #17171b;
+  box-shadow: 0 18px 70px #000b;
+}
+.history-confirm-dialog h2 {
+  margin: 0 0 10px;
+  font-size: 18px;
+}
+.history-confirm-dialog p,
+.history-confirm-dialog label {
+  color: #c7c3ca;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.history-confirm-dialog label {
+  display: grid;
+  gap: 8px;
+}
+.history-confirm-dialog input {
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #101013;
+  color: #fff;
+  font: 14px var(--font-sans);
+}
+.history-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
 
 .settings-card {
   display: grid;

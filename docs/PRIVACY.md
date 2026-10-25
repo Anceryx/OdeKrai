@@ -8,7 +8,9 @@ Ao conversar, o texto enviado pelo usuário é encaminhado ao provedor seleciona
 
 A integração de credenciais depende do aplicativo nativo Windows. A prévia web não encaminha chamadas de IA.
 
-O histórico pode ser apagado por conversa ou por inteiro na interface. A exclusão total remove os registros SQLite e executa `VACUUM`; cópias de segurança e conteúdo já enviado ao provedor permanecem fora do alcance dessa exclusão.
+Uma conversa pode ser apagada pelo menu da lista. Para apagar todo o histórico, abra Configurações → Dados e privacidade, avance pela primeira confirmação e digite `APAGAR` na segunda etapa. A exclusão remove os registros SQLite e executa `VACUUM`; cópias de segurança e conteúdo já enviado ao provedor permanecem fora do alcance dessa exclusão.
+
+As respostas usam o ícone do aplicativo como avatar por padrão. A opção “Usar meu mascote como avatar do OdeKrai” troca esse ícone pelo pet selecionado; a preferência fica no armazenamento local do WebView.
 
 Após configurar a pasta, `ODEKRAI.md`, `memory/` e a versão aprovada ficam em texto simples no dispositivo. O chat envia ao provedor as regras fixas, a identidade aprovada e até 1.024 caracteres de `memory/estilo.md`; as outras notas não entram automaticamente no prompt. Não coloque senhas, tokens ou dados bancários nesses arquivos. Uma pasta com aparência de OneDrive gera aviso de possível sincronização em nuvem.
 

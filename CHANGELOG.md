@@ -8,6 +8,10 @@
 - Mensagens do usuário ficam à direita e respostas à esquerda, com avatares, horário e opção de usar o mascote como avatar do OdeKrai. Respostas mostram Markdown básico sem interpretar HTML bruto.
 - O campo cresce com o texto; Enter envia e Shift+Enter cria uma nova linha. A resposta em andamento pode ser parada ou tentada novamente após erro.
 
+### Dados e privacidade
+
+- A exclusão de todo o histórico fica em Configurações → Dados e privacidade e exige duas etapas de confirmação.
+
 ### Janela e preferências
 
 - O tamanho inicial da janela considera o fator de escala e a área útil do monitor, incluindo a barra de tarefas.

@@ -57,6 +57,7 @@ island/mascote.
 - `chat.test.ts`: busca, seleção válida, ordem das mensagens e alinhamento conforme o autor.
 - `markdown.test.ts`: texto HTML não interpretado e esquemas executáveis recusados em links.
 - `settings.test.ts`: persistência da preferência do mascote como avatar das respostas.
+- `history-actions.test.ts`: confirmação do apagamento total exige a palavra `APAGAR`.
 - Todas as ferramentas desta fase são simuladas e os testes não fazem chamadas de rede reais.
 - A confirmação de modo e exceção usa caixa nativa Win32 em execução interativa; não é exercitada por teste automatizado.
 

@@ -34,6 +34,7 @@ import { DEFAULT_PET_ID, PETS, PET_ANIMATION_LABELS, type PetAnimationState } fr
 import { PetSprite } from './PetSprite';
 import appIcon from '../assets/odekrai-app-icon.png';
 import { MessageMarkdown } from './MessageMarkdown';
+import { HistoryDeletionSettings } from './HistoryDeletionSettings';
 
 type Section =
   | 'overview'
@@ -400,6 +401,27 @@ function MainApp() {
     }
   }
 
+  async function deleteAllConversations(): Promise<boolean> {
+    if (busy) {
+      setToast('Aguarde a conclusão da resposta antes de apagar o histórico.');
+      return false;
+    }
+    try {
+      await invoke('delete_all_conversations');
+      setConversations([]);
+      setConversationId(null);
+      setMessages([]);
+      setDraft('');
+      setError('');
+      setLastFailedPrompt('');
+      setToast('Todo o histórico foi apagado.');
+      return true;
+    } catch {
+      setToast('Não foi possível apagar o histórico.');
+      return false;
+    }
+  }
+
   async function renameConversation(id: string, rawTitle: string) {
     const title = rawTitle.trim();
     if (!title || title.length > 120) return;
@@ -623,7 +645,13 @@ function MainApp() {
                 onSelectPet={(petId) => void choosePet(petId)}
               />
             )}
-            {section === 'settings' && <Settings settings={settings} update={setSettings} />}
+            {section === 'settings' && (
+              <Settings
+                settings={settings}
+                update={setSettings}
+                onDeleteAllHistory={deleteAllConversations}
+              />
+            )}
             {section === 'permissions' && <SecurityCenter page="permissions" />}
             {section === 'activity' && <SecurityCenter page="activity" />}
             {section === 'agent' && (
@@ -1147,9 +1175,11 @@ function Companion({
 function Settings({
   settings,
   update,
+  onDeleteAllHistory,
 }: {
   settings: AppSettings;
   update: (next: AppSettings) => void;
+  onDeleteAllHistory: () => Promise<boolean>;
 }) {
   return (
     <div className="page subpage">
@@ -1242,6 +1272,7 @@ function Settings({
             Restaurar
           </button>
         </div>
+        <HistoryDeletionSettings onConfirm={onDeleteAllHistory} />
       </section>
       <div className="provider-footnote">
         <p>A restauração volta ao padrão Encerrar e não remove perfil, histórico ou credenciais.</p>
