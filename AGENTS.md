@@ -6,7 +6,7 @@ Leia este arquivo inteiro antes de alterar qualquer coisa.
 ## O que é o projeto
 
 OdeKrai é um "pet" de IA para Windows que age como assistente pessoal do usuário ("o eu" dele),
-usando até 15 provedores de IA configuráveis. Stack: Tauri 2 (Rust) + React 19 + TypeScript + Vite + Three.js.
+usando até 15 provedores de IA configuráveis. Stack: Tauri 2 (Rust) + React 19 + TypeScript + Vite.
 
 Estado atual: chat com um provedor por vez, mascote 3D, pasta pessoal, memória manual e motor de permissões em Rust exercitado por ferramentas simuladas.
 Ainda NÃO existem: agent loop, ferramentas reais, aprendizado automático e roteador.
@@ -19,8 +19,9 @@ Consulte `docs/IMPLEMENTATION-STATUS.md` e `docs/ROADMAP.md` antes de planejar.
 - `src-tauri/src/agent_home.rs` — pasta pessoal, identidade aprovada e memória manual.
 - `src-tauri/src/policy.rs` — matriz pura de modo, risco, origem e workspace.
 - `src-tauri/src/security.rs` — ferramentas simuladas, aprovações, auditoria e kill switch.
-- `src/core/` — lógica sem UI: `providers`, `settings`, `island` (FSM), `sounds`, `mascot`, `mascot-face`.
-- `src/ui/` — React: `App.tsx` (Hub + chat), `OdekraiCompanion.tsx` (3D), `IslandWindow.tsx`.
+- `src/core/` — lógica sem UI: `providers`, `settings`, `island` (FSM), `sounds` e `pets`.
+- `src/ui/` — React: `App.tsx` (Hub + chat), `PetSprite.tsx` e `IslandWindow.tsx`.
+- `scripts/render-pets.mjs` — ferramenta local de desenvolvimento que usa Three.js para renderizar assets Kenney; não faz parte do aplicativo.
 - `docs/` — arquitetura, segurança, privacidade, provedores, testes, status.
 - `assets/odekrai/` — assets (a maioria fora do Git de propósito).
 

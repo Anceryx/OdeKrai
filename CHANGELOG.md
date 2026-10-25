@@ -22,7 +22,7 @@
 ### UI-3
 
 - Adicionados sprites 2D CC0 do pacote Kenney, seleção persistida no SQLite, fallback para a imagem ausente e animações CSS ligadas aos estados do assistente.
-- O pet escolhido aparece na Visão geral, nas respostas do chat e nas janelas auxiliares. O renderer 3D segue opcional e carregado sob demanda.
+- O pet escolhido aparece na Visão geral, nas respostas do chat e nas janelas auxiliares. O renderer 3D legado foi removido do aplicativo.
 - Validação visual nativa do Windows permanece pendente.
 
 ### UI-2

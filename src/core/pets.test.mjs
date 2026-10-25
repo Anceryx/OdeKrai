@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_PET_ID,
+  PET_ANIMATION_LABELS,
   PETS,
   petAnimationForIslandState,
   petImageUrl,
@@ -119,6 +120,18 @@ describe('catálogo e imagens do mascote', () => {
       error: 'error',
       paused: 'paused',
       unknown: 'idle',
+    });
+  });
+
+  it('mapeia cada estado do pet para um rótulo', () => {
+    expect(PET_ANIMATION_LABELS).toEqual({
+      idle: 'Em espera',
+      thinking: 'Pensando',
+      working: 'Trabalhando',
+      awaiting_approval: 'Aguardando aprovação',
+      success: 'Concluído',
+      error: 'Erro',
+      paused: 'Pausado',
     });
   });
 

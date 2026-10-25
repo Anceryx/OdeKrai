@@ -39,7 +39,7 @@ injeção de instrução, e a proteção depende do taint e da política para ef
 
 O frontend usa React + TypeScript + Vite. `src/core/` mantém regras sem dependência da apresentação; `src/ui/` contém o Hub e as janelas do Companion. Na abertura, o Tauri cria somente `main`. Rust cria `island` e `mascot` quando ativadas e fecha cada uma quando desativada; cria `approval` quando há uma aprovação pendente e fecha a janela após resolver ou expirar a fila. Comandos Rust controlam posição, tamanho, visibilidade e prioridade. Eventos Tauri conectam o chat às janelas do Companion e sincronizam as preferências locais.
 
-## Pet 2D e renderer legado 3D
+## Pet 2D
 
 O pet padrão é o sprite CSS de `assets/pets/kenney-mini-characters/`, escolhido pelo usuário e
 persistido na tabela `pet_preferences` do SQLite local. O catálogo `pets.json` é validado no
@@ -48,18 +48,7 @@ convertidos em animações CSS, que ficam estáticas quando a preferência do ap
 reduz movimento está ativa. O catálogo inclui o ID feminino A solicitado como padrão, mas o PNG
 correspondente não foi fornecido; essa entrada exibe um fallback CSS.
 
-O renderer Three.js continua opcional e legado. A tela Assistente permite ativá-lo; só então o
-componente 3D lazy é montado. O build local ainda emite o chunk do Three.js e o GLB se o asset
-proprietário estiver presente no checkout. Os avisos de distribuição continuam bloqueando esse
-conteúdo; não adicionar o GLB ao Git ou a artefatos publicados.
-
-## Detalhes do renderer 3D legado
-
-`src/core/mascot.ts` declara as 16 expressões, seus parâmetros faciais, o mapeamento dos estados reais da ilha e os movimentos. `src/core/mascot-face.ts` desenha os olhos em um Canvas 2D transparente. `src/ui/OdekraiCompanion.tsx` carrega o GLB com `GLTFLoader`, localiza `ADA_Face_Display`, clona o material `ADA_Eyes_Emissive_ReplaceTexture` e usa uma `CanvasTexture` como mapa de cor e emissão. O root usado pelo código chama-se `odekraiRoot`; nomes do GLB permanecem intactos.
-
-`OdekraiMascot` carrega o renderer sob demanda. As janelas `island` e `mascot` compartilham o mesmo componente, mas cada WebView mantém sua própria cena e renderer. A máquina `transitionIsland` continua sendo a fonte de prioridades; os eventos aceitos atualizam a expressão. O chat envia `thinking`, `responding`, `completed` e `error` nos pontos reais do fluxo. O renderer pausa quando a janela ou o documento está oculto, respeita movimento reduzido e libera geometrias, materiais e texturas ao desmontar.
-
-O GLB e as referências fornecidas pelo proprietário são extraídos para `assets/odekrai/character/` e `assets/odekrai/previews/official-references/`, diretórios ignorados pelo Git. Vite detecta o GLB local como asset opcional: o build local o incorpora em `dist`; um checkout sem o arquivo mantém o marcador tipográfico de fallback e não carrega o modelo. Não adicionar esse asset proprietário ao Git nem distribuir o bundle local sem autorização.
+O componente `PetSprite` renderiza o PNG selecionado e animações CSS associadas aos estados da FSM. Ele é usado na Visão geral, no chat, na prévia do Assistente e nas janelas auxiliares. A preferência `reduzir animações` e `prefers-reduced-motion` mantêm o sprite estático. Three.js é usado somente pelo script de desenvolvimento `scripts/render-pets.mjs`; não é importado pelo frontend nem pelo runtime Tauri. Modelos proprietários não são necessários para compilar ou executar o aplicativo.
 
 ## Ilha, áudio e armazenamento
 
@@ -83,7 +72,7 @@ O plugin Tauri `global-shortcut` registra o atalho no processo nativo. O kill sw
 
 ## Limites conhecidos
 
-- Um ensaio anterior abriu o executável com o UDF WebView2 padrão. O erro `0x800700AA` também ocorreu em outra tentativa; a causa permanece inconclusiva. O plugin de instância única evita abrir uma segunda instância do aplicativo, mas seu efeito sobre esse erro precisa de teste nativo. Orientação UV, alinhamento facial e renderização precisam de validação visual.
-- O aplicativo pode usar o marcador de fallback em builds sem asset local. O bundle de build feito neste checkout inclui o GLB privado e não pode ser publicado.
+- Um ensaio anterior abriu o executável com o UDF WebView2 padrão. O erro `0x800700AA` também ocorreu em outra tentativa; a causa permanece inconclusiva. O plugin de instância única evita abrir uma segunda instância do aplicativo, mas seu efeito sobre esse erro precisa de teste nativo.
+- A nitidez dos sprites, as animações, o recorte dos avatares e o hit-testing das janelas auxiliares precisam de validação visual no Windows.
 - Escalas DPI, monitores adicionais, reconexão, fullscreen e hit-testing ainda precisam de validação manual.
 - Nenhum áudio Kenney foi integrado.

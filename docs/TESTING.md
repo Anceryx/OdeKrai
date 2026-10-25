@@ -16,11 +16,10 @@ island/mascote.
 
 ## Verificações automatizadas
 
-- `npm test`: chat, estados da ilha, persistência, carregador de sons, registro das 16 expressões, mapeamento de eventos, interpolação facial, piscadas e movimento reduzido.
+- `npm test`: chat, estados da ilha, persistência, carregador de sons, catálogo de sprites, mapeamento de estados e movimento reduzido.
 - `npm run build`: TypeScript e bundle Vite.
 - `npm run format:check`: estilo Prettier.
 - `npm run check:debug-command`: confirma que declaração e registro do disparo manual estão limitados a `debug_assertions`.
-- `npm run check:release-assets`: verifica `dist/` e falha se encontrar o GLB proprietário ou referências oficiais. O comando de build Tauri executa essa verificação antes do empacotamento.
 - O workflow `CI` valida testes, formatação e build frontend no push/PR, mas não gera nem armazena instaladores Windows como artefatos do GitHub Actions.
 - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`: formatação Rust.
 - `cargo check --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc`: compilação Rust para Windows.
@@ -28,7 +27,7 @@ island/mascote.
 - `window_config_tests::main_window_uses_requested_default_and_minimum_size`: dimensões, mínimos e centralização da janela principal em `tauri.conf.json`.
 - Testes Rust da validação do endpoint, mapeamento de status, recusa de formatos de imagem e normalização de avatar; sem chamadas às APIs reais.
 - Testes Vitest da migração v1 e isolamento de endpoint/modelo entre provedores.
-- `npm run tauri:build`: valida o build e as guardas de distribuição antes de compilar/gerar o NSIS; falhar por GLB ou referência proprietária é o resultado esperado neste checkout.
+- `npm run tauri:build`: compila o aplicativo Tauri. A ausência de assets proprietários no bundle deve ser conferida no resultado do build.
 - `git diff --check`: whitespace e marcadores de conflito.
 
 ### UI-2 — sistema visual e cópia
@@ -93,11 +92,10 @@ Execute em uma sessão Windows com a janela visível. Registre sistema, escala D
 22. Na primeira execução com a janela visível, abra o seletor de pasta nativo, escolha um diretório local e confirme que o Rust ainda valida o caminho antes de criar a pasta do agente; teste os selects de idioma e tom.
 23. Nas resoluções de janela 1250×700 e 1000×600, percorra Visão geral, Conversas, Identidade e memória, Conectores, Assistente, Configurações, Permissões, Atividade e Perfil; confirme uma barra de rolagem principal, rodapé fixo e histórico selecionável com título/data.
 24. Ao mudar modo ou habilitar override, confirme que a caixa Win32 aparece sem congelar a janela principal enquanto permanece aberta; confirme Cancelar e Sim retornando à interface.
-25. Execute `npm run build` e confirme que o mascote fica em chunk lazy separado. O chunk Three.js ainda pode superar 500 kB bruto; registre o tamanho e gzip, sem elevar o limite de aviso para ocultá-lo.
-26. Teste `npm run check:release-assets` com um `dist/` de fixture limpo (passa) e com o GLB/uma referência oficial (falha com os caminhos detectados). Não publique artefatos locais que contenham o GLB.
-27. Teste `Ctrl+Shift+F12` e um atalho em conflito. Confirme que Parar tudo cancela uma resposta em streaming, nega aprovações pendentes, bloqueia novas ações e persiste após reiniciar; Retomar exige uma auditoria gravada.
-28. Na tela Atividade, confirme a cadeia, exporte JSONL e altere uma cópia de teste para verificar a detecção. Não edite os logs reais durante o ensaio.
-29. Repita a janela de aprovação em 100%, 125% e 150% de DPI, monitores distintos, foco alternado e telas menores; verifique texto longo sem renderização de Markdown/HTML.
+25. Execute `npm run build` e inspecione `dist/` para confirmar que o aplicativo não inclui modelos GLB nem arquivos do renderer 3D.
+26. Teste `Ctrl+Shift+F12` e um atalho em conflito. Confirme que Parar tudo cancela uma resposta em streaming, nega aprovações pendentes, bloqueia novas ações e persiste após reiniciar; Retomar exige uma auditoria gravada.
+27. Na tela Atividade, confirme a cadeia, exporte JSONL e altere uma cópia de teste para verificar a detecção. Não edite os logs reais durante o ensaio.
+28. Repita a janela de aprovação em 100%, 125% e 150% de DPI, monitores distintos, foco alternado e telas menores; verifique texto longo sem renderização de Markdown/HTML.
 
 ## Inspeção visual manual pendente
 
@@ -121,7 +119,7 @@ As capturas desta revisão ainda não foram produzidas. Em Windows com sessão g
 
 ## Resultados da Fase 1 (24/10/2026)
 
-- `npm run build`: passou; 54 módulos. O Vite avisou que o chunk Three.js tem 617,24 kB. O build local incorporou o GLB privado em `dist`; esse artefato não deve ser publicado.
+- Registro histórico da revisão 3.1: o build daquela versão incluiu um chunk Three.js e um GLB local. Esse resultado não descreve o código atual após a remoção do renderer 3D.
 - `npm test -- --pool=threads --maxWorkers=1`: 16 testes passaram em 5 arquivos, executados fora da restrição que causou `spawn EPERM` na primeira tentativa.
 - `cargo check --manifest-path src-tauri/Cargo.toml --lib`: passou após resolver `rusqlite` e `tauri-plugin-single-instance`.
 - `cargo fmt --manifest-path src-tauri/Cargo.toml --check`: passou.
@@ -132,6 +130,7 @@ As capturas desta revisão ainda não foram produzidas. Em Windows com sessão g
 ## Fase 2
 
 O roteiro nativo da Fase 2 está nos itens 13–16. A validação automatizada desta revisão deve incluir sanitização dos campos, caminhos proibidos, detecção de alterações externas e ordem/limite do prompt, além de `npm run build`, `npm test`, `npm run format:check`, `cargo fmt --check`, `cargo test` e `git diff --check`. Registrar os resultados efetivamente obtidos no relatório da tarefa; build e testes locais não comprovam o assistente visível, junctions do perfil real, Credential Manager nem o formato aceito por contas reais dos provedores.
+
 # Janela inicial por área útil
 
 A janela principal pede 1.250 × 700 px lógicos e é redimensionada após a criação usando a área útil do monitor (exclui a barra de tarefas) e o fator de escala informado pelo Tauri. Cada dimensão fica limitada a 90% da área útil. O mínimo nativo é reduzido quando não cabe na área útil, para evitar que a janela ultrapasse a tela.

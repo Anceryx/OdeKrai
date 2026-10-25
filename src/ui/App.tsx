@@ -17,21 +17,13 @@ import {
   SOUND_EVENTS,
   type SoundEvent,
 } from '../core/sounds';
-import {
-  MASCOT_EXPRESSIONS,
-  MASCOT_EXPRESSION_LABELS,
-  MASCOT_MOTIONS,
-  type MascotExpression,
-  type MascotMotion,
-} from '../core/mascot';
-import { OdekraiMascot, type MascotMetrics, type MascotMotionRequest } from './OdekraiMascot';
 import { AI_PROVIDERS, type AiProvider } from '../core/providers';
 import { ProviderCatalog } from './ProviderCatalog';
 import { AgentHome } from './AgentHome';
 import { Profile, initials, type ProfileData } from './Profile';
 import { ApprovalWindow, isApprovalWindow, SecurityCenter } from './SecurityCenter';
 import { Button, PageHeader, Toggle } from './DesignSystem';
-import { DEFAULT_PET_ID, PETS, type PetAnimationState } from '../core/pets';
+import { DEFAULT_PET_ID, PETS, PET_ANIMATION_LABELS, type PetAnimationState } from '../core/pets';
 import { PetSprite } from './PetSprite';
 
 type Section =
@@ -755,23 +747,7 @@ function Companion({
   onSelectPet: (petId: string) => void;
 }) {
   const [soundEvent, setSoundEvent] = useState<SoundEvent>('notification');
-  const [previewExpression, setPreviewExpression] = useState<MascotExpression>('happy');
-  const [previewMotion, setPreviewMotion] = useState<MascotMotionRequest>();
-  const [previewMetrics, setPreviewMetrics] = useState<MascotMetrics>({
-    fps: 0,
-    triangles: 0,
-    drawCalls: 0,
-  });
-  const [previewAnimations, setPreviewAnimations] = useState(true);
   const [petState, setPetState] = useState<PetAnimationState>('idle');
-  const [previewLight, setPreviewLight] = useState(1);
-  const [previewScale, setPreviewScale] = useState(1);
-  const [previewOffset, setPreviewOffset] = useState({ x: 0, y: 0 });
-  const [previewCamera, setPreviewCamera] = useState({ yaw: 0, pitch: 0, zoom: 1 });
-  const previewMotionId = useRef(0);
-  function triggerPreviewMotion(type: MascotMotion) {
-    setPreviewMotion({ type, startedAt: performance.now(), id: ++previewMotionId.current });
-  }
   async function applyPosition(next: AppSettings['companion']) {
     if (!isTauri() || !next.enabled) return;
     const width = 280 * next.size;
@@ -875,192 +851,27 @@ function Companion({
             <option value="paused">Pausado</option>
           </select>
         </label>
-        <div className="pet-legacy-toggle">
-          <span>Renderer 3D legado (WebGL)</span>
-          <Toggle
-            checked={settings.companion.mascotType === 'legacy'}
-            label="Usar renderer 3D legado"
-            onClick={() =>
-              update({
-                ...settings,
-                companion: {
-                  ...settings.companion,
-                  mascotType: settings.companion.mascotType === 'legacy' ? 'sprite' : 'legacy',
-                },
-              })
-            }
-          />
-        </div>
       </section>
       <div className="companion-preview">
         <div className="preview-grid" />
         <div className="preview-island">
           <span className="island-light" />
-          {settings.companion.mascotType === 'legacy' ? (
-            <OdekraiMascot
-              className="preview-mascot"
-              expression={previewExpression}
-              reduceMotion={settings.reduceMotion}
-              motionRequest={previewMotion}
-              animationsEnabled={previewAnimations}
-              lightIntensity={previewLight}
-              modelScale={previewScale}
-              modelOffset={previewOffset}
-              cameraYaw={previewCamera.yaw}
-              cameraPitch={previewCamera.pitch}
-              cameraZoom={previewCamera.zoom}
-              onMetrics={setPreviewMetrics}
-            />
-          ) : (
-            <PetSprite
-              className="preview-mascot"
-              estado={petState}
-              petId={selectedPet}
-              reduceMotion={settings.reduceMotion}
-            />
-          )}
+          <PetSprite
+            className="preview-mascot"
+            estado={petState}
+            petId={selectedPet}
+            reduceMotion={settings.reduceMotion}
+          />
           <span className="island-label">
             PET OdeKrai <i />
           </span>
         </div>
         <div className="preview-caption">
           <span className="eyebrow">PET DO OdeKrai</span>
-          <strong>{MASCOT_EXPRESSION_LABELS[previewExpression]}</strong>
+          <strong>{PET_ANIMATION_LABELS[petState]}</strong>
           <p>OdeKrai pronto para acompanhar sua área de trabalho.</p>
         </div>
       </div>
-      <details className="mascot-preview-tools">
-        <summary>Ajustes avançados da prévia</summary>
-        <div className="mascot-preview-notice">
-          Estes ajustes afetam somente a prévia desta tela. As configurações do pet ficam abaixo.
-        </div>
-        <div className="mascot-preview-controls">
-          <label className="mascot-expression-control">
-            <span>Expressão facial</span>
-            <select
-              value={previewExpression}
-              onChange={(event) => setPreviewExpression(event.target.value as MascotExpression)}
-            >
-              {MASCOT_EXPRESSIONS.map((expression) => (
-                <option key={expression} value={expression}>
-                  {MASCOT_EXPRESSION_LABELS[expression]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="mascot-animation-toggle">
-            <input
-              type="checkbox"
-              checked={previewAnimations}
-              onChange={(event) => setPreviewAnimations(event.target.checked)}
-            />
-            Ativar movimentos
-          </label>
-          <div className="mascot-motion-tools">
-            <strong>Testar movimento</strong>
-            <div>
-              {MASCOT_MOTIONS.map((motion) => (
-                <button key={motion.id} onClick={() => triggerPreviewMotion(motion.id)}>
-                  {motion.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <label>
-            <span>Iluminação: {previewLight.toFixed(1)}×</span>
-            <input
-              type="range"
-              min="0.4"
-              max="1.6"
-              step="0.05"
-              value={previewLight}
-              onChange={(event) => setPreviewLight(Number(event.target.value))}
-            />
-          </label>
-          <label>
-            <span>Escala: {Math.round(previewScale * 100)}%</span>
-            <input
-              type="range"
-              min="0.75"
-              max="1.25"
-              step="0.05"
-              value={previewScale}
-              onChange={(event) => setPreviewScale(Number(event.target.value))}
-            />
-          </label>
-          <label>
-            <span>Posição horizontal: {previewOffset.x.toFixed(2)}</span>
-            <input
-              type="range"
-              min="-0.45"
-              max="0.45"
-              step="0.03"
-              value={previewOffset.x}
-              onChange={(event) =>
-                setPreviewOffset((current) => ({ ...current, x: Number(event.target.value) }))
-              }
-            />
-          </label>
-          <label>
-            <span>Posição vertical: {previewOffset.y.toFixed(2)}</span>
-            <input
-              type="range"
-              min="-0.45"
-              max="0.45"
-              step="0.03"
-              value={previewOffset.y}
-              onChange={(event) =>
-                setPreviewOffset((current) => ({ ...current, y: Number(event.target.value) }))
-              }
-            />
-          </label>
-          <label>
-            <span>Órbita horizontal: {previewCamera.yaw}°</span>
-            <input
-              type="range"
-              min="-35"
-              max="35"
-              step="1"
-              value={previewCamera.yaw}
-              onChange={(event) =>
-                setPreviewCamera((current) => ({ ...current, yaw: Number(event.target.value) }))
-              }
-            />
-          </label>
-          <label>
-            <span>Órbita vertical: {previewCamera.pitch}°</span>
-            <input
-              type="range"
-              min="-18"
-              max="18"
-              step="1"
-              value={previewCamera.pitch}
-              onChange={(event) =>
-                setPreviewCamera((current) => ({ ...current, pitch: Number(event.target.value) }))
-              }
-            />
-          </label>
-          <label>
-            <span>Zoom: {previewCamera.zoom.toFixed(2)}×</span>
-            <input
-              type="range"
-              min="0.8"
-              max="1.3"
-              step="0.05"
-              value={previewCamera.zoom}
-              onChange={(event) =>
-                setPreviewCamera((current) => ({ ...current, zoom: Number(event.target.value) }))
-              }
-            />
-          </label>
-          <div className="mascot-preview-metrics" aria-live="polite">
-            <strong>Renderização</strong>
-            <span>{previewMetrics.fps} FPS</span>
-            <span>{previewMetrics.triangles.toLocaleString('pt-BR')} triângulos</span>
-            <span>{previewMetrics.drawCalls} chamadas</span>
-          </div>
-        </div>
-      </details>
       <section className="settings-panel compact-panel">
         <div className="panel-heading">
           <div>
@@ -1275,21 +1086,6 @@ function Companion({
           </div>
         </div>
       </section>
-      <section className="settings-panel compact-panel">
-        <div className="panel-heading">
-          <div>
-            <h3>Modelo 3D e expressões</h3>
-            <p>
-              O modelo oficial é um asset local e não é incluído automaticamente em publicações do
-              código-fonte.
-            </p>
-          </div>
-          <span className="state-chip connected">ATIVO NESTE CHECKOUT</span>
-        </div>
-        <div className="inline-link">
-          Leia o guia de assets e direitos <span>↗</span>
-        </div>
-      </section>
     </div>
   );
 }
@@ -1378,9 +1174,7 @@ function Settings({
         </div>
       </section>
       <div className="provider-footnote">
-        <p>
-          A restauração volta ao padrão Encerrar e não remove perfil, histórico ou credenciais.
-        </p>
+        <p>A restauração volta ao padrão Encerrar e não remove perfil, histórico ou credenciais.</p>
       </div>
     </div>
   );

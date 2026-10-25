@@ -10,6 +10,16 @@ export type PetCatalogEntry = {
 export type PetAnimationState =
   'idle' | 'thinking' | 'working' | 'awaiting_approval' | 'success' | 'error' | 'paused';
 
+export const PET_ANIMATION_LABELS: Record<PetAnimationState, string> = {
+  idle: 'Em espera',
+  thinking: 'Pensando',
+  working: 'Trabalhando',
+  awaiting_approval: 'Aguardando aprovação',
+  success: 'Concluído',
+  error: 'Erro',
+  paused: 'Pausado',
+};
+
 export const DEFAULT_PET_ID = 'character-female-a';
 
 export function validatePetCatalog(value: unknown): PetCatalogEntry[] | null {

@@ -1,46 +1,28 @@
-# Guia de assets do Odekrai
+# Guia de assets do OdeKrai
 
-O proprietário forneceu o modelo oficial `odekrai-head.glb` e seis referências visuais no pacote local `ODEKRAI_Referencias_Codex.zip`. O modelo e as referências foram extraídos para `assets/odekrai/character/` e `assets/odekrai/previews/official-references/`, respectivamente. `.gitignore` mantém esses arquivos fora do Git.
-
-O ícone do aplicativo em `src-tauri/icons/icon.ico` é um recurso provisório gerado a partir do glifo circular “O” usado na interface. A versão PNG de origem fica ao lado. Ele não contém a arte oficial do mascote e deve ser substituído quando o proprietário fornecer o ícone final.
-
-## Mascote oficial
-
-- O renderer usa o GLB com Three.js e `GLTFLoader`; as 16 expressões são desenhadas em Canvas 2D e aplicadas por `CanvasTexture` à malha facial.
-- O asset fornecido é proprietário. A presença no checkout não concede licença MIT nem autorização para distribuição. Builds locais com o modelo incorporam o GLB ao diretório `dist`; não publicar esses builds nem commitar o arquivo sem autorização expressa.
-- Um checkout sem o GLB mantém o marcador de fallback, permitindo builds públicos do código sem incluir os arquivos oficiais.
-- As imagens de referência são exclusivamente para revisão visual; não são sprites e não entram no bundle do aplicativo.
-- Preservar os nomes internos `ADA_` do modelo. O código cria o alias `odekraiRoot` e valida `ADA_Face_Display` e `ADA_Eyes_Emissive_ReplaceTexture`.
-- Não copiar arte, animação, ícones ou sons do Coucou/Mochi.
+O runtime usa sprites PNG. Os modelos 3D Kenney usados para gerar as imagens permanecem fora do repositório; o aplicativo não os carrega.
 
 ## Personagens Kenney 2D
 
-- `assets/pets/kenney-mini-characters/` contém 12 renderizações CC0 de modelos GLB do pacote Mini
-  Characters. Cada PNG mede 512×512 px, tem canal alfa e mostra a pose de repouso do modelo; a
-  ferramenta não reproduz os clipes de animação.
-- Para regenerar no Windows, instale o Google Chrome, Microsoft Edge ou Brave e execute:
+- `assets/pets/kenney-mini-characters/` contém 12 renderizações CC0 de modelos do pacote Mini Characters. Cada PNG mede 512×512 px, tem canal alfa e mostra a pose de repouso do modelo; a ferramenta não reproduz os clipes de animação.
+- Para regenerar no Windows, instale Google Chrome, Microsoft Edge ou Brave e execute:
 
   ```powershell
   npm run render:pets -- --models "C:\Users\<usuário>\Documents\Projetos Olivera\Previews\Models"
   ```
 
-- `--models` aponta à pasta que contém `GLB format/`. O renderizador lê somente os 12 arquivos
-  `character-female-a..f.glb`, `character-male-a..f.glb` e a textura `GLB format/Textures/colormap.png`.
-  O caminho de saída é `assets/pets/kenney-mini-characters/`; ele pode ser alterado no script para
-  uma revisão temporária. O Chrome roda headless com WebGL por software (ANGLE/SwiftShader), em um
-  servidor local temporário. O script carrega os modelos e a textura somente por esse servidor e
-  não faz chamadas a serviços externos. Nenhum pacote novo é necessário; a ferramenta usa o Three.js
-  já instalado no projeto e não faz parte do app Tauri nem do bundle do Vite.
-- O enquadramento, a perspectiva, as luzes e a transparência são fixos. Os modelos são centralizados
-  no chão e normalizados para 1,88 unidade de altura para manter margem no quadro. A imagem renderizada
-  é 512×512; o app limita a escala-base do pet de mesa a 160×160 CSS px e aplica a escala escolhida.
-- `npm test` verifica as dimensões e a transparência dos 12 PNGs, o catálogo e o mapeamento de
-  estado. Os modelos-fonte e a pasta `Textures/` permanecem externos e não devem ser adicionados ao
-  Git.
+- `--models` aponta à pasta que contém `GLB format/`. O renderizador lê somente os arquivos `character-female-a..f.glb`, `character-male-a..f.glb` e `GLB format/Textures/colormap.png`. O destino padrão é `assets/pets/kenney-mini-characters/`.
+- O Chrome roda headless com WebGL por software (ANGLE/SwiftShader), em um servidor local temporário. O script não faz chamadas a serviços externos. Three.js é usado somente pelo script e está em `devDependencies`; não faz parte do app Tauri nem do bundle Vite.
+- O enquadramento, a perspectiva, as luzes e a transparência são fixos. Os modelos são centralizados no chão e normalizados para 1,88 unidade de altura. O app limita a escala-base do pet de mesa a 160×160 CSS px.
+- `npm test` verifica dimensões e transparência dos PNGs, o catálogo e o mapeamento de estado. Modelos-fonte e texturas permanecem externos e não devem ser adicionados ao Git.
+
+## Ícone do aplicativo
+
+Os ícones do aplicativo ficam em `src-tauri/icons/` e são compilados pelo Tauri.
 
 ## Áudio
 
-Os efeitos configuráveis ficam em `public/sounds/`; use arquivos curtos e licenciados. `docs/AUDIO-ASSETS.md` lista eventos, formatos e processo de substituição. Nenhum som foi integrado ainda.
+Os efeitos configuráveis ficam em `public/sounds/`; use arquivos curtos e licenciados. `docs/AUDIO-ASSETS.md` lista eventos, formatos e processo de substituição.
 
 ## Pastas reservadas
 

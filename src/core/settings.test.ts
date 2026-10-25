@@ -11,6 +11,7 @@ describe('preferências persistidas', () => {
       JSON.stringify({
         language: 'pt-BR',
         reduceMotion: true,
+        companion: { mascotType: 'legacy' },
         provider: { name: 'Local', baseUrl: 'http://localhost:11434/v1', model: 'local' },
       }),
     );
@@ -24,6 +25,7 @@ describe('preferências persistidas', () => {
       position: 'bottom-right',
       sounds: { enabled: true },
     });
+    expect(migrated.companion).not.toHaveProperty('mascotType');
     expect(migrated.providers.openai.authMode).toBe('bearer');
     expect(migrated.providers.openai.providerId).toBe('openai');
     expect(migrated.providers.openai.baseUrl).toBe('https://api.openai.com/v1');
@@ -59,7 +61,10 @@ describe('preferências persistidas', () => {
       setItem: (key: string, value: string) => storage.set(key, value),
     });
     expect(loadSettings().closeBehavior).toBe('exit');
-    storage.set('odekrai.settings.v2', JSON.stringify({ ...loadSettings(), closeBehavior: 'other' }));
+    storage.set(
+      'odekrai.settings.v2',
+      JSON.stringify({ ...loadSettings(), closeBehavior: 'other' }),
+    );
     expect(loadSettings().closeBehavior).toBe('exit');
     storage.set(
       'odekrai.settings.v2',

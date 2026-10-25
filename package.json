@@ -10,7 +10,6 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "check:debug-command": "node scripts/check-debug-command.mjs",
-    "check:release-assets": "node scripts/check-release-assets.mjs",
     "render:pets": "node scripts/render-pets.mjs",
     "preview": "vite preview",
     "test": "vitest run",
@@ -26,16 +25,15 @@
     "@tauri-apps/plugin-dialog": "^2.8.3",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "simple-icons": "16.35.0",
-    "three": "0.186.1"
+    "simple-icons": "16.35.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.8.4",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
-    "@types/three": "^0.185.3",
     "@vitejs/plugin-react": "^5.1.1",
     "prettier": "^3.9.10",
+    "three": "^0.186.1",
     "typescript": "^7.0.2",
     "vite": "^7.3.7",
     "vitest": "^5.0.5"

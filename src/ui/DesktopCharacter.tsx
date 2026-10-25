@@ -4,18 +4,13 @@ import { emit, listen } from '@tauri-apps/api/event';
 import { loadSettings, saveSettings } from '../core/settings';
 import { normalizeSoundPreferences, playSound } from '../core/sounds';
 import { initialIslandSnapshot, transitionIsland, type IslandEvent } from '../core/island';
-import { expressionForIslandState, type MascotExpression } from '../core/mascot';
 import { petAnimationForIslandState, type PetAnimationState } from '../core/pets';
-import { OdekraiMascot, type MascotMotionRequest } from './OdekraiMascot';
 import { PetSprite } from './PetSprite';
 
 export function DesktopCharacter() {
   const [settings, setSettings] = useState(loadSettings);
   const [error, setError] = useState('');
-  const [expression, setExpression] = useState<MascotExpression>('idle');
   const [petState, setPetState] = useState<PetAnimationState>('idle');
-  const [motionRequest, setMotionRequest] = useState<MascotMotionRequest>();
-  const motionId = useRef(0);
   const [returning, setReturning] = useState(false);
   const activitySnapshot = useRef(initialIslandSnapshot);
   const moveTimer = useRef<number | undefined>(undefined);
@@ -38,7 +33,6 @@ export function DesktopCharacter() {
       }),
       listen<IslandEvent>('companion-state', ({ payload }) => {
         activitySnapshot.current = transitionIsland(activitySnapshot.current, payload);
-        setExpression(expressionForIslandState(activitySnapshot.current.state));
         setPetState(petAnimationForIslandState(activitySnapshot.current.state));
       }),
     ]).then((off) => {
@@ -66,11 +60,6 @@ export function DesktopCharacter() {
       companion.coordinates?.y ?? (bottom ? Math.max(0, screen.availHeight - height - 58) : 28);
     try {
       setReturning(true);
-      setMotionRequest({
-        type: 'returning-home',
-        startedAt: performance.now(),
-        id: ++motionId.current,
-      });
       await invoke('set_island_position', { x, y, size: companion.size });
       await invoke('set_island_topmost', { enabled: companion.alwaysOnTop });
       await invoke('set_island_visible', { visible: true });
@@ -90,39 +79,18 @@ export function DesktopCharacter() {
   return (
     <main
       className={`desktop-character ${returning ? 'desktop-returning' : ''} ${settings.reduceMotion ? 'reduce-motion' : ''}`}
-      onPointerDown={() => {
-        setMotionRequest({
-          type: 'dragging',
-          startedAt: performance.now(),
-          id: ++motionId.current,
-        });
-      }}
-      onPointerUp={() => {
-        window.setTimeout(() => {
-          setMotionRequest({ type: 'idle', startedAt: performance.now(), id: ++motionId.current });
-        }, 300);
-      }}
     >
       <div className="desktop-drag-handle" data-tauri-drag-region aria-hidden="true" />
-      {settings.companion.mascotType === 'legacy' ? (
-        <OdekraiMascot
-          className={`desktop-model desktop-${expression}`}
-          expression={expression}
-          reduceMotion={settings.reduceMotion}
-          motionRequest={motionRequest}
-        />
-      ) : (
-        <PetSprite
-          className="desktop-model"
-          estado={petState}
-          reduceMotion={settings.reduceMotion}
-          style={{
-            inset: `${8 * settings.companion.size}px`,
-            width: `${160 * settings.companion.size}px`,
-            height: `${160 * settings.companion.size}px`,
-          }}
-        />
-      )}
+      <PetSprite
+        className="desktop-model"
+        estado={petState}
+        reduceMotion={settings.reduceMotion}
+        style={{
+          inset: `${8 * settings.companion.size}px`,
+          width: `${160 * settings.companion.size}px`,
+          height: `${160 * settings.companion.size}px`,
+        }}
+      />
       <button
         className="desktop-return"
         onClick={() => void returnHome()}

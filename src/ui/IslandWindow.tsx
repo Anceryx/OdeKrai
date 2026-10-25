@@ -10,9 +10,7 @@ import {
 } from '../core/island';
 import { loadSettings, saveSettings } from '../core/settings';
 import { normalizeSoundPreferences, playSound } from '../core/sounds';
-import { expressionForIslandState } from '../core/mascot';
 import { petAnimationForIslandState } from '../core/pets';
-import { OdekraiMascot } from './OdekraiMascot';
 import { PetSprite } from './PetSprite';
 
 export function IslandWindow() {
@@ -106,19 +104,11 @@ export function IslandWindow() {
               )
             }
           >
-            {settings.companion.mascotType === 'legacy' ? (
-              <OdekraiMascot
-                className="island-mascot-renderer"
-                expression={expressionForIslandState(state)}
-                reduceMotion={settings.reduceMotion}
-              />
-            ) : (
-              <PetSprite
-                className="island-mascot-renderer"
-                estado={petAnimationForIslandState(state)}
-                reduceMotion={settings.reduceMotion}
-              />
-            )}
+            <PetSprite
+              className="island-mascot-renderer"
+              estado={petAnimationForIslandState(state)}
+              reduceMotion={settings.reduceMotion}
+            />
           </button>
         )}
         <div className="island-copy">

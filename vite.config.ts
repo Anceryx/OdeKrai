@@ -6,14 +6,5 @@ export default defineConfig({
   clearScreen: false,
   server: { strictPort: true, host: '127.0.0.1', port: 1420 },
   envPrefix: ['VITE_'],
-  build: {
-    target: 'es2022',
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes('/node_modules/three/')) return 'three';
-        },
-      },
-    },
-  },
+  build: { target: 'es2022' },
 });
