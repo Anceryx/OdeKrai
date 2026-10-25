@@ -17,6 +17,7 @@
     "test:release-artifact": "node scripts/test-release-artifact.mjs",
     "check:encoding": "node scripts/check-encoding.mjs",
     "render:pets": "node scripts/render-pets.mjs",
+    "render:pets:animations": "node scripts/render-pets.mjs --animations",
     "preview": "vite preview",
     "pretest": "node scripts/generate-sound-manifest.mjs",
     "test": "vitest run",

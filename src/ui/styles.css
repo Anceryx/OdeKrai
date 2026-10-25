@@ -3502,6 +3502,36 @@ html.island-window-html {
   filter: drop-shadow(0 5px 6px #0009);
   user-select: none;
 }
+.pet-sheet-viewport {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.pet-sheet {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  height: 100%;
+  filter: drop-shadow(0 5px 6px #0009);
+  user-select: none;
+}
+.pet-sheet-loop {
+  animation: pet-sheet-play var(--pet-duration) steps(var(--pet-steps), end) infinite;
+}
+.pet-sheet-once {
+  animation: pet-sheet-play var(--pet-duration) steps(var(--pet-steps), end) 1 forwards;
+}
+@keyframes pet-sheet-play {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(var(--pet-last-frame));
+  }
+}
 .pet-shadow {
   position: absolute;
   z-index: 0;
@@ -3572,33 +3602,28 @@ html.island-window-html {
   border-radius: 4px;
   background: #27272a;
 }
-.pet-state-idle .pet-image {
-  animation: pet-breathe 3.4s ease-in-out infinite;
-}
-.pet-state-thinking .pet-image {
-  animation: pet-think 1.8s ease-in-out infinite;
-}
-.pet-state-working .pet-image {
-  animation: pet-work 0.42s ease-in-out infinite alternate;
-}
-.pet-state-awaiting_approval .pet-image {
-  animation: pet-wait 1s ease-in-out infinite;
-}
 .pet-state-success .pet-image {
-  animation: pet-jump 0.6s ease-out 2;
   filter: drop-shadow(0 0 8px #86efac);
 }
 .pet-state-error .pet-image {
-  animation: pet-shake 0.4s ease-in-out 2;
   filter: drop-shadow(0 0 7px #ef4444);
 }
 .pet-state-paused .pet-image {
   filter: grayscale(1) drop-shadow(0 5px 6px #0009);
-  animation: none;
+}
+.pet-reduce-motion .pet-sheet {
+  animation: none !important;
+  transform: translateX(var(--pet-last-frame));
+}
+.pet-hidden,
+.pet-hidden * {
+  animation-play-state: paused !important;
 }
 .pet-reduce-motion .pet-image,
+.pet-reduce-motion .pet-overlay,
 .pet-reduce-motion .pet-overlay *,
 .reduce-motion .pet-image,
+.reduce-motion .pet-overlay,
 .reduce-motion .pet-overlay * {
   animation: none !important;
   transition: none !important;
@@ -3616,6 +3641,9 @@ html.island-window-html {
   max-height: none;
   object-fit: cover;
   object-position: 50% 16%;
+}
+.pet-avatar .pet-sheet-viewport {
+  display: none;
 }
 .pet-avatar .pet-image {
   animation: none !important;
@@ -3701,39 +3729,6 @@ html.island-window-html {
   height: 100%;
   max-width: none;
   max-height: none;
-}
-@keyframes pet-breathe {
-  50% {
-    transform: translateY(-3px) scale(1.035);
-  }
-}
-@keyframes pet-think {
-  50% {
-    transform: rotate(5deg) translateY(-2px);
-  }
-}
-@keyframes pet-work {
-  to {
-    transform: translateY(-3px) rotate(2deg);
-  }
-}
-@keyframes pet-wait {
-  50% {
-    transform: translateY(-2px) scale(1.035);
-  }
-}
-@keyframes pet-jump {
-  45% {
-    transform: translateY(-8px);
-  }
-}
-@keyframes pet-shake {
-  25% {
-    transform: translateX(-3px);
-  }
-  75% {
-    transform: translateX(3px);
-  }
 }
 @keyframes pet-pulse {
   50% {

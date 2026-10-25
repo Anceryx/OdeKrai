@@ -3,8 +3,10 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import {
   DEFAULT_PET_ID,
+  petAnimationSheet,
   petImageUrl,
   petMotionDisabled,
+  petVisualMode,
   type PetAnimationState,
 } from '../core/pets';
 import { Icon, type IconName } from './Icon';
@@ -15,6 +17,7 @@ export function PetSprite({
   reduceMotion = false,
   className = '',
   avatar = false,
+  staticImage = false,
   style,
 }: {
   estado: PetAnimationState;
@@ -22,10 +25,16 @@ export function PetSprite({
   reduceMotion?: boolean;
   className?: string;
   avatar?: boolean;
+  staticImage?: boolean;
   style?: CSSProperties;
 }) {
   const [storedPetId, setStoredPetId] = useState(DEFAULT_PET_ID);
   const [imageFailed, setImageFailed] = useState(false);
+  const [sheetFailed, setSheetFailed] = useState(false);
+  const [visualState, setVisualState] = useState(estado);
+  const [documentVisible, setDocumentVisible] = useState(
+    () => typeof document === 'undefined' || document.visibilityState === 'visible',
+  );
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(
     () =>
       typeof window !== 'undefined' &&
@@ -36,6 +45,12 @@ export function PetSprite({
     const updatePreference = () => setPrefersReducedMotion(query.matches);
     query.addEventListener('change', updatePreference);
     return () => query.removeEventListener('change', updatePreference);
+  }, []);
+  useEffect(() => setVisualState(estado), [estado]);
+  useEffect(() => {
+    const updateVisibility = () => setDocumentVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', updateVisibility);
+    return () => document.removeEventListener('visibilitychange', updateVisibility);
   }, []);
   useEffect(() => {
     if (!isTauri() || petId) return;
@@ -54,18 +69,46 @@ export function PetSprite({
   }, [petId]);
 
   const selected = petId ?? storedPetId;
-  useEffect(() => setImageFailed(false), [selected]);
+  const motionDisabled = petMotionDisabled(reduceMotion, prefersReducedMotion);
+  const sheet = avatar || staticImage ? null : petAnimationSheet(selected, visualState);
+  useEffect(() => {
+    setImageFailed(false);
+    setSheetFailed(false);
+  }, [selected, sheet?.url]);
   const image = imageFailed ? null : petImageUrl(selected);
+  const visualMode = petVisualMode(Boolean(sheet && !sheetFailed), Boolean(image));
   return (
     <span
-      className={`pet-sprite pet-state-${estado} ${petMotionDisabled(reduceMotion, prefersReducedMotion) ? 'pet-reduce-motion' : ''} ${avatar ? 'pet-avatar' : ''} ${className}`.trim()}
+      className={`pet-sprite pet-state-${visualState} ${motionDisabled ? 'pet-reduce-motion' : ''} ${!documentVisible ? 'pet-hidden' : ''} ${avatar ? 'pet-avatar' : ''} ${className}`.trim()}
       role={avatar ? 'img' : undefined}
       aria-label={avatar ? 'Avatar do OdeKrai' : undefined}
       aria-hidden={avatar ? undefined : true}
       style={style}
     >
       <span className="pet-shadow" aria-hidden="true" />
-      {image ? (
+      {visualMode === 'animated' && sheet ? (
+        <span className="pet-sheet-viewport" aria-hidden="true">
+          <img
+            className={`pet-sheet ${sheet.loop ? 'pet-sheet-loop' : 'pet-sheet-once'}`}
+            src={sheet.url}
+            alt=""
+            draggable="false"
+            style={
+              {
+                '--pet-steps': sheet.frames - 1,
+                '--pet-duration': `${sheet.frames / sheet.fps}s`,
+                '--pet-last-frame': `-${((sheet.frames - 1) / sheet.frames) * 100}%`,
+                width: `${sheet.frames * 100}%`,
+                animationPlayState: documentVisible ? 'running' : 'paused',
+              } as CSSProperties
+            }
+            onAnimationEnd={() => {
+              if (!sheet.loop) setVisualState('idle');
+            }}
+            onError={() => setSheetFailed(true)}
+          />
+        </span>
+      ) : visualMode === 'static' && image ? (
         <img
           className="pet-image"
           src={image}

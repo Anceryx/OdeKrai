@@ -7,8 +7,10 @@ import {
   PET_ANIMATION_LABELS,
   PETS,
   petAnimationForIslandState,
+  petAnimationSheet,
   petImageUrl,
   petMotionDisabled,
+  petVisualMode,
   validatePetCatalog,
 } from './pets';
 
@@ -66,6 +68,33 @@ function pngAlphaBounds(bytes) {
     previous = row;
   }
   return { width, height, transparent, visible };
+}
+
+function webpInfo(bytes) {
+  expect(bytes.toString('ascii', 0, 4)).toBe('RIFF');
+  expect(bytes.toString('ascii', 8, 12)).toBe('WEBP');
+  let width = 0;
+  let height = 0;
+  let alpha = false;
+  for (let offset = 12; offset + 8 <= bytes.length;) {
+    const type = bytes.toString('ascii', offset, offset + 4);
+    const length = bytes.readUInt32LE(offset + 4);
+    const data = offset + 8;
+    if (type === 'VP8X') {
+      alpha ||= (bytes[data] & 0x10) !== 0;
+      width = 1 + bytes[data + 4] + (bytes[data + 5] << 8) + (bytes[data + 6] << 16);
+      height = 1 + bytes[data + 7] + (bytes[data + 8] << 8) + (bytes[data + 9] << 16);
+    } else if (type === 'ALPH') {
+      alpha = true;
+    } else if (type === 'VP8L') {
+      const bits = bytes.readUInt32LE(data + 1);
+      width = (bits & 0x3fff) + 1;
+      height = ((bits >>> 14) & 0x3fff) + 1;
+      alpha ||= (bits & 0x10000000) !== 0;
+    }
+    offset += 8 + length + (length & 1);
+  }
+  return { width, height, alpha };
 }
 
 describe('catálogo e imagens do mascote', () => {
@@ -138,8 +167,73 @@ describe('catálogo e imagens do mascote', () => {
   it('retorna fallback para um ID sem PNG no catálogo e preserva o movimento reduzido', () => {
     expect(petImageUrl('character-missing')).toBeNull();
     expect(petImageUrl('character-male-a')).toMatch(/\.png$/);
+    expect(petAnimationSheet('character-missing', 'idle')).toBeNull();
+    expect(petVisualMode(false, Boolean(petImageUrl('character-female-a')))).toBe('static');
+    expect(petVisualMode(false, false)).toBe('placeholder');
+    expect(petVisualMode(true, true)).toBe('animated');
     expect(petMotionDisabled(true, false)).toBe(true);
     expect(petMotionDisabled(false, true)).toBe(true);
     expect(petMotionDisabled(false, false)).toBe(false);
+  });
+
+  it('valida manifestos, mapeamento para folhas, dimensões, transparência e orçamento', () => {
+    const sheetsSeen = new Set();
+    let totalBytes = 0;
+    const states = [
+      'idle',
+      'thinking',
+      'working',
+      'awaiting_approval',
+      'success',
+      'error',
+      'paused',
+    ];
+    const expectedClips = {
+      idle: 'idle',
+      thinking: 'idle',
+      working: 'interact-right',
+      awaiting_approval: 'emote-no',
+      success: 'jump',
+      error: 'die',
+      paused: 'sit',
+    };
+    for (const pet of PETS) {
+      const manifestPath = fileURLToPath(
+        new URL(
+          `../../assets/pets/kenney-mini-characters/animations/${pet.id}.json`,
+          import.meta.url,
+        ),
+      );
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+      expect(manifest.id).toBe(pet.id);
+      expect(manifest.frameWidth).toBe(192);
+      expect(manifest.frameHeight).toBe(192);
+      for (const state of states) {
+        const sheet = petAnimationSheet(pet.id, state);
+        const entry = manifest.animations[state];
+        expect(sheet, `${pet.id}/${state}`).not.toBeNull();
+        expect(entry.clip).toBe(expectedClips[state]);
+        expect(entry.frames).toBeGreaterThanOrEqual(8);
+        expect(entry.frames).toBeLessThanOrEqual(12);
+        expect(entry.fps).toBeGreaterThan(0);
+        expect(typeof entry.loop).toBe('boolean');
+        expect(entry.loop).toBe(!['success', 'error'].includes(state));
+        expect(sheet.url).toBeTruthy();
+        const path = fileURLToPath(
+          new URL(
+            `../../assets/pets/kenney-mini-characters/animations/${entry.file}`,
+            import.meta.url,
+          ),
+        );
+        const bytes = readFileSync(path);
+        if (!sheetsSeen.has(path)) totalBytes += bytes.length;
+        sheetsSeen.add(path);
+        const info = webpInfo(bytes);
+        expect(info.width).toBe(entry.frames * 192);
+        expect(info.height).toBe(192);
+        expect(info.alpha).toBe(true);
+      }
+    }
+    expect(totalBytes).toBeLessThanOrEqual(6 * 1024 * 1024);
   });
 });

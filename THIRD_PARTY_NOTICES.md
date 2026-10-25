@@ -44,11 +44,14 @@ Os modelos e a textura do pacote **Mini Characters (1.0)** foram criados e distr
 (www.kenney.nl), em 17-07-2024. Licença Creative Commons Zero (CC0):
 https://creativecommons.org/publicdomain/zero/1.0/. Atribuição não é obrigatória.
 Texto da licença: `assets/pets/kenney-mini-characters/CC0-LICENSE.txt`.
-Origem do pacote: https://kenney.nl/assets/mini-characters. Os 12 PNGs são renderizações dos
-modelos GLB originais, com textura externa, câmera e iluminação uniformes, pose de repouso/bind
-(nenhum clipe reproduzido), fundo transparente e saída de 512×512 px. Não foram incluídos os
-modelos nem a textura no repositório. O script de desenvolvimento é `scripts/render-pets.mjs`;
-instruções de regeneração: `docs/ASSET-GUIDE.md`.
+Origem do pacote: https://kenney.nl/assets/mini-characters. Os 12 PNGs estáticos de 512×512 px e
+as folhas WebP de animação (quadros de 192×192 px) são renderizações derivadas dos modelos GLB
+originais e da textura externa, com câmera e iluminação uniformes e fundo transparente. Os PNGs
+estáticos mostram o quadro central do clipe `idle`; os manifestos em
+`assets/pets/kenney-mini-characters/animations/` identificam os clipes e os parâmetros de cada
+folha. Não foram incluídos os modelos nem a textura no repositório. As renderizações derivadas
+permanecem cobertas pela licença CC0 do pacote. O script de desenvolvimento é
+`scripts/render-pets.mjs`; instruções de regeneração: `docs/ASSET-GUIDE.md`.
 
 ## Logotipos de provedores de IA
 

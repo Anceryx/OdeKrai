@@ -148,7 +148,12 @@ export function AssistantScreen({
               key={pet.id}
               onClick={() => onSelectPet(pet.id)}
             >
-              <PetSprite estado="idle" petId={pet.id} reduceMotion={settings.reduceMotion} />
+              <PetSprite
+                estado="idle"
+                petId={pet.id}
+                reduceMotion={settings.reduceMotion}
+                staticImage
+              />
               <span>{pet.name}</span>
               {selectedPet === pet.id && <small>Selecionado</small>}
             </button>

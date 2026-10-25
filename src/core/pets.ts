@@ -10,6 +10,21 @@ export type PetCatalogEntry = {
 export type PetAnimationState =
   'idle' | 'thinking' | 'working' | 'awaiting_approval' | 'success' | 'error' | 'paused';
 
+export type PetAnimationSheet = {
+  clip: string;
+  file: string;
+  frames: number;
+  fps: number;
+  loop: boolean;
+};
+
+export type PetAnimationManifest = {
+  id: string;
+  frameWidth: number;
+  frameHeight: number;
+  animations: Record<PetAnimationState, PetAnimationSheet>;
+};
+
 export const PET_ANIMATION_LABELS: Record<PetAnimationState, string> = {
   idle: 'Em espera',
   thinking: 'Pensando',
@@ -51,11 +66,56 @@ const petAssets = import.meta.glob<string>('../../assets/pets/kenney-mini-charac
   query: '?url',
   import: 'default',
 });
+const animationAssets = import.meta.glob<string>(
+  '../../assets/pets/kenney-mini-characters/animations/*.webp',
+  { eager: true, query: '?url', import: 'default' },
+);
+const animationManifests = import.meta.glob<PetAnimationManifest>(
+  '../../assets/pets/kenney-mini-characters/animations/*.json',
+  { eager: true, import: 'default' },
+);
 
 export function petImageUrl(petId: string): string | null {
   const pet = PETS.find((entry) => entry.id === petId);
   if (!pet || !/^[a-z0-9-]+\.png$/.test(pet.file)) return null;
   return petAssets[`../../assets/pets/kenney-mini-characters/${pet.file}`] ?? null;
+}
+
+export function petAnimationSheet(petId: string, state: PetAnimationState) {
+  const loadedManifest =
+    animationManifests[`../../assets/pets/kenney-mini-characters/animations/${petId}.json`];
+  const manifest =
+    (loadedManifest as unknown as { default?: PetAnimationManifest } | undefined)?.default ??
+    loadedManifest;
+  const sheet = manifest?.animations?.[state];
+  if (
+    manifest?.id !== petId ||
+    manifest.frameWidth !== 192 ||
+    manifest.frameHeight !== 192 ||
+    !sheet ||
+    typeof sheet.clip !== 'string' ||
+    !/^[a-z0-9-]+\.webp$/.test(sheet.file) ||
+    !Number.isInteger(sheet.frames) ||
+    sheet.frames < 1 ||
+    sheet.frames > 12 ||
+    !Number.isFinite(sheet.fps) ||
+    sheet.fps <= 0 ||
+    typeof sheet.loop !== 'boolean'
+  ) {
+    return null;
+  }
+  const loadedUrl =
+    animationAssets[`../../assets/pets/kenney-mini-characters/animations/${sheet.file}`];
+  const url = (loadedUrl as unknown as { default?: string } | undefined)?.default ?? loadedUrl;
+  return url
+    ? { ...sheet, url, frameWidth: manifest.frameWidth, frameHeight: manifest.frameHeight }
+    : null;
+}
+
+export function petVisualMode(hasAnimationSheet: boolean, hasStaticImage: boolean) {
+  if (hasAnimationSheet) return 'animated';
+  if (hasStaticImage) return 'static';
+  return 'placeholder';
 }
 
 const islandStateAnimation: Record<string, PetAnimationState> = {

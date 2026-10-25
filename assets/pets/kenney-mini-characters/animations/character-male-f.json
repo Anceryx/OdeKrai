@@ -1,0 +1,56 @@
+{
+  "id": "character-male-f",
+  "frameWidth": 192,
+  "frameHeight": 192,
+  "animations": {
+    "idle": {
+      "clip": "idle",
+      "loop": true,
+      "file": "character-male-f-idle.webp",
+      "frames": 9,
+      "fps": 6.74999979883433
+    },
+    "thinking": {
+      "clip": "idle",
+      "loop": true,
+      "file": "character-male-f-idle.webp",
+      "frames": 9,
+      "fps": 6.74999979883433
+    },
+    "working": {
+      "clip": "interact-right",
+      "loop": true,
+      "file": "character-male-f-interact-right.webp",
+      "frames": 9,
+      "fps": 13.49999959766866
+    },
+    "awaiting_approval": {
+      "clip": "emote-no",
+      "loop": true,
+      "file": "character-male-f-emote-no.webp",
+      "frames": 9,
+      "fps": 13.49999959766866
+    },
+    "success": {
+      "clip": "jump",
+      "loop": false,
+      "file": "character-male-f-jump.webp",
+      "frames": 9,
+      "fps": 18
+    },
+    "error": {
+      "clip": "die",
+      "loop": false,
+      "file": "character-male-f-die.webp",
+      "frames": 9,
+      "fps": 26.99999919533732
+    },
+    "paused": {
+      "clip": "sit",
+      "loop": true,
+      "file": "character-male-f-sit.webp",
+      "frames": 9,
+      "fps": 53.99999839067464
+    }
+  }
+}
