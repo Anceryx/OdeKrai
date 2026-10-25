@@ -4,20 +4,21 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
-    future::Future,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Mutex,
-    },
+    sync::{atomic::AtomicU64, Mutex},
     time::Duration,
 };
 use tauri::{ipc::Channel, Manager, State};
 use tokio_util::sync::CancellationToken;
 
+mod cancellation;
+static INTERNAL_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 const KEYRING_SERVICE: &str = "site.anceryx.odekrai.provider";
+pub use cancellation::cancel_all;
+#[cfg(test)]
+use cancellation::cancel_requests;
+use cancellation::cancellable_request;
 const MAX_CREDENTIAL_BYTES: usize = 4096;
 const MAX_MESSAGE_BYTES: usize = 1_000_000;
-static INTERNAL_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,7 +55,7 @@ struct CatalogEntry {
 }
 
 fn catalog_entry(provider_id: &str) -> Option<CatalogEntry> {
-    serde_json::from_str::<Vec<CatalogEntry>>(include_str!("../resources/provider-catalog.json"))
+    serde_json::from_str::<Vec<CatalogEntry>>(include_str!("../../resources/provider-catalog.json"))
         .ok()?
         .into_iter()
         .find(|entry| entry.id == provider_id)
@@ -80,20 +81,6 @@ pub struct ProviderReply {
 
 #[derive(Default)]
 pub struct ProviderRequests(Mutex<HashMap<String, CancellationToken>>);
-
-pub fn cancel_all(app: &tauri::AppHandle) {
-    if let Some(state) = app.try_state::<ProviderRequests>() {
-        cancel_requests(&state);
-    }
-}
-
-fn cancel_requests(state: &ProviderRequests) {
-    if let Ok(requests) = state.0.lock() {
-        for token in requests.values() {
-            token.cancel();
-        }
-    }
-}
 
 fn supports_credentials(provider_id: &str) -> bool {
     matches!(
@@ -206,50 +193,6 @@ pub async fn list_provider_models(
 ) -> Result<Vec<ModelOption>, String> {
     super::require_main(&caller)?;
     cancellable_request(&state, &security, fetch_models(&provider_id, &base_url)).await
-}
-
-async fn cancellable_request<T, F>(
-    requests: &ProviderRequests,
-    security: &crate::security::SecurityState,
-    future: F,
-) -> Result<T, String>
-where
-    F: Future<Output = Result<T, String>>,
-{
-    if security.is_halted() {
-        return Err("O OdeKrai está parado pelo kill switch.".into());
-    }
-    let token = CancellationToken::new();
-    let id;
-    {
-        let mut pending = requests
-            .0
-            .lock()
-            .map_err(|_| "Não foi possível iniciar a solicitação.".to_string())?;
-        loop {
-            let candidate = format!(
-                "internal-{}",
-                INTERNAL_REQUEST_ID.fetch_add(1, Ordering::Relaxed)
-            );
-            if !pending.contains_key(&candidate) {
-                id = candidate;
-                pending.insert(id.clone(), token.clone());
-                break;
-            }
-        }
-    }
-    if security.is_halted() {
-        token.cancel();
-    }
-    let result = tokio::select! {
-        biased;
-        _=token.cancelled()=>Err("Solicitação cancelada pelo kill switch.".into()),
-        result=future=>result,
-    };
-    if let Ok(mut pending) = requests.0.lock() {
-        pending.remove(&id);
-    }
-    result
 }
 
 async fn fetch_models(provider_id: &str, base_url: &str) -> Result<Vec<ModelOption>, String> {
@@ -1161,7 +1104,7 @@ mod tests {
     async fn sends_adapter_urls_headers_and_bodies_to_mock_server() {
         use std::io::{Read, Write};
         for entry in serde_json::from_str::<Vec<CatalogEntry>>(include_str!(
-            "../resources/provider-catalog.json"
+            "../../resources/provider-catalog.json"
         ))
         .unwrap()
         {
