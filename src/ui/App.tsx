@@ -19,8 +19,9 @@ import { ConversationsScreen } from './screens/Conversations';
 import { ProvidersScreen } from './screens/Providers';
 import { IdentityScreen } from './screens/Identity';
 import { initials, type ProfileData } from './Profile';
-import { ApprovalWindow, isApprovalWindow, SecurityCenter } from './SecurityCenter';
+import { ApprovalWindow, isApprovalWindow } from './SecurityCenter';
 import { PermissionsScreen } from './screens/Permissions';
+import { ActivityScreen } from './screens/Activity';
 import { DEFAULT_PET_ID, PETS } from '../core/pets';
 import { Icon, type IconName } from './Icon';
 import { setPrimaryProviderSettings, toggleProviderSettings } from '../core/provider-directory';
@@ -682,7 +683,7 @@ function MainApp() {
               />
             )}
             {section === 'permissions' && <PermissionsScreen />}
-            {section === 'activity' && <SecurityCenter page="activity" />}
+            {section === 'activity' && <ActivityScreen />}
             {section === 'agent' && (
               <IdentityScreen
                 initialName={profile.displayName}
