@@ -17,7 +17,7 @@ import { AssistantScreen } from './screens/Assistant';
 import { SettingsScreen } from './screens/Settings';
 import { ConversationsScreen } from './screens/Conversations';
 import { ProvidersScreen } from './screens/Providers';
-import { AgentHome } from './AgentHome';
+import { IdentityScreen } from './screens/Identity';
 import { initials, type ProfileData } from './Profile';
 import { ApprovalWindow, isApprovalWindow, SecurityCenter } from './SecurityCenter';
 import { DEFAULT_PET_ID, PETS } from '../core/pets';
@@ -683,7 +683,7 @@ function MainApp() {
             {section === 'permissions' && <SecurityCenter page="permissions" />}
             {section === 'activity' && <SecurityCenter page="activity" />}
             {section === 'agent' && (
-              <AgentHome
+              <IdentityScreen
                 initialName={profile.displayName}
                 initialNickname={profile.nickname}
                 profileValue={profile}
