@@ -1511,7 +1511,12 @@ fn submit_action(
                 result: None,
             })
         }
-        Decision::Deny(_) => unreachable!(),
+        Decision::Deny(_) => Ok(ActionResult {
+            id,
+            status: "denied".into(),
+            message: "A ação foi bloqueada pelas regras de segurança.".into(),
+            result: None,
+        }),
     }
 }
 

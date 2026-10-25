@@ -56,8 +56,10 @@ pub(super) fn chat_request_body(request: &ChatRequest) -> Value {
         };
         if let Some(previous) = messages.last_mut() {
             if previous["role"] == role {
-                previous["content"].as_array_mut().unwrap().extend(content);
-                continue;
+                if let Some(previous_content) = previous["content"].as_array_mut() {
+                    previous_content.extend(content);
+                    continue;
+                }
             }
         }
         messages.push(json!({ "role": role, "content": content }));
