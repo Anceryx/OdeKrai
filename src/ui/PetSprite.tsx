@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import {
@@ -14,12 +14,14 @@ export function PetSprite({
   reduceMotion = false,
   className = '',
   avatar = false,
+  style,
 }: {
   estado: PetAnimationState;
   petId?: string;
   reduceMotion?: boolean;
   className?: string;
   avatar?: boolean;
+  style?: CSSProperties;
 }) {
   const [storedPetId, setStoredPetId] = useState(DEFAULT_PET_ID);
   const [imageFailed, setImageFailed] = useState(false);
@@ -57,6 +59,7 @@ export function PetSprite({
       role={avatar ? 'img' : undefined}
       aria-label={avatar ? 'Avatar do OdeKrai' : undefined}
       aria-hidden={avatar ? undefined : true}
+      style={style}
     >
       <span className="pet-shadow" aria-hidden="true" />
       {image ? (

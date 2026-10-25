@@ -116,6 +116,11 @@ export function DesktopCharacter() {
           className="desktop-model"
           estado={petState}
           reduceMotion={settings.reduceMotion}
+          style={{
+            inset: `${8 * settings.companion.size}px`,
+            width: `${160 * settings.companion.size}px`,
+            height: `${160 * settings.companion.size}px`,
+          }}
         />
       )}
       <button

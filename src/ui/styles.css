@@ -2903,13 +2903,13 @@ html.island-window-html {
   }
 }
 
-/* Pet 2D (previews Kenney de 64 px; escala máxima menor que 2x). */
+/* Pet 2D (renders Kenney de 512 px, com transparência). */
 .pet-sprite {
   position: relative;
   display: grid;
   place-items: center;
-  width: min(100%, 96px);
-  height: min(100%, 96px);
+  width: min(100%, 160px);
+  height: min(100%, 160px);
   aspect-ratio: 1;
   flex: none;
   pointer-events: none;
@@ -2918,8 +2918,8 @@ html.island-window-html {
 .pet-image {
   position: relative;
   z-index: 1;
-  width: min(100%, 96px);
-  height: min(100%, 96px);
+  width: min(100%, 160px);
+  height: min(100%, 160px);
   object-fit: contain;
   image-rendering: auto;
   filter: drop-shadow(0 5px 6px #0009);
@@ -3129,8 +3129,8 @@ html.island-window-html {
   z-index: 1;
 }
 .hero-pet-space .pet-sprite {
-  width: 96px;
-  height: 96px;
+  width: 128px;
+  height: 128px;
 }
 .pet-picker-grid {
   display: grid;
@@ -3197,8 +3197,14 @@ html.island-window-html {
 }
 .desktop-model.pet-sprite {
   inset: 8px;
-  width: 88px;
-  height: 88px;
+  width: 160px;
+  height: 160px;
+}
+.desktop-model.pet-sprite .pet-image {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
 }
 @keyframes pet-breathe {
   50% {

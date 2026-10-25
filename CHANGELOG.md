@@ -2,6 +2,13 @@
 
 ## Não lançado
 
+### Personagens Kenney em alta resolução
+
+- Substituídos os previews 64×64 por renderizações transparentes 512×512 dos 12 modelos Kenney CC0; agora também há imagem para `character-female-a`.
+- Adicionado script de desenvolvimento para regenerar as imagens a partir dos GLBs externos, sem incluir os modelos-fonte no repositório.
+- A tela Assistente do OdeKrai identifica a seção como “Escolha seu mascote”; o mascote da área de trabalho passou a ocupar até 160 px na escala-base.
+- Seleções SQLite que não existem mais no catálogo são migradas para `character-female-a`.
+
 ### UI-3
 
 - Adicionados sprites 2D CC0 do pacote Kenney, seleção persistida no SQLite, fallback para a imagem ausente e animações CSS ligadas aos estados do assistente.

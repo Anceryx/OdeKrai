@@ -1,0 +1,132 @@
+import { readFileSync } from 'node:fs';
+import { inflateSync } from 'node:zlib';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import {
+  DEFAULT_PET_ID,
+  PETS,
+  petAnimationForIslandState,
+  petImageUrl,
+  petMotionDisabled,
+  validatePetCatalog,
+} from './pets';
+
+function pngAlphaBounds(bytes) {
+  expect(bytes.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  const width = bytes.readUInt32BE(16);
+  const height = bytes.readUInt32BE(20);
+  const bitDepth = bytes[24];
+  const colorType = bytes[25];
+  const compressed = [];
+  for (let offset = 8; offset < bytes.length;) {
+    const length = bytes.readUInt32BE(offset);
+    const type = bytes.toString('ascii', offset + 4, offset + 8);
+    if (type === 'IDAT') compressed.push(bytes.subarray(offset + 8, offset + 8 + length));
+    offset += length + 12;
+    if (type === 'IEND') break;
+  }
+  expect(bitDepth).toBe(8);
+  expect(colorType).toBe(6);
+
+  const raw = inflateSync(Buffer.concat(compressed));
+  const stride = width * 4;
+  let previous = Buffer.alloc(stride);
+  let transparent = 0;
+  let visible = 0;
+  for (let y = 0; y < height; y += 1) {
+    const rowStart = y * (stride + 1);
+    const filter = raw[rowStart];
+    const row = Buffer.from(raw.subarray(rowStart + 1, rowStart + 1 + stride));
+    for (let index = 0; index < stride; index += 1) {
+      const left = index >= 4 ? row[index - 4] : 0;
+      const above = previous[index];
+      const upperLeft = index >= 4 ? previous[index - 4] : 0;
+      if (filter === 1) row[index] = (row[index] + left) & 0xff;
+      else if (filter === 2) row[index] = (row[index] + above) & 0xff;
+      else if (filter === 3) row[index] = (row[index] + Math.floor((left + above) / 2)) & 0xff;
+      else if (filter === 4) {
+        const base = left + above - upperLeft;
+        const leftDistance = Math.abs(base - left);
+        const aboveDistance = Math.abs(base - above);
+        const diagonalDistance = Math.abs(base - upperLeft);
+        const predictor =
+          leftDistance <= aboveDistance && leftDistance <= diagonalDistance
+            ? left
+            : aboveDistance <= diagonalDistance
+              ? above
+              : upperLeft;
+        row[index] = (row[index] + predictor) & 0xff;
+      } else expect(filter).toBe(0);
+    }
+    for (let index = 3; index < stride; index += 4) {
+      if (row[index] === 0) transparent += 1;
+      if (row[index] > 0) visible += 1;
+    }
+    previous = row;
+  }
+  return { width, height, transparent, visible };
+}
+
+describe('catálogo e imagens do mascote', () => {
+  it('rejeita um pets.json ausente ou inválido', () => {
+    expect(validatePetCatalog(undefined)).toBeNull();
+    expect(validatePetCatalog(null)).toBeNull();
+    expect(validatePetCatalog([{ id: 'x', name: 'x', file: '../x.png', altText: 'x' }])).toBeNull();
+    expect(validatePetCatalog([{ id: 'x', name: 'x', file: 'x.png', altText: 'x' }])).toBeNull();
+    expect(
+      validatePetCatalog(
+        Array.from({ length: 12 }, (_, i) => ({
+          id: `pet-${i}`,
+          name: 'Pet',
+          file: `pet-${i}.png`,
+          altText: 'Pet',
+        })),
+      ),
+    ).toHaveLength(12);
+    expect(DEFAULT_PET_ID).toBe('character-female-a');
+  });
+
+  it('inclui os 12 arquivos renderizados em 512×512 com transparência', () => {
+    expect(PETS).toHaveLength(12);
+    for (const pet of PETS) {
+      const path = fileURLToPath(
+        new URL(`../../assets/pets/kenney-mini-characters/${pet.file}`, import.meta.url),
+      );
+      const image = pngAlphaBounds(readFileSync(path));
+      expect(image.width, pet.file).toBe(512);
+      expect(image.height, pet.file).toBe(512);
+      expect(image.transparent, pet.file).toBeGreaterThan(0);
+      expect(image.visible, pet.file).toBeGreaterThan(0);
+    }
+  });
+
+  it('mapeia os estados da ilha para o estado visual esperado', () => {
+    expect({
+      idle: petAnimationForIslandState('compact'),
+      thinking: petAnimationForIslandState('thinking'),
+      working: petAnimationForIslandState('responding'),
+      approval: petAnimationForIslandState('awaiting_approval'),
+      success: petAnimationForIslandState('completed'),
+      error: petAnimationForIslandState('error'),
+      paused: petAnimationForIslandState('paused'),
+      unknown: petAnimationForIslandState('unmapped'),
+    }).toEqual({
+      idle: 'idle',
+      thinking: 'thinking',
+      working: 'working',
+      approval: 'awaiting_approval',
+      success: 'success',
+      error: 'error',
+      paused: 'paused',
+      unknown: 'idle',
+    });
+  });
+
+  it('retorna fallback para um ID sem PNG no catálogo e preserva o movimento reduzido', () => {
+    expect(petImageUrl('character-missing')).toBeNull();
+    expect(petImageUrl('character-male-a')).toMatch(/\.png$/);
+    expect(petMotionDisabled(true, false)).toBe(true);
+    expect(petMotionDisabled(false, true)).toBe(true);
+    expect(petMotionDisabled(false, false)).toBe(false);
+  });
+});

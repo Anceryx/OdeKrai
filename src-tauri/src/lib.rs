@@ -89,6 +89,22 @@ fn visibility_action(visible: bool, exists: bool) -> VisibilityAction {
     }
 }
 
+const CHARACTER_WINDOW_BASE_SIZE: f64 = 176.0;
+
+fn apply_character_click_region(window: &tauri::WebviewWindow) -> Result<(), String> {
+    let width = window
+        .inner_size()
+        .map_err(|error| error.to_string())?
+        .width as f64;
+    let scale = window.scale_factor().map_err(|error| error.to_string())?;
+    let logical_width = width / scale;
+    apply_click_region(
+        window,
+        logical_width * (8.0 / CHARACTER_WINDOW_BASE_SIZE),
+        0.0,
+    )
+}
+
 #[cfg(windows)]
 fn apply_click_region(
     window: &tauri::WebviewWindow,
@@ -189,7 +205,7 @@ fn ensure_mascot_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String>
     }
     let window = WebviewWindowBuilder::new(app, "mascot", WebviewUrl::App("index.html".into()))
         .title("OdeKrai")
-        .inner_size(104.0, 104.0)
+        .inner_size(CHARACTER_WINDOW_BASE_SIZE, CHARACTER_WINDOW_BASE_SIZE)
         .decorations(false)
         .transparent(true)
         .always_on_top(true)
@@ -200,7 +216,7 @@ fn ensure_mascot_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String>
         .visible(false)
         .build()
         .map_err(|_| "Não foi possível preparar a janela do mascote.".to_string())?;
-    if let Err(error) = apply_click_region(&window, 8.0, 0.0) {
+    if let Err(error) = apply_character_click_region(&window) {
         let _ = window.close();
         return Err(error);
     }
@@ -211,7 +227,7 @@ fn ensure_mascot_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String>
             event,
             tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
         ) {
-            let _ = apply_click_region(&moved_window, 8.0, 0.0);
+            let _ = apply_character_click_region(&moved_window);
         }
         if let tauri::WindowEvent::Moved(position) = event {
             let scale = moved_window.scale_factor().unwrap_or(1.0);
@@ -348,9 +364,12 @@ fn set_character_position(
     }
     let window = ensure_mascot_window(&app)?;
     window
-        .set_size(LogicalSize::new(104.0 * size, 104.0 * size))
+        .set_size(LogicalSize::new(
+            CHARACTER_WINDOW_BASE_SIZE * size,
+            CHARACTER_WINDOW_BASE_SIZE * size,
+        ))
         .map_err(|e| e.to_string())?;
-    apply_click_region(&window, 8.0, 0.0)?;
+    apply_character_click_region(&window)?;
     window
         .set_position(LogicalPosition::new(x, y))
         .map_err(|e| e.to_string())

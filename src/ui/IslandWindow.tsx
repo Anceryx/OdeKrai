@@ -161,10 +161,10 @@ export function IslandWindow() {
                   saveSettings({ ...current, companion });
                   const x =
                     companion.desktopCoordinates?.x ??
-                    Math.max(0, (screen.availWidth - 104 * companion.size) / 2);
+                    Math.max(0, (screen.availWidth - 176 * companion.size) / 2);
                   const y =
                     companion.desktopCoordinates?.y ??
-                    Math.max(0, (screen.availHeight - 104 * companion.size) / 2);
+                    Math.max(0, (screen.availHeight - 176 * companion.size) / 2);
                   void invoke('set_character_position', { x, y, size: companion.size })
                     .then(() => invoke('set_character_visible', { visible: true }))
                     .then(() =>

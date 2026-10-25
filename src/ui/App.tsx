@@ -197,10 +197,10 @@ function MainApp() {
     if (!isTauri() || !companion.freeMode) return;
     const x =
       companion.desktopCoordinates?.x ??
-      Math.max(0, (screen.availWidth - 104 * companion.size) / 2);
+      Math.max(0, (screen.availWidth - 176 * companion.size) / 2);
     const y =
       companion.desktopCoordinates?.y ??
-      Math.max(0, (screen.availHeight - 104 * companion.size) / 2);
+      Math.max(0, (screen.availHeight - 176 * companion.size) / 2);
     void invoke('set_character_position', { x, y, size: companion.size })
       .then(() => invoke('set_character_visible', { visible: true }))
       .catch(() => setToast('Não foi possível restaurar o OdeKrai no desktop.'));
@@ -787,10 +787,10 @@ function Companion({
       if (freeMode) {
         const x =
           companion.desktopCoordinates?.x ??
-          Math.max(0, (screen.availWidth - 104 * companion.size) / 2);
+          Math.max(0, (screen.availWidth - 176 * companion.size) / 2);
         const y =
           companion.desktopCoordinates?.y ??
-          Math.max(0, (screen.availHeight - 104 * companion.size) / 2);
+          Math.max(0, (screen.availHeight - 176 * companion.size) / 2);
         await invoke('set_character_position', { x, y, size: companion.size });
         await invoke('set_character_visible', { visible: true });
         void playSound('drag_start', normalizeSoundPreferences(companion.sounds));
@@ -813,13 +813,13 @@ function Companion({
       <section className="settings-panel pet-picker-panel">
         <div className="panel-heading">
           <div>
-            <h3>Escolha seu personagem</h3>
+            <h3>Escolha seu mascote</h3>
             <p>
-              Os previews têm 64×64 px e são exibidos sem ultrapassar o dobro do tamanho original.
+              {'Escolha qual mascote aparece na área de trabalho, nas conversas e na tela inicial.'}
             </p>
           </div>
         </div>
-        <div className="pet-picker-grid" role="group" aria-label="Personagem do OdeKrai">
+        <div className="pet-picker-grid" role="group" aria-label="Mascote do OdeKrai">
           {PETS.map((pet) => (
             <button
               type="button"

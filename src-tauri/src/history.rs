@@ -74,6 +74,28 @@ fn pet_id_is_valid(id: &str, manifest: &str) -> bool {
     valid_pet_catalog(manifest).is_ok_and(|pets| pets.iter().any(|pet| pet.id == id))
 }
 
+fn selected_pet_from_db(db: &Connection, manifest: &str) -> Result<String, String> {
+    let saved: Option<String> = db
+        .query_row(
+            "SELECT value FROM pet_preferences WHERE key = 'selected'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|_| "N\u{00e3}o foi poss\u{00ed}vel ler o personagem selecionado.".to_string())?;
+    if let Some(id) = saved {
+        if pet_id_is_valid(&id, manifest) {
+            return Ok(id);
+        }
+        db.execute(
+            "INSERT INTO pet_preferences(key, value) VALUES ('selected', ?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [DEFAULT_PET_ID],
+        )
+        .map_err(|_| "N\u{00e3}o foi poss\u{00ed}vel atualizar o personagem selecionado.".to_string())?;
+    }
+    Ok(DEFAULT_PET_ID.to_string())
+}
+
 #[tauri::command]
 pub fn get_selected_pet(
     app: tauri::AppHandle,
@@ -81,18 +103,7 @@ pub fn get_selected_pet(
 ) -> Result<String, String> {
     super::require_caller(&caller, &["main", "island", "mascot"])?;
     let db = database(&app)?;
-    db.query_row(
-        "SELECT value FROM pet_preferences WHERE key = 'selected'",
-        [],
-        |row| row.get(0),
-    )
-    .optional()
-    .map_err(|_| "Não foi possível ler o personagem selecionado.".to_string())
-    .map(|saved: Option<String>| {
-        saved
-            .filter(|id| pet_id_is_valid(id, PET_CATALOG))
-            .unwrap_or_else(|| DEFAULT_PET_ID.to_string())
-    })
+    selected_pet_from_db(&db, PET_CATALOG)
 }
 
 #[tauri::command]
@@ -299,29 +310,43 @@ mod tests {
     fn selected_pet_defaults_and_persists_in_sqlite() {
         let db = Connection::open_in_memory().unwrap();
         init_schema(&db).unwrap();
-        let selected: Option<String> = db
-            .query_row(
-                "SELECT value FROM pet_preferences WHERE key='selected'",
-                [],
-                |row| row.get(0),
-            )
-            .optional()
-            .unwrap();
-        assert!(selected.is_none());
+        assert_eq!(
+            selected_pet_from_db(&db, PET_CATALOG).unwrap(),
+            DEFAULT_PET_ID
+        );
         db.execute(
             "INSERT INTO pet_preferences(key,value) VALUES ('selected','character-male-a')",
             [],
         )
         .unwrap();
-        let selected: String = db
+        assert_eq!(
+            selected_pet_from_db(&db, PET_CATALOG).unwrap(),
+            "character-male-a"
+        );
+        assert!(!pet_id_is_valid("../secret", PET_CATALOG));
+    }
+
+    #[test]
+    fn selected_pet_migrates_unknown_saved_id_to_default() {
+        let db = Connection::open_in_memory().unwrap();
+        init_schema(&db).unwrap();
+        db.execute(
+            "INSERT INTO pet_preferences(key,value) VALUES ('selected','character-no-longer-in-catalog')",
+            [],
+        )
+        .unwrap();
+
+        assert_eq!(
+            selected_pet_from_db(&db, PET_CATALOG).unwrap(),
+            DEFAULT_PET_ID
+        );
+        let stored: String = db
             .query_row(
                 "SELECT value FROM pet_preferences WHERE key='selected'",
                 [],
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(selected, "character-male-a");
-        assert_eq!(DEFAULT_PET_ID, "character-female-a");
-        assert!(!pet_id_is_valid("../secret", PET_CATALOG));
+        assert_eq!(stored, DEFAULT_PET_ID);
     }
 }
