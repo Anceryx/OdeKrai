@@ -11,6 +11,7 @@ use tokio_util::sync::CancellationToken;
 
 mod cancellation;
 mod credentials;
+mod perplexity;
 use credentials::{credential_entry, supports_credentials};
 static INTERNAL_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 pub use cancellation::cancel_all;
@@ -587,7 +588,7 @@ async fn request_provider(
         "perplexity" => client
             .post(endpoint)
             .pipe_auth(provider_id, &credential)?
-            .json(&perplexity_body(model, messages)),
+            .json(&perplexity::perplexity_body(model, messages)),
         "azure-openai" => client
             .post(endpoint)
             .pipe_auth(provider_id, &credential)?
@@ -676,26 +677,6 @@ async fn request_provider(
         .await
         .map_err(|_| "O provedor retornou uma resposta inválida.".to_string())?;
     parse_provider_reply(provider_id, &payload)
-}
-
-fn perplexity_body(model: &str, messages: &[ProviderMessage]) -> Value {
-    let input = messages
-        .iter()
-        .filter(|message| message.role != "system")
-        .map(|message| format!("{}: {}", message.role, message.content))
-        .collect::<Vec<_>>()
-        .join("\n\n");
-    let instructions = messages
-        .iter()
-        .filter(|message| message.role == "system")
-        .map(|message| message.content.as_str())
-        .collect::<Vec<_>>()
-        .join("\n\n");
-    let mut body = json!({ "model": model, "input": input });
-    if !instructions.is_empty() {
-        body["instructions"] = json!(instructions);
-    }
-    body
 }
 
 fn stream_delta<'a>(provider_id: &str, payload: &'a Value) -> Option<&'a str> {
@@ -838,35 +819,7 @@ fn safe_transport_error(error: &reqwest::Error) -> String {
 
 fn parse_provider_reply(provider_id: &str, payload: &Value) -> Result<ProviderReply, String> {
     if provider_id == "perplexity" {
-        let output = payload["output"].as_array().ok_or_else(|| {
-            "A Agent API da Perplexity retornou uma resposta em formato inesperado.".to_string()
-        })?;
-        let mut texts = Vec::new();
-        let mut citations = Vec::new();
-        for item in output {
-            if let Some(contents) = item["content"].as_array() {
-                for content in contents {
-                    if content["type"] == "output_text" {
-                        if let Some(text) = content["text"].as_str() {
-                            texts.push(text.to_string());
-                        }
-                        if let Some(annotations) = content["annotations"].as_array() {
-                            citations.extend(annotations.iter().filter_map(citation_from_value));
-                        }
-                    }
-                }
-            }
-            if let Some(results) = item["results"].as_array() {
-                citations.extend(results.iter().filter_map(citation_from_value));
-            }
-        }
-        let content = texts.join("\n\n").trim().to_string();
-        if content.is_empty() {
-            return Err("A Agent API da Perplexity retornou uma resposta vazia.".into());
-        }
-        citations.sort_by(|left, right| left.url.cmp(&right.url));
-        citations.dedup_by(|left, right| left.url == right.url);
-        return Ok(ProviderReply { content, citations });
+        return perplexity::parse_reply(payload);
     }
 
     let content = if provider_id == "anthropic" {
@@ -890,38 +843,6 @@ fn parse_provider_reply(provider_id: &str, payload: &Value) -> Result<ProviderRe
     Ok(ProviderReply {
         content: content.trim().to_string(),
         citations: Vec::new(),
-    })
-}
-
-fn citation_from_value(value: &Value) -> Option<ProviderCitation> {
-    let url = value
-        .get("url")
-        .or_else(|| {
-            value
-                .get("url_citation")
-                .and_then(|citation| citation.get("url"))
-        })?
-        .as_str()?;
-    let parsed = Url::parse(url).ok()?;
-    if parsed.scheme() != "https" {
-        return None;
-    }
-    let title = value
-        .get("title")
-        .or_else(|| {
-            value
-                .get("url_citation")
-                .and_then(|citation| citation.get("title"))
-        })
-        .and_then(Value::as_str)
-        .filter(|title| !title.trim().is_empty())
-        .unwrap_or(url)
-        .chars()
-        .take(200)
-        .collect();
-    Some(ProviderCitation {
-        title,
-        url: parsed.to_string(),
     })
 }
 
@@ -967,7 +888,7 @@ mod tests {
 
     #[test]
     fn perplexity_uses_instructions_for_system_prompt() {
-        let body = perplexity_body(
+        let body = perplexity::perplexity_body(
             "sonar",
             &[
                 ProviderMessage {
