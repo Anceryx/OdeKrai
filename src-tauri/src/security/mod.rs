@@ -12,15 +12,17 @@ use std::{
     path::{Component, Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Mutex, MutexGuard,
+        Mutex,
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
+mod approvals;
 mod audit;
 mod kill_switch;
+use approvals::*;
 use audit::verify_audit_path;
 pub use kill_switch::{init_shortcut, load_halted, on_global_shortcut};
 
@@ -75,13 +77,6 @@ impl SecurityState {
     pub fn set_initial_halted(&self, halted: bool) {
         self.halted.store(halted, Ordering::SeqCst);
     }
-}
-
-fn lock_pending(state: &SecurityState) -> Result<MutexGuard<'_, VecDeque<PendingAction>>, String> {
-    state.pending.lock().map_err(|_| {
-        log::error!("Fila de aprovação indisponível: mutex envenenado; operação bloqueada.");
-        "Fila de aprovação indisponível.".to_string()
-    })
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -144,20 +139,6 @@ pub struct PendingView {
     pub full_preview: bool,
     pub expires_at: u64,
     pub display_hash: String,
-}
-
-struct PendingAction {
-    id: String,
-    action: SimulatedAction,
-    origin: Origin,
-    risk: Risk,
-    rule: &'static str,
-    summary: String,
-    preview: String,
-    digest: String,
-    expires: Instant,
-    expires_at: u64,
-    created_at: Instant,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -721,40 +702,6 @@ fn clipped(text: &str, max: usize) -> String {
 
 fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
-}
-
-fn display_hash_matches(action: &SimulatedAction, expected: &str, shown: &str) -> bool {
-    if expected != shown {
-        return false;
-    }
-    serde_json::to_string(action)
-        .ok()
-        .is_some_and(|value| digest(value.as_bytes()) == expected)
-}
-
-fn queue_has_capacity(queue: &VecDeque<PendingAction>) -> bool {
-    queue.len() < MAX_PENDING
-}
-
-fn is_expired(expires: Instant, now: Instant) -> bool {
-    now >= expires
-}
-
-fn take_pending_approval(
-    queue: &mut VecDeque<PendingAction>,
-    id: &str,
-    display_hash: &str,
-) -> Result<PendingAction, &'static str> {
-    let Some(item) = queue.front() else {
-        return Err("approval_unavailable");
-    };
-    if item.id != id {
-        return Err("approval_stale");
-    }
-    if !display_hash_matches(&item.action, &item.digest, display_hash) {
-        return Err("approval_parameters_changed");
-    }
-    queue.pop_front().ok_or("approval_unavailable")
 }
 
 fn now_secs() -> u64 {
