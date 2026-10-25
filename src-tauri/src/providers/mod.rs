@@ -1,4 +1,3 @@
-use keyring::Entry;
 use reqwest::{header, redirect::Policy, Client, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -11,8 +10,9 @@ use tauri::{ipc::Channel, Manager, State};
 use tokio_util::sync::CancellationToken;
 
 mod cancellation;
+mod credentials;
+use credentials::{credential_entry, supports_credentials};
 static INTERNAL_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
-const KEYRING_SERVICE: &str = "site.anceryx.odekrai.provider";
 pub use cancellation::cancel_all;
 #[cfg(test)]
 use cancellation::cancel_requests;
@@ -81,35 +81,6 @@ pub struct ProviderReply {
 
 #[derive(Default)]
 pub struct ProviderRequests(Mutex<HashMap<String, CancellationToken>>);
-
-fn supports_credentials(provider_id: &str) -> bool {
-    matches!(
-        provider_id,
-        "openai"
-            | "anthropic"
-            | "gemini"
-            | "xai"
-            | "mistral"
-            | "cohere"
-            | "groq"
-            | "cerebras"
-            | "deepseek"
-            | "perplexity"
-            | "together"
-            | "openrouter"
-            | "fireworks"
-            | "azure-openai"
-            | "bedrock"
-    )
-}
-
-fn credential_entry(provider_id: &str) -> Result<Entry, String> {
-    if !supports_credentials(provider_id) {
-        return Err("Este provedor ainda não aceita credenciais no OdeKrai.".into());
-    }
-    Entry::new(KEYRING_SERVICE, provider_id)
-        .map_err(|_| "Não foi possível acessar o Gerenciador de Credenciais do Windows.".into())
-}
 
 #[tauri::command]
 pub fn save_provider_credential(
@@ -1052,6 +1023,12 @@ mod tests {
         assert_eq!(anthropic.auth_header.as_deref(), Some("x-api-key"));
         assert_eq!(anthropic.chat_path.as_deref(), Some("/v1/messages"));
         assert_eq!(anthropic.model_list_path.as_deref(), Some("/v1/models"));
+    }
+
+    #[test]
+    fn unsupported_provider_is_rejected_before_accessing_credential_store() {
+        let error = credential_entry("vertex-ai").unwrap_err();
+        assert!(error.contains("não aceita credenciais"));
     }
 
     #[test]
