@@ -54,6 +54,19 @@ describe('preferências persistidas', () => {
     expect(storage.get('odekrai.settings.v2')).not.toContain('chave');
   });
 
+  it('persiste a substituição de efeito sonoro selecionada', () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    });
+    const settings = loadSettings();
+    settings.companion.sounds.replacements.success = '/sounds/error.ogg';
+
+    expect(saveSettings(settings)).toBe(true);
+    expect(loadSettings().companion.sounds.replacements.success).toBe('/sounds/error.ogg');
+  });
+
   it('usa Encerrar por padrão e restaura valores inválidos de fechamento', () => {
     const storage = new Map<string, string>();
     vi.stubGlobal('localStorage', {
