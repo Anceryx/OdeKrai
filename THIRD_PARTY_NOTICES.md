@@ -6,7 +6,28 @@ Nenhum código-fonte do Coucou foi copiado para o repositório. Foram estudados 
 
 ## Áudio e artes
 
-Nenhum som Kenney foi baixado ou incorporado. As páginas de [Interface Sounds](https://kenney.nl/assets/interface-sounds), [Sci-fi Sounds](https://kenney.nl/assets/sci-fi-sounds) e [UI Audio](https://kenney.nl/assets/ui-audio) identificam os pacotes como CC0; a inspeção dos arquivos de licença internos permanece pendente antes da incorporação. Não foram usados arquivos de som ou arte do Coucou/Mochi.
+Os arquivos abaixo estão em `public/sounds/` junto ao `License.txt` de Kenney Interface Sounds 1.0. O texto incluído identifica Creative Commons Zero (CC0) 1.0; o crédito é opcional. Os eventos sem arquivo correspondente estão marcados como não informados.
+
+| Evento            | Arquivo            | Pacote de origem            | URL                                       | Licença       |
+| ----------------- | ------------------ | --------------------------- | ----------------------------------------- | ------------- |
+| `island_open`     | `island_open.ogg`  | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+| `island_close`    | `island_close.ogg` | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+| `hover`           | `hover.ogg`        | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+| `click`           | não informado      | não informado               | não informado                             | não informado |
+| `notification`    | não informado      | não informado               | não informado                             | não informado |
+| `listening_start` | não informado      | não informado               | não informado                             | não informado |
+| `listening_stop`  | não informado      | não informado               | não informado                             | não informado |
+| `thinking`        | não informado      | não informado               | não informado                             | não informado |
+| `success`         | `success.ogg`      | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+| `error`           | `error.ogg`        | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+| `wake`            | `wake.ogg`         | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+| `sleep`           | `sleep.ogg`        | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+| `happy`           | não informado      | não informado               | não informado                             | não informado |
+| `drag_start`      | `drag_start.ogg`   | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+| `drag_end`        | `drag_end.ogg`     | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+| `return_home`     | `return_home.ogg`  | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+
+O texto de licença incluído está em `public/sounds/License.txt`. Não foram usados arquivos de som ou arte do Coucou/Mochi.
 
 ## Dependências
 

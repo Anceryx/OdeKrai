@@ -2,6 +2,10 @@
 
 ## Não lançado
 
+### Áudio
+
+- O painel do Assistente lista os 16 eventos sonoros, permite ouvir prévias e escolher arquivos disponíveis; o carregamento automático tenta WAV, OGG e MP3, memorizando falhas.
+
 ### Identidade e memória
 
 - Na abertura, o nome e o apelido também são recuperados do conteúdo aprovado do arquivo base se o perfil local estiver vazio.

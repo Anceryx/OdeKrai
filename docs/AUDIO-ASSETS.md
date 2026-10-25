@@ -1,27 +1,43 @@
-# Áudio do Odekrai
+# Efeitos sonoros
 
-## Estado atual
+O aplicativo reconhece 16 eventos. Uma substituição escolhida tem prioridade; no modo automático,
+o carregador tenta os arquivos disponíveis nesta ordem: WAV, OGG e MP3. Os buffers e as falhas ficam em cache. Se nenhum arquivo puder ser carregado,
+o aplicativo permanece em silêncio. O volume, o intervalo mínimo entre reproduções e a opção de
+desativar os sons continuam valendo.
 
-O motor de áudio suporta os eventos `island_open`, `island_close`, `hover`, `click`, `notification`, `listening_start`, `listening_stop`, `thinking`, `success`, `error`, `wake`, `sleep`, `happy`, `drag_start`, `drag_end` e `return_home`.
+O manifesto é gerado por `scripts/generate-sound-manifest.mjs` antes de iniciar o Vite, construir o
+aplicativo ou executar os testes. O script considera apenas arquivos no primeiro nível de
+`public/sounds/`, valida nomes e extensões e grava `src/core/sound-manifest.generated.json`.
 
-**Arquivos integrados:** nenhum. Não foram baixados nem incorporados sons Kenney ou sons do Coucou. Sem arquivo disponível, a reprodução falha em silêncio e não interrompe a interface.
+## Arquivos e licenças
 
-No código atual, os gatilhos ligados são abrir/fechar, hover, sucesso/erro do chat, ativar/suspender a janela, soltar o marcador no desktop e retornar à ilha. Os eventos de notificação, voz, click genérico, pensamento e animações de humor estão catalogados no motor, mas ainda não têm produtores funcionais no produto; não são simulados.
+O pacote incluído em `public/sounds/License.txt` identifica Kenney Interface Sounds 1.0 e a licença
+Creative Commons Zero (CC0). Os arquivos listados foram encontrados junto desse texto de licença.
+Nenhum arquivo é atribuído aos eventos sem correspondente disponível.
 
-## Adicionar e substituir
+| Evento            | Arquivo            | Pacote de origem            | URL                                       | Licença       |
+| ----------------- | ------------------ | --------------------------- | ----------------------------------------- | ------------- |
+| `island_open`     | `island_open.ogg`  | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+| `island_close`    | `island_close.ogg` | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+| `hover`           | `hover.ogg`        | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+| `click`           | não informado      | não informado               | não informado                             | não informado |
+| `notification`    | não informado      | não informado               | não informado                             | não informado |
+| `listening_start` | não informado      | não informado               | não informado                             | não informado |
+| `listening_stop`  | não informado      | não informado               | não informado                             | não informado |
+| `thinking`        | não informado      | não informado               | não informado                             | não informado |
+| `success`         | `success.ogg`      | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+| `error`           | `error.ogg`        | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+| `wake`            | `wake.ogg`         | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+| `sleep`           | `sleep.ogg`        | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+| `happy`           | não informado      | não informado               | não informado                             | não informado |
+| `drag_start`      | `drag_start.ogg`   | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+| `drag_end`        | `drag_end.ogg`     | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
+| `return_home`     | `return_home.ogg`  | Kenney Interface Sounds 1.0 | https://kenney.nl/assets/interface-sounds | CC0 1.0       |
 
-Adicione apenas arquivos autorizados em `public/sounds/`. O carregador aceita WAV, MP3 e OGG que o WebView consiga decodificar; o suporte efetivo depende do runtime WebView2. O caminho substituto deve seguir `/sounds/nome-do-arquivo.ext`, usando apenas letras, números, `_` e `-`. URLs externas e caminhos para fora da pasta são recusados.
+O texto de licença fornecido com os arquivos está em `public/sounds/License.txt`. A licença não
+exige atribuição; Kenney informa que o crédito é opcional.
 
-O Hub permite escolher o evento e registrar o caminho de substituição. O sistema mantém o buffer decodificado em cache. Volume vai de 0 a 100%; volume zero ou a opção de sons desativada resulta em silêncio. Eventos repetidos são limitados, com intervalos maiores para hover e thinking.
+## Validação pendente
 
-## Fontes avaliadas
-
-- [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds): página identifica 100 arquivos e CC0.
-- [Kenney Sci-fi Sounds](https://kenney.nl/assets/sci-fi-sounds): página identifica 70 arquivos e CC0.
-- [Kenney UI Audio](https://kenney.nl/assets/ui-audio): página identifica 50 arquivos e CC0.
-
-As páginas apresentam os pacotes como CC0, mas os arquivos não foram baixados nesta etapa; portanto, nenhum nome de efeito, licença incluída no ZIP ou seleção de áudio é declarado como validado. Ao baixar, guarde o texto de licença, selecione apenas os arquivos necessários e registre nomes, pacote, URL, licença e eventuais edições nesta documentação e em `THIRD_PARTY_NOTICES.md`.
-
-## Referências de implementação
-
-O sistema de carregamento e cache foi escrito para o Odekrai. O projeto estudou o carregador Windows TypeScript do Coucou; a implementação Rust `sounds.rs` não foi recuperada pela consulta de fonte. Nenhum código ou arquivo sonoro do Coucou foi copiado. A licença MIT do código do Coucou é independente da licença CC0 dos pacotes Kenney.
+A compatibilidade dos arquivos OGG e o volume percebido precisam de validação auditiva em uma
+versão nativa do Windows com WebView2. Os testes automatizados não reproduzem nem avaliam áudio.
