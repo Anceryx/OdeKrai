@@ -1,0 +1,98 @@
+name: Build Windows diagnostic executable
+
+on:
+  workflow_dispatch:
+    inputs:
+      diagnostics:
+        description: Habilitar DevTools para inspecionar a versão de produção
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Definir identificação do build
+        id: build-id
+        shell: pwsh
+        run: |
+          $commit = git rev-parse --short=12 HEAD
+          $buildDate = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
+          "ODEKRAI_BUILD_COMMIT=$commit" >> $env:GITHUB_ENV
+          "ODEKRAI_BUILD_DATE=$buildDate" >> $env:GITHUB_ENV
+          "sha=$commit" >> $env:GITHUB_OUTPUT
+
+      - run: npm ci
+
+      - name: Confirmar DevTools fora das features padrão
+        if: ${{ inputs.diagnostics == false }}
+        shell: pwsh
+        run: |
+          npm run check:release-features
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $features = cargo tree --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc --no-default-features -e features -i tauri | Out-String
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($features -match 'tauri feature "devtools"') { throw 'DevTools está ativo nas features padrão do build.' }
+
+      - name: Compilar executável de diagnóstico
+        if: ${{ inputs.diagnostics == true }}
+        run: npx tauri build --target x86_64-pc-windows-msvc --no-bundle --features diagnostics
+
+      - name: Compilar executável normal
+        if: ${{ inputs.diagnostics == false }}
+        run: npx tauri build --target x86_64-pc-windows-msvc --no-bundle
+
+      - name: Validar e preparar artefato
+        shell: pwsh
+        run: |
+          node scripts/check-release-artifact.mjs dist
+          $exe = 'src-tauri/target/x86_64-pc-windows-msvc/release/odekrai.exe'
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "Executável ausente: $exe" }
+          $stage = Join-Path $env:RUNNER_TEMP 'odekrai-artifact'
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          Copy-Item -LiteralPath $exe -Destination (Join-Path $stage 'odekrai.exe')
+          $hash = (Get-FileHash -LiteralPath (Join-Path $stage 'odekrai.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
+          $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+          [System.IO.File]::WriteAllText((Join-Path $stage 'SHA256SUMS.txt'), "$hash  odekrai.exe`n", $utf8NoBom)
+          $instructions = @"
+          OdeKrai - executável Windows
+
+          Execução: extraia o artefato e abra odekrai.exe.
+          Requisito: Microsoft Edge WebView2 Runtime instalado no Windows.
+          Aviso: este executável não está assinado; o Windows SmartScreen pode exibir um aviso.
+          Integridade: compare o SHA-256 do executável com SHA256SUMS.txt.
+          Build: $env:ODEKRAI_BUILD_COMMIT ($env:ODEKRAI_BUILD_DATE UTC).
+          "@
+          [System.IO.File]::WriteAllText((Join-Path $stage 'LEIA-ME.txt'), $instructions, $utf8NoBom)
+          node scripts/check-release-artifact.mjs dist $stage
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: odekrai-windows-${{ steps.build-id.outputs.sha }}
+          path: ${{ runner.temp }}/odekrai-artifact/
+          if-no-files-found: error
+          retention-days: 3

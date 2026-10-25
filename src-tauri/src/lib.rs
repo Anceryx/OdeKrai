@@ -2,6 +2,25 @@ use tauri::{
     Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 
+#[derive(serde::Serialize)]
+struct BuildInfo {
+    version: String,
+    commit: &'static str,
+    build_date: &'static str,
+    webview_version: String,
+}
+
+#[tauri::command]
+fn get_build_info(caller: tauri::WebviewWindow) -> Result<BuildInfo, String> {
+    require_main(&caller)?;
+    Ok(BuildInfo {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        commit: option_env!("ODEKRAI_BUILD_COMMIT").unwrap_or("local"),
+        build_date: option_env!("ODEKRAI_BUILD_DATE").unwrap_or("não definida"),
+        webview_version: tauri::webview_version().map_err(|error| error.to_string())?,
+    })
+}
+
 pub mod agent;
 mod agent_home;
 mod history;
@@ -418,6 +437,7 @@ pub fn run() -> Result<(), tauri::Error> {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            get_build_info,
             set_island_visible,
             set_island_position,
             set_island_topmost,

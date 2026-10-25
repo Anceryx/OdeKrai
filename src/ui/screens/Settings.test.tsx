@@ -14,5 +14,7 @@ describe('SettingsScreen', () => {
     );
     expect(markup).toContain('Dados e privacidade');
     expect(markup).toContain('Ao fechar a janela');
+    expect(markup).toContain('Sobre');
+    expect(markup).toContain('WebView2');
   });
 });

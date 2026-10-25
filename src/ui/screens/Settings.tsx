@@ -1,6 +1,15 @@
+import { useEffect, useState } from 'react';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { defaultSettings, type AppSettings } from '../../core/settings';
 import { PageHeader, Toggle } from '../DesignSystem';
 import { HistoryDeletionSettings } from '../HistoryDeletionSettings';
+
+type BuildInfo = {
+  version: string;
+  commit: string;
+  build_date: string;
+  webview_version: string;
+};
 
 export function SettingsScreen({
   settings,
@@ -11,6 +20,15 @@ export function SettingsScreen({
   update: (next: AppSettings) => void;
   onDeleteAllHistory: () => Promise<boolean>;
 }) {
+  const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    void invoke<BuildInfo>('get_build_info')
+      .then(setBuildInfo)
+      .catch(() => setBuildInfo(null));
+  }, []);
+
   return (
     <div className="page subpage">
       <PageHeader
@@ -107,6 +125,19 @@ export function SettingsScreen({
       <div className="provider-footnote">
         <p>A restauração volta ao padrão Encerrar e não remove perfil, histórico ou credenciais.</p>
       </div>
+      <section className="settings-panel settings-section" aria-labelledby="about-heading">
+        <h2 id="about-heading">Sobre</h2>
+        <dl>
+          <dt>Versão</dt>
+          <dd>{buildInfo?.version ?? '—'}</dd>
+          <dt>Commit</dt>
+          <dd>{buildInfo?.commit ?? '—'}</dd>
+          <dt>Data do build (UTC)</dt>
+          <dd>{buildInfo?.build_date ?? '—'}</dd>
+          <dt>WebView2</dt>
+          <dd>{buildInfo?.webview_version ?? '—'}</dd>
+        </dl>
+      </section>
     </div>
   );
 }

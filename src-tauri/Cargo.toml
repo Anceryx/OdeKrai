@@ -6,6 +6,9 @@ authors = ["Anceryx"]
 license = "MIT"
 edition = "2021"
 
+[features]
+diagnostics = ["tauri/devtools"]
+
 [lib]
 name = "odekrai_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]

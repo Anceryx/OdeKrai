@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, type FormEvent } from 'react';
+import { lazy, Suspense, useEffect, useMemo, type FormEvent } from 'react';
 import { resolveConversationSelection } from '../core/chat';
 import type { ChatMessage } from '../core/provider-messages';
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
@@ -44,6 +44,20 @@ export function App() {
 }
 
 function MainApp() {
+  useEffect(() => {
+    if (!isTauri()) return;
+    void invoke<{
+      version: string;
+      commit: string;
+      build_date: string;
+      webview_version: string;
+    }>('get_build_info')
+      .then((info) => console.info('[OdeKrai diagnóstico]', info))
+      .catch((error: unknown) =>
+        console.error('[OdeKrai diagnóstico] Falha ao obter cabeçalho:', error),
+      );
+  }, []);
+
   const appState = useAppState();
   const {
     section,
