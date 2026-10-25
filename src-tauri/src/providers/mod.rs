@@ -11,6 +11,7 @@ use tokio_util::sync::CancellationToken;
 
 mod anthropic;
 mod cancellation;
+mod chat_completions;
 mod credentials;
 mod perplexity;
 use credentials::{credential_entry, supports_credentials};
@@ -580,11 +581,19 @@ async fn request_provider(
         "azure-openai" => client
             .post(endpoint)
             .pipe_auth(provider_id, &credential)?
-            .json(&json!({ "model": model, "messages": messages, "stream": on_chunk.is_some() })),
+            .json(&chat_completions::request_body(
+                model,
+                messages,
+                on_chunk.is_some(),
+            )),
         _ => client
             .post(endpoint)
             .pipe_auth(provider_id, &credential)?
-            .json(&json!({ "model": model, "messages": messages, "stream": on_chunk.is_some() })),
+            .json(&chat_completions::request_body(
+                model,
+                messages,
+                on_chunk.is_some(),
+            )),
     };
 
     let mut response = request
