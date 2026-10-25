@@ -16,7 +16,7 @@ import { Overview } from './screens/Overview';
 import { AssistantScreen } from './screens/Assistant';
 import { SettingsScreen } from './screens/Settings';
 import { ConversationsScreen } from './screens/Conversations';
-import { ProviderCatalog } from './ProviderCatalog';
+import { ProvidersScreen } from './screens/Providers';
 import { AgentHome } from './AgentHome';
 import { initials, type ProfileData } from './Profile';
 import { ApprovalWindow, isApprovalWindow, SecurityCenter } from './SecurityCenter';
@@ -640,7 +640,7 @@ function MainApp() {
               />
             )}
             {section === 'providers' && (
-              <ProviderCatalog
+              <ProvidersScreen
                 settings={settings}
                 keySaved={keySavedForSession}
                 selectedId={selectedProviderId}
