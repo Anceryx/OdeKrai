@@ -2,17 +2,22 @@
 
 ## Capacidades dos adaptadores
 
+Capacidades de tool calling conferidas em 25/10/2026: Groq, Cerebras e Mistral documentam chamadas de ferramentas no formato Chat Completions; OpenRouter documenta o mesmo formato, mas a disponibilidade depende do modelo e pode ser consultada no catálogo do próprio provedor. Google Gemini documenta Function Calling na API nativa, porém a documentação de compatibilidade OpenAI não confirma esse recurso nesse endpoint; por isso, o catálogo mantém `tools: false` e `verified: false` para Gemini. O cache local por `providerId` e modelo continua registrando recusas explícitas de tools.
+
+Fontes: [Groq Tool Use](https://console.groq.com/docs/tool-use), [Cerebras Tool Calling](https://inference-docs.cerebras.ai/capabilities/tool-use), [Mistral Function Calling](https://docs.mistral.ai/studio/conversations/function-calling), [OpenRouter Tool Calling](https://openrouter.ai/docs/guides/features/tool-calling) e [compatibilidade OpenAI do Gemini](https://ai.google.dev/gemini-api/docs/openai).
+
 O transporte de tool calls está implementado para Anthropic Messages e OpenAI Chat Completions.
 Os tipos neutros incluem blocos de texto, chamadas e resultados; os adaptadores serializam esses
 blocos, interpretam respostas completas e em streaming, validam argumentos JSON e expõem uso de
 tokens quando a API retorna esses dados. O chat ainda envia uma lista vazia de tools: não há
 execução de ferramentas nem loop de agente.
 
-O catálogo marca tools como verificadas apenas para Anthropic e OpenAI. Se uma resposta HTTP 400
-indicar que o modelo não aceita tools, o par provedor/modelo é salvo no SQLite local e a capacidade
-efetiva daquele modelo passa a ser “sem suporte”. Os demais provedores permanecem não verificados
-para tool calling, inclusive implementações compatíveis com Chat Completions. Visão, geração de
-imagens e roteamento não são capacidades implementadas nesta integração.
+O catálogo marca tools como verificadas para Anthropic, OpenAI, Groq, Cerebras, Mistral e OpenRouter.
+No OpenRouter, o suporte depende do modelo. Gemini pelo endpoint compatível com OpenAI permanece sem
+suporte verificado porque a documentação consultada não confirma tools nesse endpoint. Se uma resposta
+HTTP 400 indicar que o modelo não aceita tools, o par provedor/modelo é salvo no SQLite local e a
+capacidade efetiva daquele modelo passa a ser “sem suporte”. Visão, geração de imagens e roteamento
+não são capacidades implementadas nesta integração.
 
 Referências oficiais conferidas em 25/10/2026: [Anthropic tool use](https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools),
 [Anthropic streaming](https://platform.claude.com/docs/en/build-with-claude/streaming),

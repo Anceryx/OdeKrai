@@ -48,7 +48,7 @@
     "modelListShape": "data",
     "hostRule": "generativelanguage.googleapis.com",
     "docsUrl": "https://ai.google.dev/gemini-api/docs/openai",
-    "verifiedAt": "2026-10-24",
+    "verifiedAt": "2026-10-25",
     "verification": "verified",
     "fields": [],
     "capabilities": {
@@ -87,16 +87,16 @@
     "modelListPath": "/models",
     "modelListShape": "data",
     "hostRule": "api.mistral.ai",
+    "verifiedAt": "2026-10-25",
     "docsUrl": "https://docs.mistral.ai/api/endpoint/models",
-    "verifiedAt": "2026-10-24",
     "verification": "verified",
     "fields": [],
     "capabilities": {
       "streaming": true,
-      "tools": false,
+      "tools": true,
       "vision": false,
       "imageGeneration": false,
-      "verified": false
+      "verified": true
     }
   },
   {
@@ -127,16 +127,16 @@
     "modelListPath": "/models",
     "modelListShape": "data",
     "hostRule": "api.groq.com",
+    "verifiedAt": "2026-10-25",
     "docsUrl": "https://console.groq.com/docs/api-reference",
-    "verifiedAt": "2026-10-24",
     "verification": "verified",
     "fields": [],
     "capabilities": {
       "streaming": true,
-      "tools": false,
+      "tools": true,
       "vision": false,
       "imageGeneration": false,
-      "verified": false
+      "verified": true
     }
   },
   {
@@ -153,10 +153,10 @@
     "fields": [],
     "capabilities": {
       "streaming": true,
-      "tools": false,
+      "tools": true,
       "vision": false,
       "imageGeneration": false,
-      "verified": false
+      "verified": true
     }
   },
   {
@@ -228,15 +228,15 @@
     "modelListShape": "data",
     "hostRule": "openrouter.ai",
     "docsUrl": "https://openrouter.ai/docs/api/api-reference/models/get-models",
-    "verifiedAt": "2026-10-24",
+    "verifiedAt": "2026-10-25",
     "verification": "verified",
     "fields": [],
     "capabilities": {
       "streaming": true,
-      "tools": false,
+      "tools": true,
       "vision": false,
       "imageGeneration": false,
-      "verified": false
+      "verified": true
     }
   },
   {

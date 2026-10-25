@@ -1181,7 +1181,10 @@ mod tests {
         ))
         .unwrap();
         for entry in entries {
-            if entry.id == "openai" || entry.id == "anthropic" {
+            if matches!(
+                entry.id.as_str(),
+                "openai" | "anthropic" | "groq" | "cerebras" | "mistral" | "openrouter"
+            ) {
                 assert!(entry.capabilities.tools);
                 assert!(entry.capabilities.verified);
             } else {
@@ -1189,6 +1192,24 @@ mod tests {
                 assert!(!entry.capabilities.verified, "{}", entry.id);
             }
         }
+    }
+
+    #[test]
+    fn third_party_tool_capabilities_have_current_verification_dates() {
+        let entries = serde_json::from_str::<Vec<Value>>(include_str!(
+            "../../resources/provider-catalog.json"
+        ))
+        .unwrap();
+        for id in ["gemini", "groq", "cerebras", "mistral", "openrouter"] {
+            let entry = entries.iter().find(|entry| entry["id"] == id).unwrap();
+            assert_eq!(entry["verifiedAt"], "2026-10-25", "{id}");
+        }
+        let gemini = entries
+            .iter()
+            .find(|entry| entry["id"] == "gemini")
+            .unwrap();
+        assert!(!gemini["capabilities"]["tools"].as_bool().unwrap());
+        assert!(!gemini["capabilities"]["verified"].as_bool().unwrap());
     }
 
     #[test]
