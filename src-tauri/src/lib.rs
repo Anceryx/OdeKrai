@@ -23,6 +23,7 @@ fn get_build_info(caller: tauri::WebviewWindow) -> Result<BuildInfo, String> {
 
 pub mod agent;
 mod agent_home;
+mod diagnostics;
 mod history;
 mod policy;
 mod profile;
@@ -180,7 +181,7 @@ fn apply_click_region(
     Ok(())
 }
 
-fn ensure_island_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
+async fn ensure_island_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
     if let Some(window) = app.get_webview_window("island") {
         return Ok(window);
     }
@@ -221,7 +222,7 @@ fn ensure_island_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String>
     Ok(window)
 }
 
-fn ensure_mascot_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
+async fn ensure_mascot_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
     if let Some(window) = app.get_webview_window("mascot") {
         return Ok(window);
     }
@@ -272,7 +273,7 @@ fn apply_click_region(
 }
 
 #[tauri::command]
-fn set_island_visible(
+async fn set_island_visible(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
     visible: bool,
@@ -280,7 +281,7 @@ fn set_island_visible(
     require_caller(&caller, &["main", "island", "mascot"])?;
     let existing = app.get_webview_window("island");
     match visibility_action(visible, existing.is_some()) {
-        VisibilityAction::CreateOrShow => ensure_island_window(&app)?.show(),
+        VisibilityAction::CreateOrShow => ensure_island_window(&app).await?.show(),
         VisibilityAction::Close => existing
             .ok_or("Janela do assistente indisponível para fechar.")?
             .close(),
@@ -290,7 +291,7 @@ fn set_island_visible(
 }
 
 #[tauri::command]
-fn set_island_position(
+async fn set_island_position(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
     x: f64,
@@ -306,7 +307,7 @@ fn set_island_position(
     {
         return Err("Posição ou escala inválida".into());
     }
-    let window = ensure_island_window(&app)?;
+    let window = ensure_island_window(&app).await?;
     let factor = window.scale_factor().map_err(|e| e.to_string())?;
     let current_size = window.inner_size().map_err(|e| e.to_string())?;
     let height = current_size.height as f64 / factor;
@@ -354,7 +355,7 @@ fn set_island_height(
 }
 
 #[tauri::command]
-fn set_character_visible(
+async fn set_character_visible(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
     visible: bool,
@@ -362,7 +363,7 @@ fn set_character_visible(
     require_caller(&caller, &["main", "island", "mascot"])?;
     let existing = app.get_webview_window("mascot");
     match visibility_action(visible, existing.is_some()) {
-        VisibilityAction::CreateOrShow => ensure_mascot_window(&app)?.show(),
+        VisibilityAction::CreateOrShow => ensure_mascot_window(&app).await?.show(),
         VisibilityAction::Close => existing
             .ok_or("Janela do mascote indisponível para fechar.")?
             .close(),
@@ -372,7 +373,7 @@ fn set_character_visible(
 }
 
 #[tauri::command]
-fn set_character_position(
+async fn set_character_position(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
     x: f64,
@@ -388,7 +389,7 @@ fn set_character_position(
     {
         return Err("Posição ou escala inválida".into());
     }
-    let window = ensure_mascot_window(&app)?;
+    let window = ensure_mascot_window(&app).await?;
     window
         .set_size(LogicalSize::new(
             CHARACTER_WINDOW_BASE_SIZE * size,
@@ -424,7 +425,13 @@ pub fn run() -> Result<(), tauri::Error> {
         .manage(providers::ProviderRequests::default())
         .manage(security::SecurityState::new(true))
         .manage(tray::CloseBehaviorState::default())
+        .manage(tray::ShutdownState::default())
         .setup(|app| {
+            let startup_state = diagnostics::setup(app.handle()).unwrap_or_else(|error| {
+                log::error!("Não foi possível preparar o estado de inicialização: {error}");
+                diagnostics::StartupState::safe_fallback()
+            });
+            app.manage(startup_state);
             if let Some(window) = app.get_webview_window("main") {
                 window_sizing::fit_main_window(&window).map_err(std::io::Error::other)?;
                 tray::install_main_close_handler(app.handle(), &window);
@@ -434,10 +441,14 @@ pub fn run() -> Result<(), tauri::Error> {
                 state.set_initial_halted(halted);
             }
             security::init_shortcut(app.handle());
+            diagnostics::log_setup_complete(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_build_info,
+            diagnostics::get_startup_state,
+            diagnostics::complete_startup,
+            diagnostics::record_diagnostic_event,
             set_island_visible,
             set_island_position,
             set_island_topmost,
@@ -495,4 +506,52 @@ pub fn run() -> Result<(), tauri::Error> {
             agent_home::agent_memory_delete_all,
         ])
         .run(tauri::generate_context!())
+}
+
+#[cfg(test)]
+mod mock_window_tests {
+    use tauri::{
+        ipc::{CallbackFn, InvokeBody},
+        test::{
+            get_ipc_response, mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY,
+        },
+        webview::InvokeRequest,
+        Manager, WebviewUrl, WebviewWindowBuilder,
+    };
+
+    #[tauri::command]
+    async fn create_auxiliary_window(app: tauri::AppHandle<MockRuntime>) -> Result<(), String> {
+        WebviewWindowBuilder::new(&app, "auxiliary", WebviewUrl::App("index.html".into()))
+            .build()
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    }
+
+    #[test]
+    fn async_window_command_builds_a_mock_webview() {
+        let app = mock_builder()
+            .invoke_handler(tauri::generate_handler![create_auxiliary_window])
+            .build(mock_context(noop_assets()))
+            .expect("mock Tauri app should build");
+        let main = WebviewWindowBuilder::new(&app, "main", WebviewUrl::App("index.html".into()))
+            .build()
+            .expect("mock main window should build");
+        let response = get_ipc_response(
+            &main,
+            InvokeRequest {
+                cmd: "create_auxiliary_window".into(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: "tauri://localhost"
+                    .parse()
+                    .expect("mock origin should parse"),
+                body: InvokeBody::default(),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.to_string(),
+            },
+        );
+
+        assert!(response.is_ok());
+        assert!(app.get_webview_window("auxiliary").is_some());
+    }
 }

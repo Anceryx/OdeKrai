@@ -8,7 +8,7 @@ pub fn cancel_all(app: &tauri::AppHandle) {
 }
 
 pub(super) fn cancel_requests(state: &ProviderRequests) {
-    if let Ok(requests) = state.0.lock() {
+    if let Ok(requests) = state.0.try_lock() {
         for token in requests.values() {
             token.cancel();
         }

@@ -515,6 +515,20 @@ pub(super) fn open_approval(app: &tauri::AppHandle) -> Result<(), String> {
             .map_err(|_| "Não foi possível mostrar a janela de aprovação.".to_string())?;
         return Ok(());
     }
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = create_approval_window(&handle).await {
+            log::error!("Falha ao criar janela de aprovação: {error}");
+            let _ = handle.emit(
+                "security-error",
+                "Não foi possível abrir a janela de aprovação.",
+            );
+        }
+    });
+    Ok(())
+}
+
+async fn create_approval_window(app: &tauri::AppHandle) -> Result<(), String> {
     let window = WebviewWindowBuilder::new(app, "approval", WebviewUrl::App("index.html".into()))
         .title("Aprovação de ação — OdeKrai")
         .inner_size(560.0, 620.0)
@@ -530,44 +544,74 @@ pub(super) fn open_approval(app: &tauri::AppHandle) -> Result<(), String> {
     let close_window = window.clone();
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
             let Some(state) = handle.try_state::<SecurityState>() else {
+                let _ = close_window.destroy();
                 return;
             };
-            let item = match lock_pending(&state) {
+            let (item, has_more) = match state.pending.try_lock() {
                 Ok(mut queue) => {
                     let item = queue.pop_front();
-                    if !queue.is_empty() {
-                        api.prevent_close();
-                    }
-                    item
+                    (item, !queue.is_empty())
                 }
                 Err(_) => {
-                    api.prevent_close();
+                    let _ = handle.emit(
+                        "security-error",
+                        "A fila de aprovação está ocupada; tente fechar novamente.",
+                    );
                     return;
                 }
             };
-            if let Some(item) = item {
-                let _ = record(
-                    &handle,
-                    &state,
-                    &item.id,
-                    tool_for(&item.action).name(),
-                    item.risk,
-                    &item.origin,
-                    "deny",
-                    "approval_window_closed",
-                    "denied",
-                    item.created_at.elapsed().as_millis() as u64,
-                    audit_params(&item.action),
-                    "denied",
-                    None,
-                );
-                if lock_pending(&state).is_ok_and(|queue| !queue.is_empty()) {
+            if has_more {
+                if let Some(item) = item {
                     let _ = handle.emit("approval-updated", ());
                     let _ = close_window.set_focus();
-                } else {
-                    api.prevent_close();
+                    let audit_handle = handle.clone();
+                    tauri::async_runtime::spawn_blocking(move || {
+                        if let Some(state) = audit_handle.try_state::<SecurityState>() {
+                            let _ = record(
+                                &audit_handle,
+                                &state,
+                                &item.id,
+                                tool_for(&item.action).name(),
+                                item.risk,
+                                &item.origin,
+                                "deny",
+                                "approval_window_closed",
+                                "denied",
+                                item.created_at.elapsed().as_millis() as u64,
+                                audit_params(&item.action),
+                                "denied",
+                                None,
+                            );
+                        }
+                    });
                 }
+            } else {
+                let audit_handle = handle.clone();
+                let destroy_window = close_window.clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    if let Some(item) = item {
+                        if let Some(state) = audit_handle.try_state::<SecurityState>() {
+                            let _ = record(
+                                &audit_handle,
+                                &state,
+                                &item.id,
+                                tool_for(&item.action).name(),
+                                item.risk,
+                                &item.origin,
+                                "deny",
+                                "approval_window_closed",
+                                "denied",
+                                item.created_at.elapsed().as_millis() as u64,
+                                audit_params(&item.action),
+                                "denied",
+                                None,
+                            );
+                        }
+                    }
+                    let _ = destroy_window.destroy();
+                });
             }
         }
     });

@@ -1,4 +1,8 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::{
+    future::Future,
+    sync::atomic::{AtomicBool, Ordering},
+    time::Duration,
+};
 
 use tauri::{
     menu::{Menu, MenuItem},
@@ -7,9 +11,13 @@ use tauri::{
 };
 
 const TRAY_ID: &str = "odekrai-main-tray";
+const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Default)]
 pub struct CloseBehaviorState(AtomicBool);
+
+#[derive(Default)]
+pub struct ShutdownState(AtomicBool);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CloseAction {
@@ -59,8 +67,29 @@ fn close_auxiliary_windows(app: &AppHandle) {
 }
 
 fn shutdown(app: &AppHandle) {
-    close_auxiliary_windows(app);
-    app.exit(0);
+    if app
+        .try_state::<ShutdownState>()
+        .is_some_and(|state| state.0.swap(true, Ordering::SeqCst))
+    {
+        return;
+    }
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let timeout_handle = handle.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(SHUTDOWN_TIMEOUT).await;
+            std::process::exit(0);
+        });
+        let cleanup =
+            tauri::async_runtime::spawn_blocking(move || close_auxiliary_windows(&handle));
+        if wait_for_cleanup(cleanup, SHUTDOWN_TIMEOUT).await {
+            timeout_handle.exit(0);
+        }
+    });
+}
+
+async fn wait_for_cleanup<F: Future>(cleanup: F, timeout: Duration) -> bool {
+    tokio::time::timeout(timeout, cleanup).await.is_ok()
 }
 
 #[tauri::command]
@@ -112,11 +141,18 @@ fn show_main(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{close_action, CloseAction};
+    use super::{close_action, wait_for_cleanup, CloseAction};
+    use std::{future, time::Duration};
 
     #[test]
     fn close_behavior_maps_to_hide_or_application_exit() {
         assert_eq!(close_action(true), CloseAction::Hide);
         assert_eq!(close_action(false), CloseAction::Exit);
+    }
+
+    #[tokio::test]
+    async fn shutdown_cleanup_respects_its_deadline() {
+        assert!(!wait_for_cleanup(future::pending::<()>(), Duration::from_millis(1)).await);
+        assert!(wait_for_cleanup(async {}, Duration::from_millis(50)).await);
     }
 }

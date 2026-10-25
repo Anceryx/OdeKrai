@@ -55,6 +55,9 @@ jobs:
       - name: Verificar comando exclusivo de debug
         run: npm run check:debug-command
 
+      - name: Verificar criação assíncrona de janelas Tauri
+        run: npm run check:tauri-window-commands
+
       - name: Verificar formatação Rust
         run: cargo fmt --check
         working-directory: src-tauri
