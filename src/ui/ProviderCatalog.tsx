@@ -1,7 +1,12 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { AI_PROVIDERS, providerCatalogEntry, type AiProvider } from '../core/providers';
+import {
+  AI_PROVIDERS,
+  providerCatalogEntry,
+  type AiProvider,
+  type ProviderCapabilities,
+} from '../core/providers';
 import { openProviderLink } from '../core/provider-links';
 import { providerLogoFor } from '../core/provider-logos';
 import {
@@ -63,6 +68,9 @@ export function ProviderCatalog({
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
   const [stages, setStages] = useState<{ id: string; status: string; message: string }[]>([]);
   const [technicalError, setTechnicalError] = useState('');
+  const [effectiveCapabilities, setEffectiveCapabilities] = useState<ProviderCapabilities | null>(
+    null,
+  );
   useEffect(() => {
     setDraft(settings.providers[selected.id] ?? defaultProviderSettings(selected.id));
     setSecret('');
@@ -93,6 +101,26 @@ export function ProviderCatalog({
       current = false;
     };
   }, [selected.id, settings.providers[selected.id]]);
+  useEffect(() => {
+    let current = true;
+    const baseCapabilities = catalogEntry?.capabilities ?? null;
+    setEffectiveCapabilities(baseCapabilities);
+    if (isTauri() && draft.model.trim()) {
+      void invoke<ProviderCapabilities>('get_provider_capabilities', {
+        providerId: selected.id,
+        model: draft.model.trim(),
+      })
+        .then((result) => {
+          if (current) setEffectiveCapabilities(result);
+        })
+        .catch(() => {
+          if (current) setEffectiveCapabilities(baseCapabilities);
+        });
+    }
+    return () => {
+      current = false;
+    };
+  }, [selected.id, draft.model, catalogEntry]);
   const filtered = useMemo(
     () => filterProviderDirectory(AI_PROVIDERS, tab, search, connectedIds),
     [tab, search, connectedIds],
@@ -470,6 +498,27 @@ export function ProviderCatalog({
               </div>
             </div>
             <p className="provider-description">{selected.description}</p>
+            {effectiveCapabilities && selected.integration !== 'guide' && (
+              <p className="provider-capability-note">
+                Ferramentas:{' '}
+                <span
+                  className={
+                    'ui-badge ' +
+                    (effectiveCapabilities.tools
+                      ? 'ui-badge--success'
+                      : effectiveCapabilities.verified
+                        ? 'ui-badge--danger'
+                        : 'ui-badge--warning')
+                  }
+                >
+                  {effectiveCapabilities.tools
+                    ? 'Verificado'
+                    : effectiveCapabilities.verified
+                      ? 'Sem suporte para este modelo'
+                      : 'Não verificado'}
+                </span>
+              </p>
+            )}
             {externalLinkError && (
               <p className="provider-key-note" role="alert">
                 Não foi possível abrir o navegador. Copie este endereço e abra-o manualmente:{' '}
