@@ -33,6 +33,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
+          components: clippy, rustfmt
+
+      - name: Cache do Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
 
       - name: Instalar dependências JavaScript
         run: npm ci
@@ -42,6 +48,21 @@ jobs:
 
       - name: Verificar formatação
         run: npm run format:check
+
+      - name: Verificar comando exclusivo de debug
+        run: npm run check:debug-command
+
+      - name: Verificar formatação Rust
+        run: cargo fmt --check
+        working-directory: src-tauri
+
+      - name: Testar biblioteca Rust
+        run: cargo test --lib
+        working-directory: src-tauri
+
+      - name: Executar Clippy
+        run: cargo clippy -- -D warnings
+        working-directory: src-tauri
 
       - name: Compilar a interface
         run: npm run build
