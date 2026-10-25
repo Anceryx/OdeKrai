@@ -59,7 +59,7 @@ pub fn install_main_close_handler(app: &AppHandle, window: &WebviewWindow) {
 
 fn close_auxiliary_windows(app: &AppHandle) {
     crate::providers::cancel_all(app);
-    for label in ["island", "mascot", "approval"] {
+    for label in ["pet", "approval"] {
         if let Some(window) = app.get_webview_window(label) {
             let _ = window.destroy();
         }
@@ -108,15 +108,24 @@ pub async fn set_close_behavior(
             .ok_or("O ícone do aplicativo não está disponível.")?;
         let open = MenuItem::with_id(&app, "open", "Abrir", true, None::<&str>)
             .map_err(|error| error.to_string())?;
+        let pet = MenuItem::with_id(&app, "pet", "Mostrar/ocultar pet", true, None::<&str>)
+            .map_err(|error| error.to_string())?;
         let quit = MenuItem::with_id(&app, "quit", "Sair", true, None::<&str>)
             .map_err(|error| error.to_string())?;
-        let menu = Menu::with_items(&app, &[&open, &quit]).map_err(|error| error.to_string())?;
+        let menu =
+            Menu::with_items(&app, &[&open, &pet, &quit]).map_err(|error| error.to_string())?;
         TrayIconBuilder::with_id(TRAY_ID)
             .icon(icon)
             .menu(&menu)
             .on_menu_event(|app, event| match event.id().as_ref() {
                 "open" => show_main(app),
                 "quit" => shutdown(app),
+                "pet" => {
+                    let handle = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        crate::toggle_pet_from_tray(&handle).await;
+                    });
+                }
                 _ => {}
             })
             .build(&app)

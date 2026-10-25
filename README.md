@@ -9,7 +9,7 @@ Aplicativo OdeKrai para Windows, desenvolvido com React, TypeScript e Tauri 2. O
 ## Recursos implementados
 
 - Aplicativo com visão geral, conversas, catálogo de 16 provedores e configurações do assistente.
-- Janelas nativas do Tauri para a ilha flutuante e o modo livre do mascote.
+- Uma janela nativa do Tauri para os modos Ilha e Livre do pet, com posição, tamanho e modo persistidos.
 - Preferências locais sem chaves de API.
 - Armazenamento de credenciais via Gerenciador de Credenciais do Windows e envio de mensagens pelo processo Rust.
 - Histórico de conversas em SQLite local, com retomada da conversa e respostas incrementais para Anthropic e adaptadores Chat Completions. A Perplexity ainda retorna a resposta completa.

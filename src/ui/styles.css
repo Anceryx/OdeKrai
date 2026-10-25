@@ -1606,6 +1606,48 @@ html.island-window-html {
     border-color 0.2s ease,
     box-shadow 0.2s ease;
 }
+.floating-island.free-mode {
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.free-mode .island-shell {
+  width: 100%;
+  min-height: 0;
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.free-mode .island-shell:before,
+.free-mode .island-orbit,
+.free-mode .island-drag-handle,
+.free-mode .island-copy,
+.free-mode .island-action {
+  display: none;
+}
+.free-mode .island-mascot {
+  width: 100%;
+  height: 100%;
+}
+.free-mode .island-expanded {
+  left: 0;
+  right: auto;
+  bottom: auto;
+  top: 0;
+  width: max-content;
+  max-width: 360px;
+  flex-wrap: wrap;
+  padding: 10px;
+  border: 1px solid #ffffff20;
+  border-radius: 12px;
+  background: #111116f5;
+  box-shadow: 0 8px 24px #0009;
+}
 .island-shell:before {
   content: '';
   position: absolute;

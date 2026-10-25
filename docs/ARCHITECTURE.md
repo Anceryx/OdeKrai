@@ -37,7 +37,7 @@ injeção de instrução, e a proteção depende do taint e da política para ef
 
 ## Aplicativo
 
-O frontend usa React + TypeScript + Vite. `src/core/` mantém regras sem dependência da apresentação; `src/ui/` contém o Hub e as janelas do Companion. Na abertura, o Tauri cria somente `main`. Rust cria `island` e `mascot` quando ativadas e fecha cada uma quando desativada; cria `approval` quando há uma aprovação pendente e fecha a janela após resolver ou expirar a fila. Comandos Rust controlam posição, tamanho, visibilidade e prioridade. Eventos Tauri conectam o chat às janelas do Companion e sincronizam as preferências locais.
+O frontend usa React + TypeScript + Vite. `src/core/` mantém regras sem dependência da apresentação; `src/ui/` contém o Hub e a janela única `pet`. Na abertura, o Tauri cria somente `main`; a janela `pet` é criada sob demanda e opera nos modos Ilha ou Livre. A janela de aprovação continua independente. Comandos Rust controlam posição, tamanho, visibilidade e prioridade; eventos conectam o chat à FSM do pet.
 
 ## Pet 2D
 
@@ -60,7 +60,7 @@ o ícone do aplicativo por padrão, com uma preferência para usar o mascote. As
 renderizador Markdown que cria elementos React a partir de texto, sem interpretar HTML. Links só
 aceitam `http` e `https`.
 
-No Windows, a janela do mascote recebe região Win32 retangular no limite do sprite; a ilha mantém a região arredondada para acomodar seus controles. As regiões são atualizadas no redimensionamento e na alteração de DPI. Isso ainda exige teste de desktop real para confirmar o encaminhamento de cliques nas áreas transparentes.
+A janela `pet` usa transparência sem região Win32 e não ignora eventos do ponteiro. Os cantos transparentes continuam pertencendo à janela e podem receber cliques; arrasto, foco, DPI e monitores múltiplos exigem validação visual no Windows.
 
 ## Pasta e identidade do agente
 
@@ -85,6 +85,6 @@ O plugin Tauri `global-shortcut` registra o atalho no processo nativo. O kill sw
 
 ## Inicialização do painel
 
-Janelas auxiliares são construídas somente por caminhos assíncronos. A restauração da ilha e do mascote ocorre após as leituras iniciais, com limite de cinco segundos e sem condicionar a janela principal. Uma inicialização anterior incompleta ativa o modo seguro e mantém essas janelas desligadas nessa sessão. Falhas de inicialização e erros não tratados do frontend aparecem no banner **Diagnóstico** e são registrados em `app_data_dir/logs/diagnostic.log`, sem mensagens de conversa, segredos ou texto livre de erros.
+Janelas auxiliares são construídas somente por caminhos assíncronos. A restauração do pet ocorre após as leituras iniciais, com limite de cinco segundos e sem condicionar a janela principal. Uma inicialização anterior incompleta ativa o modo seguro e mantém essas janelas desligadas nessa sessão. Falhas de inicialização e erros não tratados do frontend aparecem no banner **Diagnóstico** e são registrados em `app_data_dir/logs/diagnostic.log`, sem mensagens de conversa, segredos ou texto livre de erros.
 
 Comandos nativos de leitura usados durante a abertura (pasta do agente, credenciais, perfil, permissões, mascote e histórico) são assíncronos no Tauri para não executar trabalho de disco ou do Gerenciador de Credenciais na thread principal da janela.

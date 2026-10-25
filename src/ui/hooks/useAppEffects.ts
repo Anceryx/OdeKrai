@@ -183,59 +183,35 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
             await timeout(
               (async () => {
                 await startupInvoke<void>(
-                  'set_island_position',
+                  'set_pet_position',
                   { x, y, size: companion.size },
                   reportDiagnostic,
                 );
                 await startupInvoke<void>(
-                  'set_island_topmost',
+                  'set_pet_size',
+                  {
+                    width: (companion.freeMode ? 176 : 280) * companion.size,
+                    height: (companion.freeMode ? 176 : 150) * companion.size,
+                  },
+                  reportDiagnostic,
+                );
+                await startupInvoke<void>(
+                  'set_pet_position',
+                  { x, y, size: companion.size },
+                  reportDiagnostic,
+                );
+                await startupInvoke<void>(
+                  'set_pet_topmost',
                   { enabled: companion.alwaysOnTop },
                   reportDiagnostic,
                 );
-                await startupInvoke<void>(
-                  'set_island_visible',
-                  { visible: true },
-                  reportDiagnostic,
-                );
+                await startupInvoke<void>('set_pet_visible', { visible: true }, reportDiagnostic);
                 await emit('companion-state', { type: 'reveal' });
               })(),
-              'restore_island',
+              'restore_pet',
             );
           } catch {
-            reportDiagnostic(
-              'set_island_visible',
-              'Não foi possível restaurar o pet do assistente.',
-            );
-          }
-        }
-        if (companion.freeMode) {
-          const x =
-            companion.desktopCoordinates?.x ??
-            Math.max(0, (screen.availWidth - 176 * companion.size) / 2);
-          const y =
-            companion.desktopCoordinates?.y ??
-            Math.max(0, (screen.availHeight - 176 * companion.size) / 2);
-          try {
-            await timeout(
-              (async () => {
-                await startupInvoke<void>(
-                  'set_character_position',
-                  { x, y, size: companion.size },
-                  reportDiagnostic,
-                );
-                await startupInvoke<void>(
-                  'set_character_visible',
-                  { visible: true },
-                  reportDiagnostic,
-                );
-              })(),
-              'restore_mascot',
-            );
-          } catch {
-            reportDiagnostic(
-              'set_character_visible',
-              'Não foi possível restaurar o OdeKrai no desktop.',
-            );
+            reportDiagnostic('set_pet_visible', 'Não foi possível restaurar o pet do assistente.');
           }
         }
       }

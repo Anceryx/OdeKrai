@@ -2,7 +2,8 @@ import { lazy, Suspense, useEffect, useMemo, type ComponentType, type FormEvent 
 import { resolveConversationSelection } from '../core/chat';
 import type { ChatMessage } from '../core/provider-messages';
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
-import { emit } from '@tauri-apps/api/event';
+import { emit, listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { normalizeSoundPreferences, playSound } from '../core/sounds';
 import { AI_PROVIDERS, type AiProvider } from '../core/providers';
 const Overview = lazy(() =>
@@ -155,6 +156,37 @@ function MainApp() {
     request,
     companionStateTimer,
   } = useAppState();
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: (() => void) | undefined;
+    void listen<string>('pet-action', ({ payload }) => {
+      if (payload === 'open') {
+        void getCurrentWindow()
+          .show()
+          .then(() => getCurrentWindow().setFocus());
+      } else if (payload === 'new-chat') {
+        setSection('chat');
+        setConversationId(null);
+        setMessages([]);
+        setDraft('');
+      } else if (payload === 'stop') {
+        void invoke('halt_all').catch(() => setToast('Não foi possível parar as ações.'));
+      } else if (payload === 'mute') {
+        setSettings((current) => ({
+          ...current,
+          companion: {
+            ...current.companion,
+            sounds: { ...current.companion.sounds, enabled: false },
+          },
+        }));
+        setToast('O pet foi silenciado.');
+      }
+    }).then((stop) => {
+      unlisten = stop;
+    });
+    return () => unlisten?.();
+  }, [setDraft, setMessages, setSection, setSettings, setConversationId, setToast]);
 
   async function choosePet(petId: string) {
     if (!PETS.some((pet) => pet.id === petId)) return;

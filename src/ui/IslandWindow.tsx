@@ -18,7 +18,7 @@ export function IslandWindow() {
   const [snapshot, setSnapshot] = useState<IslandSnapshot>(initialIslandSnapshot);
   const [settings, setSettings] = useState(loadSettings);
   const moveTimer = useRef<number | undefined>(undefined);
-  const heightRef = useRef(150 * settings.companion.size);
+  const heightRef = useRef((settings.companion.freeMode ? 176 : 150) * settings.companion.size);
   useEffect(() => {
     document.body.classList.add('island-window-body');
     document.documentElement.classList.add('island-window-html');
@@ -29,7 +29,7 @@ export function IslandWindow() {
       listen<IslandEvent>('companion-state', ({ payload }) =>
         setSnapshot((current) => transitionIsland(current, payload)),
       ),
-      listen<[number, number]>('companion-moved', ({ payload: [x, y] }) => {
+      listen<[number, number]>('pet-moved', ({ payload: [x, y] }) => {
         window.clearTimeout(moveTimer.current);
         moveTimer.current = window.setTimeout(() => {
           const current = loadSettings();
@@ -51,11 +51,17 @@ export function IslandWindow() {
     let active = true;
     const scale = settings.companion.size;
     const start = heightRef.current;
-    const end = (snapshot.state === 'expanded' ? 230 : 150) * scale;
+    const baseHeight = settings.companion.freeMode ? 176 : 150;
+    const end = (snapshot.state === 'expanded' ? 280 : baseHeight) * scale;
     void (async () => {
       for (let step = 1; step <= 8 && active; step++) {
         const height = start + ((end - start) * step) / 8;
-        await invoke('set_island_height', { size: scale, height });
+        await invoke('set_pet_size', {
+          width:
+            (settings.companion.freeMode ? (snapshot.state === 'expanded' ? 360 : 176) : 280) *
+            scale,
+          height,
+        });
         heightRef.current = height;
         await new Promise((resolve) => window.setTimeout(resolve, 18));
       }
@@ -63,7 +69,7 @@ export function IslandWindow() {
     return () => {
       active = false;
     };
-  }, [snapshot.state, settings.companion.size]);
+  }, [snapshot.state, settings.companion.freeMode, settings.companion.size]);
   useEffect(() => {
     if (snapshot.state === 'expanded') {
       const timer = window.setTimeout(
@@ -81,7 +87,7 @@ export function IslandWindow() {
   const state = snapshot.state;
   return (
     <main
-      className={`floating-island state-${state} ${settings.reduceMotion ? 'reduce-motion' : ''}`}
+      className={`floating-island ${settings.companion.freeMode ? 'free-mode' : 'island-mode'} state-${state} ${settings.reduceMotion ? 'reduce-motion' : ''}`}
     >
       <div
         className="island-shell"
@@ -94,10 +100,30 @@ export function IslandWindow() {
       >
         <div className="island-drag-handle" data-tauri-drag-region aria-hidden="true" />
         <div className="island-orbit" aria-hidden="true" />
+        <button
+          className="island-mascot"
+          data-tauri-drag-region={settings.companion.freeMode ? '' : undefined}
+          aria-label="Abrir o assistente do OdeKrai"
+          onClick={() => void send({ type: state === 'expanded' ? 'close' : 'open' })}
+        >
+          <PetSprite
+            className="island-mascot-renderer"
+            estado={petAnimationForIslandState(state)}
+            reduceMotion={settings.reduceMotion}
+          />
+        </button>
+        {!settings.companion.freeMode && (
+          <span className="island-copy">
+            <strong>OdeKrai</strong>
+            <span>{snapshot.message || islandLabels[state]}</span>
+          </span>
+        )}
         {!settings.companion.freeMode && (
           <button
-            className="island-mascot"
-            aria-label="Abrir o assistente do OdeKrai"
+            className="island-action"
+            aria-label={
+              state === 'expanded' ? 'Recolher pet do OdeKrai' : 'Expandir pet do OdeKrai'
+            }
             onClick={() =>
               void send(
                 { type: state === 'expanded' ? 'close' : 'open' },
@@ -105,79 +131,29 @@ export function IslandWindow() {
               )
             }
           >
-            <PetSprite
-              className="island-mascot-renderer"
-              estado={petAnimationForIslandState(state)}
-              reduceMotion={settings.reduceMotion}
-            />
+            <Icon name={state === 'expanded' ? 'minus' : 'plus'} />
           </button>
         )}
-        <div className="island-copy">
-          <strong>OdeKrai</strong>
-          <span>{snapshot.message || islandLabels[state]}</span>
-        </div>
-        <button
-          className="island-action"
-          aria-label={state === 'expanded' ? 'Recolher pet do OdeKrai' : 'Expandir pet do OdeKrai'}
-          onClick={() =>
-            void send(
-              { type: state === 'expanded' ? 'close' : 'open' },
-              state === 'expanded' ? 'island_close' : 'island_open',
-            )
-          }
-        >
-          <Icon name={state === 'expanded' ? 'minus' : 'plus'} />
-        </button>
         {state === 'expanded' && (
           <div className="island-expanded">
             <span className="island-status">
               <i />
               {islandLabels[state]}
             </span>
+            <button onClick={() => void emit('pet-action', 'open')}>Abrir o OdeKrai</button>
+            <button onClick={() => void emit('pet-action', 'new-chat')}>Nova conversa</button>
+            <button onClick={() => void emit('pet-action', 'stop')}>Parar tudo</button>
+            <button onClick={() => void emit('pet-action', 'mute')}>Silenciar</button>
             <button
               onClick={() => {
                 const current = loadSettings();
                 saveSettings({ ...current, companion: { ...current.companion, enabled: false } });
                 void send({ type: 'hide' }, 'sleep');
-                void invoke('set_island_visible', { visible: false });
+                void invoke('set_pet_visible', { visible: false });
               }}
             >
               Ocultar
             </button>
-            {!settings.companion.freeMode && (
-              <button
-                onClick={() => {
-                  const current = loadSettings();
-                  const companion = { ...current.companion, freeMode: true };
-                  saveSettings({ ...current, companion });
-                  const x =
-                    companion.desktopCoordinates?.x ??
-                    Math.max(0, (screen.availWidth - 176 * companion.size) / 2);
-                  const y =
-                    companion.desktopCoordinates?.y ??
-                    Math.max(0, (screen.availHeight - 176 * companion.size) / 2);
-                  void invoke('set_character_position', { x, y, size: companion.size })
-                    .then(() => invoke('set_character_visible', { visible: true }))
-                    .then(() =>
-                      playSound('drag_start', normalizeSoundPreferences(companion.sounds)),
-                    )
-                    .catch(() => {
-                      const latest = loadSettings();
-                      saveSettings({
-                        ...latest,
-                        companion: { ...latest.companion, freeMode: false },
-                      });
-                      void emit('companion-state', {
-                        type: 'activity',
-                        state: 'error',
-                        message: 'Não foi possível mover o OdeKrai para o desktop',
-                      });
-                    });
-                }}
-              >
-                Modo livre
-              </button>
-            )}
           </div>
         )}
       </div>

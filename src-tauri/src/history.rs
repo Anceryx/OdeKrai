@@ -169,11 +169,48 @@ pub async fn get_selected_pet(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
 ) -> Result<String, String> {
-    super::require_caller(&caller, &["main", "island", "mascot"])?;
+    super::require_caller(&caller, &["main", "pet"])?;
     let db = database(&app)?;
     selected_pet_from_db(&db, PET_CATALOG)
 }
 
+fn pet_mode_from_db(db: &Connection) -> Result<String, String> {
+    let saved = db
+        .query_row(
+            "SELECT value FROM pet_preferences WHERE key='mode'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|_| "Não foi possível ler o modo do pet.".to_string())?;
+    Ok(saved
+        .filter(|mode| mode == "island" || mode == "free")
+        .unwrap_or_else(|| "island".into()))
+}
+
+#[tauri::command]
+pub async fn get_pet_mode(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+) -> Result<String, String> {
+    super::require_caller(&caller, &["main", "pet"])?;
+    pet_mode_from_db(&database(&app)?)
+}
+
+#[tauri::command]
+pub async fn set_pet_mode(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    mode: String,
+) -> Result<(), String> {
+    super::require_main(&caller)?;
+    if mode != "island" && mode != "free" {
+        return Err("Modo do pet inválido.".into());
+    }
+    let db = database(&app)?;
+    db.execute("INSERT INTO pet_preferences(key,value) VALUES ('mode',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [mode]).map_err(|_| "Não foi possível salvar o modo do pet.".to_string())?;
+    Ok(())
+}
 #[tauri::command]
 pub fn set_selected_pet(
     app: tauri::AppHandle,
@@ -497,6 +534,25 @@ mod tests {
             "character-male-a"
         );
         assert!(!pet_id_is_valid("../secret", PET_CATALOG));
+    }
+
+    #[test]
+    fn pet_mode_defaults_and_persists_in_sqlite() {
+        let db = Connection::open_in_memory().unwrap();
+        init_schema(&db).unwrap();
+        assert_eq!(pet_mode_from_db(&db).unwrap(), "island");
+        db.execute(
+            "INSERT INTO pet_preferences(key,value) VALUES ('mode','free')",
+            [],
+        )
+        .unwrap();
+        assert_eq!(pet_mode_from_db(&db).unwrap(), "free");
+        db.execute(
+            "UPDATE pet_preferences SET value='invalid' WHERE key='mode'",
+            [],
+        )
+        .unwrap();
+        assert_eq!(pet_mode_from_db(&db).unwrap(), "island");
     }
 
     #[test]

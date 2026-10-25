@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "pet",
+  "description": "Minimal event and window-drag permissions for the pet window.",
+  "windows": ["pet"],
+  "permissions": ["core:event:default", "core:window:allow-start-dragging"]
+}

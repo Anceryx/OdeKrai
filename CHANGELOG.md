@@ -35,6 +35,7 @@
 
 ### Janela e preferências
 
+- A ilha e o modo livre agora compartilham uma única janela de pet, com alternância salva no SQLite. A transparência dos cantos permanece interativa.
 - As janelas auxiliares são criadas por comandos assíncronos; a inicialização tem modo seguro após interrupção, e o fechamento tenta encerrar em até três segundos.
 - Falhas de inicialização aparecem no banner Diagnóstico e são registradas em `app_data_dir/logs/diagnostic.log` sem conteúdo de conversas ou segredos.
 - Com “Encerrar”, o X encerra o processo e cancela fluxos e janelas auxiliares; só “Minimizar para a bandeja” mantém o app em segundo plano.

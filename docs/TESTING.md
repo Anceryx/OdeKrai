@@ -44,7 +44,7 @@ island/mascote.
 - `src/core/pets.test.ts`: rejeita catálogo ausente e nomes de arquivo inválidos, verifica mapeamento da FSM, fallback para PNG ausente e preferência de movimento reduzido.
 - `history.rs`: `pet_catalog_rejects_missing_json_and_unsafe_paths` valida o manifesto e bloqueia caminhos inseguros; `selected_pet_defaults_and_persists_in_sqlite` confere o padrão e persistência local.
 - `npm run build`, `npm test`, `npm run format:check`, `cargo fmt --check`, `cargo test --offline --lib` e `git diff --check` devem ser executados para validar o código.
-- Validação visual nativa pendente no Windows: seleção, animações, avatar, pet da Visão geral, transparência, arrasto, topmost, click-through e escala/DPI nas janelas auxiliares.
+- Validação visual nativa pendente no Windows: seleção, animações, avatar, pet da Visão geral, transparência dos cantos, foco, arrasto, topmost, escala/DPI e limites da área útil em vários monitores; não validar click-through, pois a janela recebe cliques normalmente.
 - Há SVGs locais em `assets-src/iconly/`, sem arquivo de licença e ainda não rastreados pelo Git; não são incorporados nesta fase.
 
 ### Fase 3 — permissões
@@ -76,9 +76,9 @@ O GLB deste proprietário fica fora do Git e pode ser incluído pelo `npm run bu
 Execute em uma sessão Windows com a janela visível. Registre sistema, escala DPI, resolução/monitores e resultado por etapa. Não marque como aprovado quando não for possível observar o comportamento.
 
 1. Abra o HUB e confirme que a janela aparece, responde e fecha normalmente.
-2. Ative a ilha; confirme posição inicial, transparência, expansão/recolhimento e que áreas transparentes permitem clicar no desktop.
-3. Abra o Companion em modo livre; arraste-o, mova o foco para outros apps e confirme que ele não rouba foco.
-4. Reinicie o app e confirme a persistência da posição; use “Retornar à ilha” e confirme que a janela livre some e a ilha reaparece.
+2. Ative a ilha; confirme posição inicial, transparência, expansão/recolhimento e que os cantos transparentes continuam interceptando cliques da janela.
+3. No modo Livre, arraste o pet e confira foco e limites da área útil em cada monitor.
+4. Reinicie o app e confirme posição e modo salvos; alterne entre Ilha e Livre.
 5. Abra a pré-visualização e percorra `idle`, `happy`, `sad`, `angry`, `surprised`, `confused`, `thinking`, `listening`, `talking`, `sleeping`, `waking`, `celebrating`, `loading`, `error`, `working` e `notification`. Para cada uma, confirme olhos no visor, identidade preservada, transição suave e ausência de deformação.
 6. Teste piscar, olhar, flutuar, inclinar, arrastar, retornar e movimento reduzido. Minimize/restaure e feche/reabra; confirme que a animação pausa/restaura e não há consumo crescente ou processos órfãos.
 7. Compare frente e três quartos com as referências oficiais locais; confira UV, espelhamento, profundidade, materiais vermelhos/pretos, brilho dos olhos, nitidez e transparência do fundo.
@@ -95,7 +95,7 @@ Execute em uma sessão Windows com a janela visível. Registre sistema, escala D
 18. Troque entre provedores e confirme que endpoint/modelo não se misturam. Informe endpoint de outro provedor e confirme a recusa antes do salvamento da credencial. Carregue modelos somente nos provedores com endpoint documentado; confirme o estado parcial nos demais.
 19. Em Configurações → Permissões, troque cada modo e confirme a caixa nativa antes de salvar. Confira que o modo exibido em `ODEKRAI.md` não altera o modo efetivo do SQLite.
 20. Em build de desenvolvimento, teste leitura, gravação com backup, mover para `.trash`, envio simulado e bloqueio financeiro. Confirme que só a janela `approval` pode aprovar, que Negar e fechar negam, que parâmetros adulterados/replay/expiração/fila cheia falham fechados e que conteúdo externo pede aprovação.
-21. Confirme que a inicialização abre apenas `main`; habilite e desabilite island/mascote e resolva/expire aprovações, observando que as janelas correspondentes são criadas sob demanda e fechadas no fim do uso.
+21. Confirme que a inicialização abre apenas `main`; habilite, oculte e alterne os modos Ilha/Livre do pet; resolva/expire aprovações e confirme que a janela do pet é criada sob demanda.
 22. Na primeira execução com a janela visível, abra o seletor de pasta nativo, escolha um diretório local e confirme que o Rust ainda valida o caminho antes de criar a pasta do agente; teste os selects de idioma e tom.
 23. Nas resoluções de janela 1250×700 e 1000×600, percorra Visão geral, Conversas, Identidade e memória, Conectores, Assistente, Configurações, Permissões, Atividade e Perfil; confirme uma barra de rolagem principal, rodapé fixo e histórico selecionável com título/data.
 24. Ao mudar modo ou habilitar override, confirme que a caixa Win32 aparece sem congelar a janela principal enquanto permanece aberta; confirme Cancelar e Sim retornando à interface.

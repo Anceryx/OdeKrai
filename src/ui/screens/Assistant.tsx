@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { emit } from '@tauri-apps/api/event';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import {
@@ -14,6 +14,18 @@ import type { AppSettings } from '../../core/settings';
 import { PageHeader, Toggle } from '../DesignSystem';
 import { PetSprite } from '../PetSprite';
 
+export function PetActionError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  if (!message) return null;
+  return (
+    <div className="diagnostic-banner" role="alert">
+      <span>{message}</span>
+      <button type="button" onClick={onRetry}>
+        Tentar de novo
+      </button>
+    </div>
+  );
+}
+
 export function AssistantScreen({
   settings,
   update,
@@ -28,18 +40,27 @@ export function AssistantScreen({
   onSelectPet: (petId: string) => void;
 }) {
   const [petState, setPetState] = useState<PetAnimationState>('idle');
+  const [petError, setPetError] = useState('');
+  const [retryPetAction, setRetryPetAction] = useState<(() => void) | null>(null);
   async function applyPosition(next: AppSettings['companion']) {
     if (!isTauri() || !next.enabled) return;
-    const width = 280 * next.size;
-    const height = 150 * next.size;
+    const width = (next.freeMode ? 176 : 280) * next.size;
+    const height = (next.freeMode ? 176 : 150) * next.size;
     const right = next.position.endsWith('right');
     const bottom = next.position.startsWith('bottom');
     const x = next.coordinates?.x ?? (right ? Math.max(0, screen.availWidth - width - 28) : 28);
     const y = next.coordinates?.y ?? (bottom ? Math.max(0, screen.availHeight - height - 58) : 28);
     try {
-      await invoke('set_island_position', { x, y, size: next.size });
+      await invoke('set_pet_position', { x, y, size: next.size });
+      setPetError('');
+      setRetryPetAction(null);
+      await invoke('set_pet_size', { width, height });
+      await invoke('set_pet_position', { x, y, size: next.size });
     } catch {
-      throw new Error('Não foi possível atualizar a posição do pet.');
+      const message = 'Não foi possível atualizar a posição ou o tamanho do pet.';
+      setPetError(message);
+      setRetryPetAction(() => () => void applyPosition(next));
+      throw new Error(message);
     }
   }
   async function setEnabled(enabled: boolean) {
@@ -48,45 +69,62 @@ export function AssistantScreen({
     try {
       if (enabled) {
         await applyPosition({ ...settings.companion, enabled: true });
-        await invoke('set_island_topmost', { enabled: settings.companion.alwaysOnTop });
-        await invoke('set_island_visible', { visible: true });
+        await invoke('set_pet_topmost', { enabled: settings.companion.alwaysOnTop });
+        await invoke('set_pet_visible', { visible: true });
         await emit('companion-state', { type: 'reveal' });
+        setPetError('');
+        setRetryPetAction(null);
         void playSound('wake', normalizeSoundPreferences(settings.companion.sounds));
       } else {
-        await invoke('set_island_visible', { visible: false });
+        await invoke('set_pet_visible', { visible: false });
         void playSound('sleep', normalizeSoundPreferences(settings.companion.sounds));
       }
     } catch {
       update({ ...settings, companion: { ...settings.companion, enabled: !enabled } });
+      setPetError('Não foi possível alterar a janela do pet.');
+      setRetryPetAction(() => () => void setEnabled(enabled));
       onError('Não foi possível alterar a janela do assistente.');
     }
   }
-  async function setFreeMode(freeMode: boolean) {
-    const companion = { ...settings.companion, freeMode };
-    update({ ...settings, companion });
+  useEffect(() => {
     if (!isTauri()) return;
+    void invoke<'island' | 'free'>('get_pet_mode')
+      .then((mode) => {
+        update({ ...settings, companion: { ...settings.companion, freeMode: mode === 'free' } });
+      })
+      .catch(() => {
+        setPetError('Não foi possível carregar o modo salvo do pet.');
+        setRetryPetAction(() => () => void invoke('get_pet_mode'));
+        onError('Não foi possível carregar o modo salvo do pet.');
+      });
+  }, []);
+  async function setFreeMode(freeMode: boolean) {
     try {
-      if (freeMode) {
-        const x =
-          companion.desktopCoordinates?.x ??
-          Math.max(0, (screen.availWidth - 176 * companion.size) / 2);
+      if (isTauri()) await invoke('set_pet_mode', { mode: freeMode ? 'free' : 'island' });
+      const companion = { ...settings.companion, freeMode };
+      update({ ...settings, companion });
+      if (companion.enabled) {
+        const x = companion.coordinates?.x ?? Math.max(0, screen.availWidth - 300 * companion.size);
         const y =
-          companion.desktopCoordinates?.y ??
-          Math.max(0, (screen.availHeight - 176 * companion.size) / 2);
-        await invoke('set_character_position', { x, y, size: companion.size });
-        await invoke('set_character_visible', { visible: true });
-        void playSound('drag_start', normalizeSoundPreferences(companion.sounds));
-      } else {
-        await invoke('set_character_visible', { visible: false });
-        void playSound('return_home', normalizeSoundPreferences(companion.sounds));
+          companion.coordinates?.y ?? Math.max(0, screen.availHeight - 190 * companion.size);
+        await invoke('set_pet_position', { x, y, size: companion.size });
+        await invoke('set_pet_size', {
+          width: (freeMode ? 176 : 280) * companion.size,
+          height: (freeMode ? 176 : 150) * companion.size,
+        });
+        await invoke('set_pet_position', { x, y, size: companion.size });
       }
+      setPetError('');
+      setRetryPetAction(null);
     } catch {
-      update({ ...settings, companion: { ...settings.companion, freeMode: !freeMode } });
-      onError('Não foi possível mover o OdeKrai entre as janelas.');
+      setPetError('Não foi possível trocar o modo do pet.');
+      setRetryPetAction(() => () => void setFreeMode(freeMode));
+      onError('Não foi possível trocar o modo do pet.');
     }
   }
   return (
     <div className="page subpage">
+      <PetActionError message={petError} onRetry={retryPetAction ?? (() => undefined)} />
       <PageHeader
         eyebrow="PERSONALIZAÇÃO"
         title="Assistente do OdeKrai"
@@ -195,15 +233,18 @@ export function AssistantScreen({
         </div>
         <div className="preference-row">
           <div>
-            <strong>Modo livre do OdeKrai</strong>
-            <span>Permite mover o OdeKrai em uma janela separada.</span>
+            <strong>Modo do pet</strong>
+            <span>Escolha entre uma ilha junto à borda e o mascote livre.</span>
           </div>
-          <Toggle
-            checked={settings.companion.freeMode}
-            label="Ativar modo livre do pet"
-            onClick={() => void setFreeMode(!settings.companion.freeMode)}
+          <select
+            aria-label="Modo do pet"
+            value={settings.companion.freeMode ? 'free' : 'island'}
+            onChange={(event) => void setFreeMode(event.target.value === 'free')}
             disabled={!isTauri()}
-          />
+          >
+            <option value="island">Ilha</option>
+            <option value="free">Livre</option>
+          </select>
         </div>
         <div className="preference-row">
           <div>
@@ -237,7 +278,7 @@ export function AssistantScreen({
             onClick={() => {
               const enabled = !settings.companion.alwaysOnTop;
               update({ ...settings, companion: { ...settings.companion, alwaysOnTop: enabled } });
-              if (isTauri()) void invoke('set_island_topmost', { enabled });
+              if (isTauri()) void invoke('set_pet_topmost', { enabled });
             }}
             disabled={!isTauri()}
           />

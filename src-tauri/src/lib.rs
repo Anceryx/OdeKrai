@@ -56,8 +56,7 @@ mod security_caller_tests {
     fn approval_commands_only_accept_the_approval_window() {
         assert!(caller_label_allowed("approval", &["approval"]));
         assert!(!caller_label_allowed("main", &["approval"]));
-        assert!(!caller_label_allowed("island", &["approval"]));
-        assert!(!caller_label_allowed("mascot", &["approval"]));
+        assert!(!caller_label_allowed("pet", &["approval"]));
     }
 }
 
@@ -97,6 +96,19 @@ mod feature_window_lifecycle_tests {
     }
 }
 
+#[cfg(test)]
+mod pet_position_tests {
+    use super::clamp_window_position;
+
+    #[test]
+    fn pet_position_is_limited_to_work_area_including_negative_monitor_origins() {
+        assert_eq!(
+            clamp_window_position(4000.0, -400.0, -1920.0, 40.0, 1920.0, 1040.0, 300.0, 180.0),
+            (-300.0, 40.0)
+        );
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum VisibilityAction {
     CreateOrShow,
@@ -112,109 +124,68 @@ fn visibility_action(visible: bool, exists: bool) -> VisibilityAction {
     }
 }
 
-const CHARACTER_WINDOW_BASE_SIZE: f64 = 176.0;
-
-fn apply_character_click_region(window: &tauri::WebviewWindow) -> Result<(), String> {
-    let width = window
-        .inner_size()
-        .map_err(|error| error.to_string())?
-        .width as f64;
-    let scale = window.scale_factor().map_err(|error| error.to_string())?;
-    let logical_width = width / scale;
-    apply_click_region(
-        window,
-        logical_width * (8.0 / CHARACTER_WINDOW_BASE_SIZE),
-        0.0,
+fn clamp_window_position(
+    x: f64,
+    y: f64,
+    left: f64,
+    top: f64,
+    work_width: f64,
+    work_height: f64,
+    window_width: f64,
+    window_height: f64,
+) -> (f64, f64) {
+    (
+        x.clamp(left, (left + work_width - window_width).max(left)),
+        y.clamp(top, (top + work_height - window_height).max(top)),
     )
 }
 
-#[cfg(windows)]
-fn apply_click_region(
-    window: &tauri::WebviewWindow,
-    inset: f64,
-    corner_radius: f64,
-) -> Result<(), String> {
-    use std::{ffi::c_void, io};
-
-    #[link(name = "gdi32")]
-    unsafe extern "system" {
-        fn CreateRoundRectRgn(
-            left: i32,
-            top: i32,
-            right: i32,
-            bottom: i32,
-            ellipse_width: i32,
-            ellipse_height: i32,
-        ) -> *mut c_void;
-        fn DeleteObject(object: *mut c_void) -> i32;
-    }
-    #[link(name = "user32")]
-    unsafe extern "system" {
-        fn SetWindowRgn(window: *mut c_void, region: *mut c_void, redraw: i32) -> i32;
-    }
-
-    let size = window.inner_size().map_err(|error| error.to_string())?;
-    let scale = window.scale_factor().map_err(|error| error.to_string())?;
-    let hwnd = window.hwnd().map_err(|error| error.to_string())?.0;
-    let inset = (inset * scale).round() as i32;
-    let radius = (corner_radius * scale).round() as i32;
-    let region = unsafe {
-        CreateRoundRectRgn(
-            inset,
-            inset,
-            size.width as i32 - inset,
-            size.height as i32 - inset,
-            radius * 2,
-            radius * 2,
-        )
-    };
-    if region.is_null() {
-        return Err(io::Error::last_os_error().to_string());
-    }
-
-    // SetWindowRgn takes ownership of the region after a successful call.
-    if unsafe { SetWindowRgn(hwnd, region, 1) } == 0 {
-        let error = io::Error::last_os_error();
-        unsafe { DeleteObject(region) };
-        return Err(error.to_string());
-    }
-    Ok(())
-}
-
-async fn ensure_island_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
-    if let Some(window) = app.get_webview_window("island") {
+async fn ensure_pet_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
+    if let Some(window) = app.get_webview_window("pet") {
         return Ok(window);
     }
-    let window = WebviewWindowBuilder::new(app, "island", WebviewUrl::App("index.html".into()))
-        .title("Ilha do OdeKrai")
+    let window = WebviewWindowBuilder::new(app, "pet", WebviewUrl::App("index.html".into()))
+        .title("Pet do OdeKrai")
         .inner_size(280.0, 150.0)
         .decorations(false)
         .transparent(true)
         .always_on_top(true)
-        .focusable(false)
-        .focused(false)
+        .focusable(true)
         .resizable(false)
         .skip_taskbar(true)
         .visible(false)
         .build()
-        .map_err(|_| "Não foi possível preparar a ilha do assistente.".to_string())?;
-    if let Err(error) = apply_click_region(&window, 5.0, 34.0) {
-        let _ = window.close();
-        return Err(error);
-    }
+        .map_err(|_| "Não foi possível preparar a janela do pet.".to_string())?;
     let handle = app.clone();
     let moved_window = window.clone();
     window.on_window_event(move |event| {
-        if matches!(
-            event,
-            tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
-        ) {
-            let _ = apply_click_region(&moved_window, 5.0, 34.0);
-        }
         if let tauri::WindowEvent::Moved(position) = event {
             let scale = moved_window.scale_factor().unwrap_or(1.0);
+            if let Ok(Some(monitor)) = moved_window.current_monitor() {
+                if let (Ok(size), Ok(_)) = (moved_window.inner_size(), moved_window.scale_factor())
+                {
+                    let work = monitor.work_area();
+                    let x = position.x as f64 / scale;
+                    let y = position.y as f64 / scale;
+                    let (x, y) = clamp_window_position(
+                        x,
+                        y,
+                        work.position.x as f64 / scale,
+                        work.position.y as f64 / scale,
+                        work.size.width as f64 / scale,
+                        work.size.height as f64 / scale,
+                        size.width as f64 / scale,
+                        size.height as f64 / scale,
+                    );
+                    if (x - position.x as f64 / scale).abs() > 1.0
+                        || (y - position.y as f64 / scale).abs() > 1.0
+                    {
+                        let _ = moved_window.set_position(LogicalPosition::new(x, y));
+                    }
+                }
+            }
             let _ = handle.emit(
-                "companion-moved",
+                "pet-moved",
                 (position.x as f64 / scale, position.y as f64 / scale),
             );
         }
@@ -222,68 +193,31 @@ async fn ensure_island_window(app: &tauri::AppHandle) -> Result<WebviewWindow, S
     Ok(window)
 }
 
-async fn ensure_mascot_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
-    if let Some(window) = app.get_webview_window("mascot") {
-        return Ok(window);
-    }
-    let window = WebviewWindowBuilder::new(app, "mascot", WebviewUrl::App("index.html".into()))
-        .title("OdeKrai")
-        .inner_size(CHARACTER_WINDOW_BASE_SIZE, CHARACTER_WINDOW_BASE_SIZE)
-        .decorations(false)
-        .transparent(true)
-        .always_on_top(true)
-        .focusable(false)
-        .focused(false)
-        .resizable(false)
-        .skip_taskbar(true)
-        .visible(false)
-        .build()
-        .map_err(|_| "Não foi possível preparar a janela do mascote.".to_string())?;
-    if let Err(error) = apply_character_click_region(&window) {
-        let _ = window.close();
-        return Err(error);
-    }
-    let handle = app.clone();
-    let moved_window = window.clone();
-    window.on_window_event(move |event| {
-        if matches!(
-            event,
-            tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
-        ) {
-            let _ = apply_character_click_region(&moved_window);
+pub(crate) async fn toggle_pet_from_tray(app: &tauri::AppHandle) {
+    match app.get_webview_window("pet") {
+        Some(window) if window.is_visible().unwrap_or(false) => {
+            let _ = window.hide();
         }
-        if let tauri::WindowEvent::Moved(position) = event {
-            let scale = moved_window.scale_factor().unwrap_or(1.0);
-            let _ = handle.emit(
-                "character-moved",
-                (position.x as f64 / scale, position.y as f64 / scale),
-            );
+        _ => {
+            if let Ok(window) = ensure_pet_window(app).await {
+                let _ = window.show();
+            }
         }
-    });
-    Ok(window)
-}
-
-#[cfg(not(windows))]
-fn apply_click_region(
-    _window: &tauri::WebviewWindow,
-    _inset: f64,
-    _corner_radius: f64,
-) -> Result<(), String> {
-    Ok(())
+    }
 }
 
 #[tauri::command]
-async fn set_island_visible(
+async fn set_pet_visible(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
     visible: bool,
 ) -> Result<(), String> {
-    require_caller(&caller, &["main", "island", "mascot"])?;
-    let existing = app.get_webview_window("island");
+    require_caller(&caller, &["main", "pet"])?;
+    let existing = app.get_webview_window("pet");
     match visibility_action(visible, existing.is_some()) {
-        VisibilityAction::CreateOrShow => ensure_island_window(&app).await?.show(),
+        VisibilityAction::CreateOrShow => ensure_pet_window(&app).await?.show(),
         VisibilityAction::Close => existing
-            .ok_or("Janela do assistente indisponível para fechar.")?
+            .ok_or("Janela do pet indisponível para fechar.")?
             .close(),
         VisibilityAction::Noop => Ok(()),
     }
@@ -291,14 +225,14 @@ async fn set_island_visible(
 }
 
 #[tauri::command]
-async fn set_island_position(
+async fn set_pet_position(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
     x: f64,
     y: f64,
     size: f64,
 ) -> Result<(), String> {
-    require_caller(&caller, &["main", "mascot"])?;
+    require_caller(&caller, &["main", "pet"])?;
     if !x.is_finite()
         || !y.is_finite()
         || !(-100_000.0..=100_000.0).contains(&x)
@@ -307,101 +241,94 @@ async fn set_island_position(
     {
         return Err("Posição ou escala inválida".into());
     }
-    let window = ensure_island_window(&app).await?;
-    let factor = window.scale_factor().map_err(|e| e.to_string())?;
-    let current_size = window.inner_size().map_err(|e| e.to_string())?;
-    let height = current_size.height as f64 / factor;
-    window
-        .set_size(LogicalSize::new(280.0 * size, height))
-        .map_err(|e| e.to_string())?;
-    apply_click_region(&window, 5.0, 34.0)?;
+    let window = ensure_pet_window(&app).await?;
+    let monitor = window
+        .current_monitor()
+        .map_err(|error| error.to_string())?
+        .or_else(|| window.primary_monitor().ok().flatten())
+        .ok_or("Não foi possível localizar o monitor do pet.")?;
+    let scale = window.scale_factor().map_err(|error| error.to_string())?;
+    let work = monitor.work_area();
+    let current = window.inner_size().map_err(|error| error.to_string())?;
+    let width = current.width as f64 / scale;
+    let height = current.height as f64 / scale;
+    let left = work.position.x as f64 / scale;
+    let top = work.position.y as f64 / scale;
+    let (x, y) = clamp_window_position(
+        x,
+        y,
+        left,
+        top,
+        work.size.width as f64 / scale,
+        work.size.height as f64 / scale,
+        width,
+        height,
+    );
     window
         .set_position(LogicalPosition::new(x, y))
-        .map_err(|e| e.to_string())
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-fn set_island_topmost(
+async fn set_pet_topmost(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
     enabled: bool,
 ) -> Result<(), String> {
-    require_caller(&caller, &["main", "mascot"])?;
-    if let Some(window) = app.get_webview_window("island") {
-        window.set_always_on_top(enabled).map_err(|e| e.to_string())
+    require_caller(&caller, &["main", "pet"])?;
+    if let Some(window) = app.get_webview_window("pet") {
+        window
+            .set_always_on_top(enabled)
+            .map_err(|error| error.to_string())
     } else {
         Ok(())
     }
 }
 
 #[tauri::command]
-fn set_island_height(
+async fn set_pet_size(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
-    size: f64,
+    width: f64,
     height: f64,
 ) -> Result<(), String> {
-    require_caller(&caller, &["main", "island"])?;
-    if !(0.75..=1.5).contains(&size) || !height.is_finite() || !(100.0..=360.0).contains(&height) {
+    require_caller(&caller, &["main", "pet"])?;
+    if !width.is_finite()
+        || !height.is_finite()
+        || !(100.0..=420.0).contains(&width)
+        || !(100.0..=360.0).contains(&height)
+    {
         return Err("Dimensão inválida".into());
     }
     let window = app
-        .get_webview_window("island")
-        .ok_or("Janela do assistente indisponível")?;
+        .get_webview_window("pet")
+        .ok_or("Janela do pet indisponível")?;
     window
-        .set_size(LogicalSize::new(280.0 * size, height))
+        .set_size(LogicalSize::new(width, height))
         .map_err(|error| error.to_string())?;
-    apply_click_region(&window, 5.0, 34.0)
-}
-
-#[tauri::command]
-async fn set_character_visible(
-    app: tauri::AppHandle,
-    caller: tauri::WebviewWindow,
-    visible: bool,
-) -> Result<(), String> {
-    require_caller(&caller, &["main", "island", "mascot"])?;
-    let existing = app.get_webview_window("mascot");
-    match visibility_action(visible, existing.is_some()) {
-        VisibilityAction::CreateOrShow => ensure_mascot_window(&app).await?.show(),
-        VisibilityAction::Close => existing
-            .ok_or("Janela do mascote indisponível para fechar.")?
-            .close(),
-        VisibilityAction::Noop => Ok(()),
-    }
-    .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-async fn set_character_position(
-    app: tauri::AppHandle,
-    caller: tauri::WebviewWindow,
-    x: f64,
-    y: f64,
-    size: f64,
-) -> Result<(), String> {
-    require_caller(&caller, &["main", "island"])?;
-    if !x.is_finite()
-        || !y.is_finite()
-        || !(-100_000.0..=100_000.0).contains(&x)
-        || !(-100_000.0..=100_000.0).contains(&y)
-        || !(0.75..=1.5).contains(&size)
-    {
-        return Err("Posição ou escala inválida".into());
-    }
-    let window = ensure_mascot_window(&app).await?;
-    window
-        .set_size(LogicalSize::new(
-            CHARACTER_WINDOW_BASE_SIZE * size,
-            CHARACTER_WINDOW_BASE_SIZE * size,
-        ))
-        .map_err(|e| e.to_string())?;
-    apply_character_click_region(&window)?;
+    let monitor = window
+        .current_monitor()
+        .map_err(|error| error.to_string())?
+        .or_else(|| window.primary_monitor().ok().flatten())
+        .ok_or("Não foi possível localizar o monitor do pet.")?;
+    let scale = window.scale_factor().map_err(|error| error.to_string())?;
+    let position = window.outer_position().map_err(|error| error.to_string())?;
+    let actual_size = window.inner_size().map_err(|error| error.to_string())?;
+    let work = monitor.work_area();
+    let (x, y) = clamp_window_position(
+        position.x as f64 / scale,
+        position.y as f64 / scale,
+        work.position.x as f64 / scale,
+        work.position.y as f64 / scale,
+        work.size.width as f64 / scale,
+        work.size.height as f64 / scale,
+        actual_size.width as f64 / scale,
+        actual_size.height as f64 / scale,
+    );
     window
         .set_position(LogicalPosition::new(x, y))
-        .map_err(|e| e.to_string())
+        .map_err(|error| error.to_string())
 }
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> Result<(), tauri::Error> {
     tauri::Builder::default()
@@ -449,12 +376,10 @@ pub fn run() -> Result<(), tauri::Error> {
             diagnostics::get_startup_state,
             diagnostics::complete_startup,
             diagnostics::record_diagnostic_event,
-            set_island_visible,
-            set_island_position,
-            set_island_topmost,
-            set_island_height,
-            set_character_visible,
-            set_character_position,
+            set_pet_visible,
+            set_pet_position,
+            set_pet_topmost,
+            set_pet_size,
             tray::set_close_behavior,
             providers::save_provider_credential,
             providers::has_provider_credential,
@@ -478,6 +403,8 @@ pub fn run() -> Result<(), tauri::Error> {
             history::rename_conversation,
             history::delete_all_conversations,
             history::get_selected_pet,
+            history::get_pet_mode,
+            history::set_pet_mode,
             history::set_selected_pet,
             security::get_permission_settings,
             security::set_permission_mode,
