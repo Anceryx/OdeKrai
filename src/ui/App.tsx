@@ -65,6 +65,8 @@ function MainApp() {
   const [initialSettingsLoad] = useState(loadSettingsWithWarnings);
   const [section, setSection] = useState<Section>('overview');
   const [settings, setSettings] = useState<AppSettings>(initialSettingsLoad.settings);
+  const [identityConfigured, setIdentityConfigured] = useState<boolean | null>(null);
+  const [identityCardDismissed, setIdentityCardDismissed] = useState(false);
   const [permissionIndicator, setPermissionIndicator] = useState<{
     mode: string;
     halted: boolean;
@@ -141,9 +143,7 @@ function MainApp() {
   useEffect(() => {
     if (!isTauri()) return;
     void invoke<{ configured: boolean }>('agent_home_status')
-      .then((home) => {
-        if (!home.configured) setSection('agent');
-      })
+      .then((home) => setIdentityConfigured(home.configured))
       .catch(() => setError('Não foi possível verificar a pasta do agente.'));
   }, []);
   useEffect(() => {
@@ -383,19 +383,6 @@ function MainApp() {
     >
       <aside className="sidebar">
         <button
-          className="brand"
-          onClick={() => {
-            setSection('overview');
-            setChatMode(false);
-          }}
-          aria-label="Ir para a visão geral"
-        >
-          <span className="brand-mark">O</span>
-          <span>
-            <strong>OdeKrai</strong>
-          </span>
-        </button>
-        <button
           className="profile-card"
           onClick={() => {
             setSection('profile');
@@ -447,11 +434,6 @@ function MainApp() {
             </div>
           ))}
         </nav>
-        <div className="sidebar-bottom">
-          <div className="local-badge">
-            <span>◉</span> Dados locais neste dispositivo
-          </div>
-        </div>
       </aside>
 
       <main className="main-area">
@@ -464,9 +446,19 @@ function MainApp() {
             </strong>
           </div>
           <div className="top-actions">
-            <span className="connection">
-              <i /> LOCAL
-            </span>
+            <button
+              type="button"
+              className="provider-chip"
+              onClick={() => {
+                setSection('providers');
+                setChatMode(false);
+              }}
+              aria-label="Abrir conectores de IA"
+            >
+              {keySavedForSession
+                ? `${activeProvider.name}${activeProvider.model ? ` · ${activeProvider.model}` : ''}`
+                : 'Sem provedor'}
+            </button>
             {permissionIndicator?.halted && (
               <button
                 className="security-state halted"
@@ -545,6 +537,9 @@ function MainApp() {
                 keyReady={keySavedForSession}
                 profile={profile}
                 selectedPet={selectedPet}
+                needsIdentity={identityConfigured === false && !identityCardDismissed}
+                onConfigureIdentity={() => setSection('agent')}
+                onDismissIdentity={() => setIdentityCardDismissed(true)}
               />
             )}
             {section === 'providers' && (
@@ -602,6 +597,9 @@ function Overview({
   keyReady,
   profile,
   selectedPet,
+  needsIdentity,
+  onConfigureIdentity,
+  onDismissIdentity,
 }: {
   onChat: () => void;
   onOpen: (section: Section) => void;
@@ -609,6 +607,9 @@ function Overview({
   keyReady: boolean;
   profile: ProfileData;
   selectedPet: string;
+  needsIdentity: boolean;
+  onConfigureIdentity: () => void;
+  onDismissIdentity: () => void;
 }) {
   const today = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
     .format(new Date())
@@ -634,6 +635,25 @@ function Overview({
           <i />
         </div>
       </div>
+      {needsIdentity && (
+        <section className="identity-setup-card" aria-label="Configuração de identidade">
+          <div>
+            <strong>Configurar identidade</strong>
+            <p>Defina seu nome e as preferências usadas pelo OdeKrai.</p>
+          </div>
+          <Button type="button" variant="secondary" onClick={onConfigureIdentity}>
+            Configurar
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            aria-label="Dispensar cartão de configuração de identidade"
+            onClick={onDismissIdentity}
+          >
+            Dispensar
+          </Button>
+        </section>
+      )}
       <section className="hero-card">
         <div className="hero-pet-space">
           <PetSprite estado="idle" petId={selectedPet} />

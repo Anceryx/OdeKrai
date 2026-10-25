@@ -137,3 +137,7 @@ O roteiro nativo da Fase 2 está nos itens 13–16. A validação automatizada d
 A janela principal pede 1.250 × 700 px lógicos e é redimensionada após a criação usando a área útil do monitor (exclui a barra de tarefas) e o fator de escala informado pelo Tauri. Cada dimensão fica limitada a 90% da área útil. O mínimo nativo é reduzido quando não cabe na área útil, para evitar que a janela ultrapasse a tela.
 
 O teste `window_sizing::tests` usa uma área útil sintética de 1.920 × 1.040 px físicos. Os tamanhos lógicos calculados são 1.250 × 700 em 100%, 1.250 × 700 em 125% e 1.152 × 624 em 150%. Esses valores validam o cálculo; não substituem a medição visual na tela real. O corte de conteúdo por tela ainda requer validação visual em Windows nos três fatores de escala.
+
+## Entrada e cabeçalho
+
+O estado inicial é a Visão geral; a falta de identidade é apresentada por um cartão dispensável nessa tela. O chip do cabeçalho abre Conectores e mostra o provedor/modelo quando há credencial disponível. A disposição precisa de conferência visual em Windows.
