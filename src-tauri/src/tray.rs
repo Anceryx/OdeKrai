@@ -30,7 +30,6 @@ pub fn install_main_close_handler(app: &AppHandle, window: &WebviewWindow) {
     let main_window = window.clone();
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-            api.prevent_close();
             match close_action(
                 handle
                     .state::<CloseBehaviorState>()
@@ -38,21 +37,26 @@ pub fn install_main_close_handler(app: &AppHandle, window: &WebviewWindow) {
                     .load(Ordering::SeqCst),
             ) {
                 CloseAction::Hide => {
+                    api.prevent_close();
                     let _ = main_window.hide();
                 }
-                CloseAction::Exit => shutdown(&handle),
+                CloseAction::Exit => close_auxiliary_windows(&handle),
             }
         }
     });
 }
 
-fn shutdown(app: &AppHandle) {
+fn close_auxiliary_windows(app: &AppHandle) {
     crate::providers::cancel_all(app);
     for label in ["island", "mascot", "approval"] {
         if let Some(window) = app.get_webview_window(label) {
             let _ = window.destroy();
         }
     }
+}
+
+fn shutdown(app: &AppHandle) {
+    close_auxiliary_windows(app);
     app.exit(0);
 }
 
