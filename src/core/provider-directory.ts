@@ -3,6 +3,22 @@ import { defaultProviderSettings, type AppSettings } from './settings';
 
 export type ProviderDirectoryTab = 'connected' | 'free' | 'all';
 
+export async function loadConnectedProviderIds(
+  providerIds: readonly string[],
+  hasCredential: (providerId: string) => Promise<boolean>,
+): Promise<{ connectedIds: Set<string>; failedIds: Set<string> }> {
+  const connectedIds = new Set<string>();
+  const failedIds = new Set<string>();
+  for (const providerId of providerIds) {
+    try {
+      if (await hasCredential(providerId)) connectedIds.add(providerId);
+    } catch {
+      failedIds.add(providerId);
+    }
+  }
+  return { connectedIds, failedIds };
+}
+
 export function filterProviderDirectory(
   providers: AiProvider[],
   tab: ProviderDirectoryTab,

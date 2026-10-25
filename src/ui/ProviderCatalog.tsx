@@ -6,6 +6,7 @@ import { openProviderLink } from '../core/provider-links';
 import { providerLogoFor } from '../core/provider-logos';
 import {
   filterProviderDirectory,
+  loadConnectedProviderIds,
   removeProviderCredential,
   type ProviderDirectoryTab,
 } from '../core/provider-directory';
@@ -51,6 +52,8 @@ export function ProviderCatalog({
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<ProviderDirectoryTab>('all');
   const [connectedIds, setConnectedIds] = useState<Set<string>>(new Set());
+  const [credentialChecksComplete, setCredentialChecksComplete] = useState(false);
+  const [credentialCheckFailed, setCredentialCheckFailed] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [externalLinkError, setExternalLinkError] = useState('');
@@ -67,32 +70,28 @@ export function ProviderCatalog({
     setTechnicalError('');
     setModels([]);
     setStages([]);
-    setCredentialAvailable(false);
-    if (isTauri() && selected.integration !== 'guide') {
-      void invoke<boolean>('has_provider_credential', { providerId: selected.id })
-        .then(setCredentialAvailable)
-        .catch(() => setCredentialAvailable(false));
-    }
-  }, [selected.id, settings.providers[selected.id]]);
-  useEffect(() => {
     let current = true;
-    void Promise.all(
-      AI_PROVIDERS.filter((provider) => provider.integration !== 'guide').map(async (provider) => {
-        try {
-          return (await invoke<boolean>('has_provider_credential', { providerId: provider.id }))
-            ? provider.id
-            : null;
-        } catch {
-          return null;
-        }
-      }),
-    ).then((result) => {
-      if (current) setConnectedIds(new Set(result.filter((id): id is string => id !== null)));
-    });
+    setCredentialAvailable(false);
+    setCredentialChecksComplete(false);
+    setCredentialCheckFailed(false);
+    if (isTauri()) {
+      const providerIds = AI_PROVIDERS.filter((provider) => provider.integration !== 'guide').map(
+        (provider) => provider.id,
+      );
+      void loadConnectedProviderIds(providerIds, (providerId) =>
+        invoke<boolean>('has_provider_credential', { providerId }),
+      ).then((result) => {
+        if (!current) return;
+        setConnectedIds(result.connectedIds);
+        setCredentialChecksComplete(true);
+        setCredentialCheckFailed(result.failedIds.size > 0);
+        setCredentialAvailable(result.connectedIds.has(selected.id));
+      });
+    } else setCredentialChecksComplete(true);
     return () => {
       current = false;
     };
-  }, []);
+  }, [selected.id, settings.providers[selected.id]]);
   const filtered = useMemo(
     () => filterProviderDirectory(AI_PROVIDERS, tab, search, connectedIds),
     [tab, search, connectedIds],
@@ -134,6 +133,7 @@ export function ProviderCatalog({
         });
       setCredentialAvailable(true);
       setConnectedIds((ids) => new Set(ids).add(selected.id));
+      setCredentialChecksComplete(true);
       onSave(next);
       setSecret('');
       if (test) {
@@ -337,6 +337,11 @@ export function ProviderCatalog({
               </button>
             ))}
           </div>
+          {tab === 'connected' && credentialCheckFailed && filtered.length > 0 && (
+            <p className="provider-empty" role="status">
+              Algumas credenciais não puderam ser consultadas; a lista pode estar incompleta.
+            </p>
+          )}
           <div className="provider-grid">
             {filtered.map((provider) => {
               const connected = connectedIds.has(provider.id);
@@ -421,9 +426,13 @@ export function ProviderCatalog({
           </div>
           {filtered.length === 0 && (
             <p className="provider-empty" role="status">
-              {tab === 'connected' && !search.trim()
-                ? 'Nenhum provedor tem credencial salva neste dispositivo.'
-                : 'Nenhum provedor corresponde à busca.'}
+              {tab === 'connected' && !search.trim() && !credentialChecksComplete
+                ? 'Consultando credenciais salvas…'
+                : tab === 'connected' && !search.trim() && credentialCheckFailed
+                  ? 'Não foi possível consultar as credenciais. A lista pode estar incompleta.'
+                  : tab === 'connected' && !search.trim()
+                    ? 'Nenhum provedor tem credencial salva neste dispositivo.'
+                    : 'Nenhum provedor corresponde à busca.'}
             </p>
           )}
           <p className="provider-compat-note">

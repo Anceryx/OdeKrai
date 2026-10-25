@@ -3,6 +3,7 @@ import { AI_PROVIDERS } from './providers';
 import { defaultSettings } from './settings';
 import {
   filterProviderDirectory,
+  loadConnectedProviderIds,
   removeProviderCredential,
   removeConnectedProvider,
   setPrimaryProviderSettings,
@@ -12,6 +13,26 @@ import {
 
 describe('diretório de provedores', () => {
   const connected = new Set(['groq', 'openai']);
+
+  it('consulta credenciais em sequência e preserva as que foram encontradas', async () => {
+    const calls: string[] = [];
+    let activeCalls = 0;
+    let maxActiveCalls = 0;
+    const result = await loadConnectedProviderIds(['openai', 'groq', 'gemini'], async (id) => {
+      calls.push(id);
+      activeCalls += 1;
+      maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
+      await Promise.resolve();
+      activeCalls -= 1;
+      if (id === 'groq') throw new Error('Credential Manager indisponível');
+      return id === 'openai';
+    });
+
+    expect(calls).toEqual(['openai', 'groq', 'gemini']);
+    expect(maxActiveCalls).toBe(1);
+    expect(result.connectedIds).toEqual(new Set(['openai']));
+    expect(result.failedIds).toEqual(new Set(['groq']));
+  });
 
   it('filtra conectados, gratuitos e todos por nome', () => {
     expect(

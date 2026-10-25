@@ -10,6 +10,7 @@
 
 ### Conectores
 
+- A consulta de credenciais da aba “Conectados” agora é sequencial e diferencia falhas de consulta de uma lista realmente vazia.
 - A tela de conectores ganhou filtros por provedores conectados, planos gratuitos confirmados e catálogo completo, com busca e detalhes em painel sobreposto.
 - Credenciais conectadas mostram os estados salva, testada e ativa, com controles para ativar, definir o provedor principal e remover a credencial.
 - O fluxo orienta a criação da conta, geração da chave, carregamento de modelos e teste da conexão. O endereço da API fica em Avançado.
