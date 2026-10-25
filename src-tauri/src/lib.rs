@@ -8,6 +8,7 @@ mod policy;
 mod profile;
 mod providers;
 mod security;
+mod window_sizing;
 
 fn require_main(window: &tauri::WebviewWindow) -> Result<(), String> {
     require_caller(window, &["main"])
@@ -397,6 +398,9 @@ pub fn run() {
         .manage(providers::ProviderRequests::default())
         .manage(security::SecurityState::new(true))
         .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                window_sizing::fit_main_window(&window).map_err(std::io::Error::other)?;
+            }
             let halted = security::load_halted(app.handle());
             if let Some(state) = app.try_state::<security::SecurityState>() {
                 state.set_initial_halted(halted);

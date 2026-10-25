@@ -132,3 +132,8 @@ As capturas desta revisão ainda não foram produzidas. Em Windows com sessão g
 ## Fase 2
 
 O roteiro nativo da Fase 2 está nos itens 13–16. A validação automatizada desta revisão deve incluir sanitização dos campos, caminhos proibidos, detecção de alterações externas e ordem/limite do prompt, além de `npm run build`, `npm test`, `npm run format:check`, `cargo fmt --check`, `cargo test` e `git diff --check`. Registrar os resultados efetivamente obtidos no relatório da tarefa; build e testes locais não comprovam o assistente visível, junctions do perfil real, Credential Manager nem o formato aceito por contas reais dos provedores.
+# Janela inicial por área útil
+
+A janela principal pede 1.250 × 700 px lógicos e é redimensionada após a criação usando a área útil do monitor (exclui a barra de tarefas) e o fator de escala informado pelo Tauri. Cada dimensão fica limitada a 90% da área útil. O mínimo nativo é reduzido quando não cabe na área útil, para evitar que a janela ultrapasse a tela.
+
+O teste `window_sizing::tests` usa uma área útil sintética de 1.920 × 1.040 px físicos. Os tamanhos lógicos calculados são 1.250 × 700 em 100%, 1.250 × 700 em 125% e 1.152 × 624 em 150%. Esses valores validam o cálculo; não substituem a medição visual na tela real. O corte de conteúdo por tela ainda requer validação visual em Windows nos três fatores de escala.
