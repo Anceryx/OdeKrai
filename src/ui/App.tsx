@@ -1,13 +1,7 @@
-﻿import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import type { ChatMessage } from '../core/provider-messages';
+﻿import { lazy, Suspense, useEffect, useMemo, type FormEvent } from 'react';
 import { resolveConversationSelection } from '../core/chat';
-import {
-  activeProviderSettings,
-  loadSettings,
-  loadSettingsWithWarnings,
-  saveSettings,
-  type AppSettings,
-} from '../core/settings';
+import type { ChatMessage } from '../core/provider-messages';
+import { loadSettings, saveSettings } from '../core/settings';
 import { emit, listen } from '@tauri-apps/api/event';
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
 import { normalizeSoundPreferences, playSound } from '../core/sounds';
@@ -38,7 +32,7 @@ const ActivityScreen = lazy(() =>
 );
 import { initials, type ProfileData } from './Profile';
 import { ApprovalWindow, isApprovalWindow } from './SecurityCenter';
-import { DEFAULT_PET_ID, PETS } from '../core/pets';
+import { PETS } from '../core/pets';
 import { Icon, type IconName } from './Icon';
 import { setPrimaryProviderSettings, toggleProviderSettings } from '../core/provider-directory';
 import { profileFromApprovedCore } from '../core/identity';
@@ -46,6 +40,7 @@ import { profileFromApprovedCore } from '../core/identity';
 import type { Section } from './screens/types';
 
 import type { Conversation } from './screens/types';
+import { useAppState } from './hooks/useAppState';
 
 const nav: { id: Section; label: string; icon: IconName; group: string }[] = [
   { id: 'overview', label: 'VisÃ£o geral', icon: 'home', group: 'ESPAÃ‡O DE TRABALHO' },
@@ -63,35 +58,47 @@ export function App() {
 }
 
 function MainApp() {
-  const [initialSettingsLoad] = useState(loadSettingsWithWarnings);
-  const [section, setSection] = useState<Section>('overview');
-  const [settings, setSettings] = useState<AppSettings>(initialSettingsLoad.settings);
-  const [identityConfigured, setIdentityConfigured] = useState<boolean | null>(null);
-  const [identityCardDismissed, setIdentityCardDismissed] = useState(false);
-  const [permissionIndicator, setPermissionIndicator] = useState<{
-    mode: string;
-    halted: boolean;
-  } | null>(null);
-  const [profile, setProfile] = useState<ProfileData>({
-    displayName: '',
-    nickname: '',
-    avatarDataUrl: null,
-  });
-  const [keySavedForSession, setKeySavedForSession] = useState(false);
-  const [selectedProviderId, setSelectedProviderId] = useState(settings.activeProviderId);
-  const activeProvider = activeProviderSettings(settings);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [selectedPet, setSelectedPet] = useState(DEFAULT_PET_ID);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [draft, setDraft] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [lastFailedPrompt, setLastFailedPrompt] = useState('');
-  const [toast, setToast] = useState(initialSettingsLoad.warnings.join(' '));
-  const [chatMode, setChatMode] = useState(false);
-  const request = useRef<string | null>(null);
-  const companionStateTimer = useRef<number | undefined>(undefined);
+  const {
+    section,
+    setSection,
+    settings,
+    setSettings,
+    identityConfigured,
+    setIdentityConfigured,
+    identityCardDismissed,
+    setIdentityCardDismissed,
+    permissionIndicator,
+    setPermissionIndicator,
+    profile,
+    setProfile,
+    keySavedForSession,
+    setKeySavedForSession,
+    selectedProviderId,
+    setSelectedProviderId,
+    activeProvider,
+    messages,
+    setMessages,
+    selectedPet,
+    setSelectedPet,
+    conversations,
+    setConversations,
+    conversationId,
+    setConversationId,
+    draft,
+    setDraft,
+    busy,
+    setBusy,
+    error,
+    setError,
+    lastFailedPrompt,
+    setLastFailedPrompt,
+    toast,
+    setToast,
+    chatMode,
+    setChatMode,
+    request,
+    companionStateTimer,
+  } = useAppState();
 
   useEffect(() => {
     if (!isTauri()) return;
