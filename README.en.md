@@ -14,7 +14,7 @@ A personal AI assistant for Windows, built with React, TypeScript, and Tauri 2. 
 - Credential storage through Windows Credential Manager and message requests through the Rust process.
 - A Rust permission engine with native, one-time approvals, chained local audit logs, and a global kill switch. Only simulated tools are available in this phase.
 - Adapters for 12 Chat Completions APIs, Anthropic Messages, and Perplexity Agent API. Vertex AI remains a guide pending ADC/OAuth integration.
-- Official 3D model is local and Git-ignored; checkouts without the asset use a fallback.
+- 2D pet with 12 CC0 characters rendered at 512×512, a saved selection, and CSS animations.
 
 ## Requirements and development
 
@@ -22,7 +22,7 @@ A personal AI assistant for Windows, built with React, TypeScript, and Tauri 2. 
 - `npm install`, `npm run dev`, `npm run build`, `npm test`.
 - `npm run tauri:dev` starts the app; `npm run tauri:build` creates Windows artifacts.
 
-In the catalog, enter an allowed endpoint, model ID, and credential. Saving does not validate access. **Test connection** sends a real request and may incur charges. Supported credentials are stored in Windows Credential Manager. Vertex AI, AWS IAM/SigV4 authentication, and automatic model listing are not implemented.
+In the catalog, enter an allowed endpoint, model ID, and credential. Saving does not validate access. **Test connection** sends a real request and may incur charges. Supported credentials are stored in Windows Credential Manager. Model lists appear only where the provider documents support. Vertex AI and AWS IAM/SigV4 authentication are not integrated.
 
 ## Screenshots
 

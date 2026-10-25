@@ -18,7 +18,7 @@ Aplicativo OdeKrai para Windows, desenvolvido com React, TypeScript e Tauri 2. O
 - Instância única, CSP de produção restrita e permissões separadas para as janelas auxiliares.
 - Adaptadores para 12 APIs Chat Completions, Anthropic Messages e Perplexity Agent API. Vertex AI continua como guia pendente de ADC/OAuth.
 - Pet 2D com 12 personagens CC0 renderizados em 512×512, escolha persistida no SQLite e animações
-  CSS; o renderer 3D oficial permanece opcional e legado, com asset local ignorado pelo Git.
+  CSS.
 
 ## Requisitos e execução
 
