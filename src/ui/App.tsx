@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+﻿import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { ChatMessage } from '../core/provider-messages';
 import { resolveConversationSelection } from '../core/chat';
 import {
@@ -20,6 +20,7 @@ import { ProvidersScreen } from './screens/Providers';
 import { IdentityScreen } from './screens/Identity';
 import { initials, type ProfileData } from './Profile';
 import { ApprovalWindow, isApprovalWindow, SecurityCenter } from './SecurityCenter';
+import { PermissionsScreen } from './screens/Permissions';
 import { DEFAULT_PET_ID, PETS } from '../core/pets';
 import { Icon, type IconName } from './Icon';
 import { setPrimaryProviderSettings, toggleProviderSettings } from '../core/provider-directory';
@@ -30,14 +31,14 @@ import type { Section } from './screens/types';
 import type { Conversation } from './screens/types';
 
 const nav: { id: Section; label: string; icon: IconName; group: string }[] = [
-  { id: 'overview', label: 'Visão geral', icon: 'home', group: 'ESPAÇO DE TRABALHO' },
-  { id: 'chat', label: 'Conversas', icon: 'chat', group: 'ESPAÇO DE TRABALHO' },
-  { id: 'agent', label: 'Identidade e memória', icon: 'memory', group: 'ESPAÇO DE TRABALHO' },
-  { id: 'providers', label: 'Conectores de IA', icon: 'connectors', group: 'INTELIGÊNCIA' },
-  { id: 'companion', label: 'Assistente do OdeKrai', icon: 'pet', group: 'PERSONALIZAÇÃO' },
-  { id: 'settings', label: 'Configurações', icon: 'settings', group: 'PERSONALIZAÇÃO' },
-  { id: 'permissions', label: 'Permissões', icon: 'shield', group: 'PERSONALIZAÇÃO' },
-  { id: 'activity', label: 'Atividade', icon: 'activity', group: 'PERSONALIZAÇÃO' },
+  { id: 'overview', label: 'VisÃ£o geral', icon: 'home', group: 'ESPAÃ‡O DE TRABALHO' },
+  { id: 'chat', label: 'Conversas', icon: 'chat', group: 'ESPAÃ‡O DE TRABALHO' },
+  { id: 'agent', label: 'Identidade e memÃ³ria', icon: 'memory', group: 'ESPAÃ‡O DE TRABALHO' },
+  { id: 'providers', label: 'Conectores de IA', icon: 'connectors', group: 'INTELIGÃŠNCIA' },
+  { id: 'companion', label: 'Assistente do OdeKrai', icon: 'pet', group: 'PERSONALIZAÃ‡ÃƒO' },
+  { id: 'settings', label: 'ConfiguraÃ§Ãµes', icon: 'settings', group: 'PERSONALIZAÃ‡ÃƒO' },
+  { id: 'permissions', label: 'PermissÃµes', icon: 'shield', group: 'PERSONALIZAÃ‡ÃƒO' },
+  { id: 'activity', label: 'Atividade', icon: 'activity', group: 'PERSONALIZAÃ‡ÃƒO' },
 ];
 
 export function App() {
@@ -89,7 +90,7 @@ function MainApp() {
     let unlisten: (() => void)[] = [];
     void Promise.all([
       listen('security-halted', () => {
-        setToast('O OdeKrai foi parado. Ações e respostas em andamento foram canceladas.');
+        setToast('O OdeKrai foi parado. AÃ§Ãµes e respostas em andamento foram canceladas.');
         refreshPermissionIndicator();
       }),
       listen('security-resumed', () => {
@@ -111,7 +112,7 @@ function MainApp() {
       setSelectedPet(petId);
       await emit('selected-pet-updated', petId);
     } catch {
-      setToast('Não foi possível salvar o personagem selecionado.');
+      setToast('NÃ£o foi possÃ­vel salvar o personagem selecionado.');
     }
   }
 
@@ -122,7 +123,7 @@ function MainApp() {
     if (!isTauri()) return;
     void invoke('set_close_behavior', {
       minimizeToTray: settings.closeBehavior === 'minimize_to_tray',
-    }).catch(() => setToast('Não foi possível atualizar o comportamento ao fechar.'));
+    }).catch(() => setToast('NÃ£o foi possÃ­vel atualizar o comportamento ao fechar.'));
   }, [settings.closeBehavior]);
   useEffect(() => {
     if (!isTauri()) return;
@@ -135,9 +136,9 @@ function MainApp() {
       if (!current) return;
       const stored = savedProfile.status === 'fulfilled' ? savedProfile.value : null;
       if (stored) setProfile(stored);
-      else setToast('Não foi possível ler o perfil local.');
+      else setToast('NÃ£o foi possÃ­vel ler o perfil local.');
       if (home.status === 'rejected') {
-        setToast('Não foi possível verificar a pasta do OdeKrai.');
+        setToast('NÃ£o foi possÃ­vel verificar a pasta do OdeKrai.');
         return;
       }
       setIdentityConfigured(home.value.configured);
@@ -151,7 +152,7 @@ function MainApp() {
             setToast('Perfil recuperado do arquivo base aprovado.');
           }
         } catch {
-          if (current) setToast('Não foi possível recuperar o perfil do arquivo base.');
+          if (current) setToast('NÃ£o foi possÃ­vel recuperar o perfil do arquivo base.');
         }
       }
     })();
@@ -168,10 +169,10 @@ function MainApp() {
           setConversationId(items[0].id);
           void invoke<ChatMessage[]>('load_conversation', { conversationId: items[0].id })
             .then(setMessages)
-            .catch(() => setError('Não foi possível abrir a conversa anterior.'));
+            .catch(() => setError('NÃ£o foi possÃ­vel abrir a conversa anterior.'));
         }
       })
-      .catch(() => setError('Não foi possível abrir o histórico local.'));
+      .catch(() => setError('NÃ£o foi possÃ­vel abrir o histÃ³rico local.'));
   }, []);
   useEffect(() => {
     const provider = AI_PROVIDERS.find((item) => item.id === settings.activeProviderId);
@@ -203,7 +204,7 @@ function MainApp() {
       .then(() => invoke('set_island_topmost', { enabled: companion.alwaysOnTop }))
       .then(() => invoke('set_island_visible', { visible: true }))
       .then(() => emit('companion-state', { type: 'reveal' }))
-      .catch(() => setToast('Não foi possível restaurar o pet do assistente.'));
+      .catch(() => setToast('NÃ£o foi possÃ­vel restaurar o pet do assistente.'));
   }, []);
   useEffect(() => {
     const companion = settings.companion;
@@ -216,7 +217,7 @@ function MainApp() {
       Math.max(0, (screen.availHeight - 176 * companion.size) / 2);
     void invoke('set_character_position', { x, y, size: companion.size })
       .then(() => invoke('set_character_visible', { visible: true }))
-      .catch(() => setToast('Não foi possível restaurar o OdeKrai no desktop.'));
+      .catch(() => setToast('NÃ£o foi possÃ­vel restaurar o OdeKrai no desktop.'));
   }, []);
   useEffect(() => {
     if (!toast) return;
@@ -284,7 +285,7 @@ function MainApp() {
     request.current = requestId;
     try {
       const provider = AI_PROVIDERS.find((item) => item.id === settings.activeProviderId);
-      if (!provider) throw new Error('O provedor selecionado não possui adaptador conhecido.');
+      if (!provider) throw new Error('O provedor selecionado nÃ£o possui adaptador conhecido.');
       if (!reuseLastUserMessage) {
         await invoke('append_conversation_message', {
           conversationId: activeId,
@@ -381,14 +382,14 @@ function MainApp() {
             ? cause
             : cause instanceof Error
               ? cause.message
-              : 'Não foi possível concluir a solicitação.',
+              : 'NÃ£o foi possÃ­vel concluir a solicitaÃ§Ã£o.',
         );
         void playSound('error', normalizeSoundPreferences(settings.companion.sounds));
         if (isTauri())
           void emit('companion-state', {
             type: 'activity',
             state: 'error',
-            message: 'Não foi possível concluir a solicitação',
+            message: 'NÃ£o foi possÃ­vel concluir a solicitaÃ§Ã£o',
           });
       } else {
         setMessages(next);
@@ -418,13 +419,13 @@ function MainApp() {
         setMessages([]);
       }
     } catch {
-      setError('Não foi possível apagar a conversa.');
+      setError('NÃ£o foi possÃ­vel apagar a conversa.');
     }
   }
 
   async function deleteAllConversations(): Promise<boolean> {
     if (busy) {
-      setToast('Aguarde a conclusão da resposta antes de apagar o histórico.');
+      setToast('Aguarde a conclusÃ£o da resposta antes de apagar o histÃ³rico.');
       return false;
     }
     try {
@@ -435,10 +436,10 @@ function MainApp() {
       setDraft('');
       setError('');
       setLastFailedPrompt('');
-      setToast('Todo o histórico foi apagado.');
+      setToast('Todo o histÃ³rico foi apagado.');
       return true;
     } catch {
-      setToast('Não foi possível apagar o histórico.');
+      setToast('NÃ£o foi possÃ­vel apagar o histÃ³rico.');
       return false;
     }
   }
@@ -452,7 +453,7 @@ function MainApp() {
         items.map((item) => (item.id === id ? { ...item, title } : item)),
       );
     } catch {
-      setToast('Não foi possível renomear a conversa.');
+      setToast('NÃ£o foi possÃ­vel renomear a conversa.');
     }
   }
 
@@ -481,8 +482,8 @@ function MainApp() {
             <span>{profile.nickname || 'Local neste dispositivo'}</span>
           </div>
         </button>
-        <nav className="nav-list" aria-label="Navegação principal">
-          {(['ESPAÇO DE TRABALHO', 'INTELIGÊNCIA', 'PERSONALIZAÇÃO'] as const).map((group) => (
+        <nav className="nav-list" aria-label="NavegaÃ§Ã£o principal">
+          {(['ESPAÃ‡O DE TRABALHO', 'INTELIGÃŠNCIA', 'PERSONALIZAÃ‡ÃƒO'] as const).map((group) => (
             <div className="nav-group" key={group}>
               <span className="nav-heading">{group}</span>
               {nav
@@ -505,8 +506,8 @@ function MainApp() {
                         className="nav-status"
                         aria-label={
                           keySavedForSession
-                            ? 'Chave disponível nesta sessão'
-                            : 'Chave não configurada'
+                            ? 'Chave disponÃ­vel nesta sessÃ£o'
+                            : 'Chave nÃ£o configurada'
                         }
                       />
                     )}
@@ -540,7 +541,7 @@ function MainApp() {
               aria-label="Abrir conectores de IA"
             >
               {keySavedForSession
-                ? `${activeProvider.name}${activeProvider.model ? ` · ${activeProvider.model}` : ''}`
+                ? `${activeProvider.name}${activeProvider.model ? ` Â· ${activeProvider.model}` : ''}`
                 : 'Sem provedor'}
             </button>
             {permissionIndicator?.halted && (
@@ -551,7 +552,7 @@ function MainApp() {
                   setChatMode(false);
                 }}
               >
-                PARADO · PERMISSÕES
+                PARADO Â· PERMISSÃ•ES
               </button>
             )}
             {!permissionIndicator?.halted && permissionIndicator?.mode === 'controle_total' && (
@@ -568,7 +569,7 @@ function MainApp() {
             <button
               className="icon-button"
               aria-label="Ajuda"
-              onClick={() => setToast('A documentação do projeto está em docs/.')}
+              onClick={() => setToast('A documentaÃ§Ã£o do projeto estÃ¡ em docs/.')}
             >
               <Icon name="help" />
             </button>
@@ -593,7 +594,7 @@ function MainApp() {
               setError('');
               void invoke<ChatMessage[]>('load_conversation', { conversationId: selectedId })
                 .then((loaded) => setMessages(loaded))
-                .catch(() => setError('Não foi possível abrir a conversa.'));
+                .catch(() => setError('NÃ£o foi possÃ­vel abrir a conversa.'));
             }}
             onNewConversation={() => {
               if (!busy) {
@@ -680,7 +681,7 @@ function MainApp() {
                 onDeleteAllHistory={deleteAllConversations}
               />
             )}
-            {section === 'permissions' && <SecurityCenter page="permissions" />}
+            {section === 'permissions' && <PermissionsScreen />}
             {section === 'activity' && <SecurityCenter page="activity" />}
             {section === 'agent' && (
               <IdentityScreen
