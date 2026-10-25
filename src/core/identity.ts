@@ -1,5 +1,17 @@
 export type ConversationNotes = { instructions: string; slang: string };
 
+export type ApprovedProfile = { displayName: string; nickname: string };
+
+export function profileFromApprovedCore(content: string): ApprovedProfile | null {
+  const displayName = content.match(/^- Nome: (.*)$/m)?.[1]?.trim() ?? '';
+  const savedNickname = content.match(/^- Apelido: (.*)$/m)?.[1]?.trim() ?? '';
+  if (!displayName || displayName.startsWith('{{') || !savedNickname) return null;
+  return {
+    displayName,
+    nickname: savedNickname === 'não informado' ? '' : savedNickname,
+  };
+}
+
 export function sanitizeIdentityName(value: string, maxLength: number): string {
   return value
     .replace(/[\p{C}\r\n]+/gu, ' ')

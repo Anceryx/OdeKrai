@@ -2,11 +2,24 @@ import { describe, expect, it } from 'vitest';
 import {
   formatConversationNotes,
   parseConversationNotes,
+  profileFromApprovedCore,
   sanitizeIdentityName,
   updateIdentityProfile,
 } from './identity';
 
 describe('preferências de identidade', () => {
+  it('recupera nome e apelido do conteúdo aprovado e ignora modelo vazio', () => {
+    expect(profileFromApprovedCore('- Nome: Marina\n- Apelido: Mari\n')).toEqual({
+      displayName: 'Marina',
+      nickname: 'Mari',
+    });
+    expect(profileFromApprovedCore('- Nome: Ana\n- Apelido: não informado\n')).toEqual({
+      displayName: 'Ana',
+      nickname: '',
+    });
+    expect(profileFromApprovedCore('- Nome: {{NOME}}\n- Apelido: {{APELIDO}}\n')).toBeNull();
+  });
+
   it('preserva instruções e expressões ao salvar e reler as notas de conversa', () => {
     const notes = { instructions: 'Prefiro respostas curtas.', slang: 'beleza, valeu' };
     expect(parseConversationNotes(formatConversationNotes(notes))).toEqual(notes);

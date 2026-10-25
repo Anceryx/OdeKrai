@@ -36,6 +36,7 @@ import appIcon from '../assets/odekrai-app-icon.png';
 import { MessageMarkdown } from './MessageMarkdown';
 import { HistoryDeletionSettings } from './HistoryDeletionSettings';
 import { setPrimaryProviderSettings, toggleProviderSettings } from '../core/provider-directory';
+import { profileFromApprovedCore } from '../core/identity';
 
 type Section =
   | 'overview'
@@ -145,15 +146,38 @@ function MainApp() {
   }, [settings.closeBehavior]);
   useEffect(() => {
     if (!isTauri()) return;
-    void invoke<ProfileData>('get_profile')
-      .then(setProfile)
-      .catch(() => undefined);
-  }, []);
-  useEffect(() => {
-    if (!isTauri()) return;
-    void invoke<{ configured: boolean }>('agent_home_status')
-      .then((home) => setIdentityConfigured(home.configured))
-      .catch(() => setError('Não foi possível verificar a pasta do agente.'));
+    let current = true;
+    void (async () => {
+      const [savedProfile, home] = await Promise.allSettled([
+        invoke<ProfileData>('get_profile'),
+        invoke<{ configured: boolean }>('agent_home_status'),
+      ]);
+      if (!current) return;
+      const stored = savedProfile.status === 'fulfilled' ? savedProfile.value : null;
+      if (stored) setProfile(stored);
+      else setToast('Não foi possível ler o perfil local.');
+      if (home.status === 'rejected') {
+        setToast('Não foi possível verificar a pasta do OdeKrai.');
+        return;
+      }
+      setIdentityConfigured(home.value.configured);
+      if (home.value.configured && !stored?.displayName) {
+        try {
+          const document = await invoke<{ approved_content: string }>('agent_home_read_core');
+          if (!current) return;
+          const recovered = profileFromApprovedCore(document.approved_content);
+          if (recovered) {
+            setProfile((profile) => ({ ...profile, ...recovered }));
+            setToast('Perfil recuperado do arquivo base aprovado.');
+          }
+        } catch {
+          if (current) setToast('Não foi possível recuperar o perfil do arquivo base.');
+        }
+      }
+    })();
+    return () => {
+      current = false;
+    };
   }, []);
   useEffect(() => {
     if (!isTauri()) return;

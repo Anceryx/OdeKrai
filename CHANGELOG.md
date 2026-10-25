@@ -4,12 +4,14 @@
 
 ### Identidade e memória
 
+- Na abertura, o nome e o apelido também são recuperados do conteúdo aprovado do arquivo base se o perfil local estiver vazio.
 - A primeira configuração agora usa três passos curtos e salva a identidade ao final.
 - Perfil, preferências de conversa, notas de memória, pasta pessoal e arquivo base foram reunidos em uma tela.
 - A troca da pasta pede confirmação do arquivo base antes que a identidade dessa pasta seja usada.
 
 ### Conectores
 
+- As etapas “Criar conta” e “Gerar chave” agora apontam para o cadastro/console e a página de credenciais de cada provedor; links HTTPS estão autorizados apenas nos domínios oficiais listados.
 - A consulta de credenciais da aba “Conectados” agora é sequencial e diferencia falhas de consulta de uma lista realmente vazia.
 - A tela de conectores ganhou filtros por provedores conectados, planos gratuitos confirmados e catálogo completo, com busca e detalhes em painel sobreposto.
 - Credenciais conectadas mostram os estados salva, testada e ativa, com controles para ativar, definir o provedor principal e remover a credencial.
@@ -29,6 +31,7 @@
 
 ### Janela e preferências
 
+- Com “Encerrar”, o X fecha a janela principal e cancela fluxos e janelas auxiliares; “Minimizar para a bandeja” continua ocultando a janela.
 - O tamanho inicial da janela considera o fator de escala e a área útil do monitor, incluindo a barra de tarefas.
 - Ao fechar a janela, a preferência padrão encerra o aplicativo; a opção alternativa minimiza para a bandeja com ações para abrir e sair.
 - As configurações agora estão organizadas em Geral, Janela, Aparência e Dados e privacidade.
