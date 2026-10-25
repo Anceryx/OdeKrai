@@ -1,4 +1,4 @@
-use super::{ProviderEvent, ToolCall};
+use super::{safe_transport_error, ProviderEvent, ProviderReply, ToolCall, MAX_MESSAGE_BYTES};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
@@ -221,6 +221,118 @@ fn complete_tool(tool: PartialTool) -> Result<ToolCall, String> {
         id: tool.id,
         name: tool.name,
         args,
+    })
+}
+
+pub(super) async fn consume_stream_response<F>(
+    provider_id: &str,
+    mut response: reqwest::Response,
+    mut emit: F,
+) -> Result<ProviderReply, String>
+where
+    F: FnMut(ProviderEvent),
+{
+    let mut pending = Vec::new();
+    let mut content = String::new();
+    let mut finished = false;
+    let mut stream_state = StreamState::default();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| safe_transport_error(&error))?
+    {
+        pending.extend_from_slice(&chunk);
+        if pending.len() > MAX_MESSAGE_BYTES {
+            return Err("A resposta excede o limite permitido.".into());
+        }
+        while let Some((end, delimiter_len)) = pending
+            .windows(4)
+            .position(|part| part == b"\r\n\r\n")
+            .map(|end| (end, 4))
+            .or_else(|| {
+                pending
+                    .windows(2)
+                    .position(|part| part == b"\n\n")
+                    .map(|end| (end, 2))
+            })
+        {
+            let event = pending.drain(..end + delimiter_len).collect::<Vec<_>>();
+            for line in String::from_utf8_lossy(&event).lines() {
+                if let Some(data) = line.trim_end_matches('\r').strip_prefix("data: ") {
+                    if data == "[DONE]" {
+                        finished = true;
+                        match stream_state.finish() {
+                            Ok(outputs) => {
+                                for output in outputs {
+                                    if let ProviderEvent::TextDelta { text } = &output {
+                                        content.push_str(text);
+                                    }
+                                    emit(output);
+                                }
+                            }
+                            Err(error) => {
+                                emit(ProviderEvent::Error {
+                                    kind: "invalid_tool_arguments".into(),
+                                    status: None,
+                                    message: error.clone(),
+                                });
+                                return Err(error);
+                            }
+                        }
+                        continue;
+                    }
+                    let payload: Value = match serde_json::from_str(data) {
+                        Ok(payload) => payload,
+                        Err(_) => {
+                            let message = "O provedor retornou um evento inválido.".to_string();
+                            emit(ProviderEvent::Error {
+                                kind: "invalid_event".into(),
+                                status: None,
+                                message: message.clone(),
+                            });
+                            return Err(message);
+                        }
+                    };
+                    if payload["type"] == "message_stop" {
+                        finished = true;
+                    }
+                    let outputs = match stream_state.consume(provider_id, &payload) {
+                        Ok(outputs) => outputs,
+                        Err(error) => {
+                            emit(ProviderEvent::Error {
+                                kind: "provider_stream".into(),
+                                status: None,
+                                message: error.clone(),
+                            });
+                            return Err(error);
+                        }
+                    };
+                    for output in outputs {
+                        if let ProviderEvent::TextDelta { text } = &output {
+                            content.push_str(text);
+                            if content.len() > MAX_MESSAGE_BYTES {
+                                return Err("A resposta excede o limite permitido.".into());
+                            }
+                        }
+                        emit(output);
+                    }
+                }
+            }
+        }
+    }
+    if !finished {
+        return Err("A resposta do provedor foi interrompida.".into());
+    }
+    let tool_calls = stream_state.tool_calls().to_vec();
+    if content.trim().is_empty() && tool_calls.is_empty() {
+        return Err("O provedor retornou uma resposta vazia.".into());
+    }
+    Ok(ProviderReply {
+        content,
+        citations: Vec::new(),
+        tool_calls,
+        usage: stream_state.usage(),
+        stop_reason: stream_state.stop_reason(),
     })
 }
 

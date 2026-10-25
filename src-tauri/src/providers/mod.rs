@@ -1,10 +1,13 @@
-use reqwest::{header, redirect::Policy, Client, Url};
+#[cfg(test)]
+use reqwest::Client;
+use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+#[cfg(test)]
+use std::time::Duration;
 use std::{
     collections::HashMap,
     sync::{atomic::AtomicU64, Mutex},
-    time::Duration,
 };
 use tauri::{ipc::Channel, Manager, State};
 use tokio_util::sync::CancellationToken;
@@ -15,8 +18,10 @@ mod catalog;
 mod chat_completions;
 mod credentials;
 mod endpoint;
+mod http;
 mod llm_provider;
 use endpoint::provider_endpoint;
+use http::{http_client, provider_http_error, safe_transport_error, AuthRequest};
 mod perplexity;
 mod stream;
 mod types;
@@ -25,7 +30,7 @@ use catalog::{capabilities_with_model_cache, CatalogEntry};
 use catalog::{catalog_entry, effective_capabilities};
 use credentials::{credential_entry, supports_credentials};
 use llm_provider::{AnthropicProvider, ChatCompletionsProvider, LlmProvider, PerplexityProvider};
-use stream::StreamState;
+use stream::consume_stream_response;
 pub use types::{
     Block, ChatRequest, Message, ProviderCapabilities, ProviderEvent, ToolCall, ToolDef, Usage,
 };
@@ -203,12 +208,7 @@ async fn fetch_models(provider_id: &str, base_url: &str) -> Result<Vec<ModelOpti
             .unwrap_or_default()
     };
     url.set_path(&format!("{}{}", base_path, path));
-    let client = Client::builder()
-        .redirect(Policy::none())
-        .connect_timeout(Duration::from_secs(15))
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|_| "Não foi possível preparar uma conexão segura.".to_string())?;
+    let client = http_client(30)?;
     let mut request = client.get(url).pipe_auth(provider_id, &credential)?;
     if provider_id == "anthropic" {
         request = request.header("anthropic-version", "2023-06-01");
@@ -384,12 +384,7 @@ async fn ping_provider_inner(provider_id: &str, base_url: &str, model: &str) -> 
     let credential = credential_entry(provider_id)?
         .get_password()
         .map_err(|_| "Salve uma credencial para testar a geração.")?;
-    let client = Client::builder()
-        .redirect(Policy::none())
-        .connect_timeout(Duration::from_secs(15))
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|_| "Não foi possível preparar uma conexão segura.")?;
+    let client = http_client(30)?;
     let mut request = client
         .post(endpoint)
         .pipe_auth(provider_id, &credential)?
@@ -629,12 +624,7 @@ async fn request_provider(
         }
         _ => "Não foi possível recuperar a credencial do Gerenciador do Windows.".to_string(),
     })?;
-    let client = Client::builder()
-        .redirect(Policy::none())
-        .connect_timeout(Duration::from_secs(15))
-        .timeout(Duration::from_secs(90))
-        .build()
-        .map_err(|_| "Não foi possível preparar uma conexão segura.".to_string())?;
+    let client = http_client(90)?;
 
     let chat_capabilities = effective_capabilities(app, provider_id, &request_data.model)?;
     let protocol_capabilities = match provider_id {
@@ -760,117 +750,6 @@ fn cache_unsupported_tools_response(
     }
 }
 
-async fn consume_stream_response<F>(
-    provider_id: &str,
-    mut response: reqwest::Response,
-    mut emit: F,
-) -> Result<ProviderReply, String>
-where
-    F: FnMut(ProviderEvent),
-{
-    let mut pending = Vec::new();
-    let mut content = String::new();
-    let mut finished = false;
-    let mut stream_state = StreamState::default();
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|error| safe_transport_error(&error))?
-    {
-        pending.extend_from_slice(&chunk);
-        if pending.len() > MAX_MESSAGE_BYTES {
-            return Err("A resposta excede o limite permitido.".into());
-        }
-        while let Some((end, delimiter_len)) = pending
-            .windows(4)
-            .position(|part| part == b"\r\n\r\n")
-            .map(|end| (end, 4))
-            .or_else(|| {
-                pending
-                    .windows(2)
-                    .position(|part| part == b"\n\n")
-                    .map(|end| (end, 2))
-            })
-        {
-            let event = pending.drain(..end + delimiter_len).collect::<Vec<_>>();
-            for line in String::from_utf8_lossy(&event).lines() {
-                if let Some(data) = line.trim_end_matches('\r').strip_prefix("data: ") {
-                    if data == "[DONE]" {
-                        finished = true;
-                        match stream_state.finish() {
-                            Ok(outputs) => {
-                                for output in outputs {
-                                    if let ProviderEvent::TextDelta { text } = &output {
-                                        content.push_str(text);
-                                    }
-                                    emit(output);
-                                }
-                            }
-                            Err(error) => {
-                                emit(ProviderEvent::Error {
-                                    kind: "invalid_tool_arguments".into(),
-                                    status: None,
-                                    message: error.clone(),
-                                });
-                                return Err(error);
-                            }
-                        }
-                        continue;
-                    }
-                    let payload: Value = match serde_json::from_str(data) {
-                        Ok(payload) => payload,
-                        Err(_) => {
-                            let message = "O provedor retornou um evento inválido.".to_string();
-                            emit(ProviderEvent::Error {
-                                kind: "invalid_event".into(),
-                                status: None,
-                                message: message.clone(),
-                            });
-                            return Err(message);
-                        }
-                    };
-                    if payload["type"] == "message_stop" {
-                        finished = true;
-                    }
-                    let outputs = match stream_state.consume(provider_id, &payload) {
-                        Ok(outputs) => outputs,
-                        Err(error) => {
-                            emit(ProviderEvent::Error {
-                                kind: "provider_stream".into(),
-                                status: None,
-                                message: error.clone(),
-                            });
-                            return Err(error);
-                        }
-                    };
-                    for output in outputs {
-                        if let ProviderEvent::TextDelta { text } = &output {
-                            content.push_str(text);
-                            if content.len() > MAX_MESSAGE_BYTES {
-                                return Err("A resposta excede o limite permitido.".into());
-                            }
-                        }
-                        emit(output);
-                    }
-                }
-            }
-        }
-    }
-    if !finished {
-        return Err("A resposta do provedor foi interrompida.".into());
-    }
-    let tool_calls = stream_state.tool_calls().to_vec();
-    if content.trim().is_empty() && tool_calls.is_empty() {
-        return Err("O provedor retornou uma resposta vazia.".into());
-    }
-    Ok(ProviderReply {
-        content,
-        citations: Vec::new(),
-        tool_calls,
-        usage: stream_state.usage(),
-        stop_reason: stream_state.stop_reason(),
-    })
-}
 #[cfg(test)]
 fn stream_delta<'a>(provider_id: &str, payload: &'a Value) -> Option<&'a str> {
     if provider_id == "anthropic" {
@@ -881,61 +760,6 @@ fn stream_delta<'a>(provider_id: &str, payload: &'a Value) -> Option<&'a str> {
         }
     } else {
         payload["choices"][0]["delta"]["content"].as_str()
-    }
-}
-
-fn provider_http_error(status: u16) -> String {
-    match status {
-        400 => {
-            format!("O provedor rejeitou o modelo ou os parâmetros da solicitação (HTTP {status}).")
-        }
-        401 | 403 => format!("A credencial é inválida ou não tem permissão (HTTP {status})."),
-        404 => "O endpoint ou modelo não foi encontrado (HTTP 404).".into(),
-        408 => "O provedor atingiu o tempo limite (HTTP 408). Tente novamente.".into(),
-        429 => "O limite de uso deste provedor foi atingido (HTTP 429). Consulte os limites do seu plano e tente novamente mais tarde.".into(),
-        500..=599 => format!("O serviço do provedor está indisponível (HTTP {status})."),
-        _ => format!("O provedor respondeu com HTTP {status}."),
-    }
-}
-
-fn header_value(value: &str) -> Result<header::HeaderValue, String> {
-    header::HeaderValue::from_str(value)
-        .map_err(|_| "A credencial contém caracteres inválidos para uma requisição.".to_string())
-}
-
-trait AuthRequest {
-    fn pipe_auth(self, provider_id: &str, credential: &str) -> Result<Self, String>
-    where
-        Self: Sized;
-}
-
-impl AuthRequest for reqwest::RequestBuilder {
-    fn pipe_auth(self, provider_id: &str, credential: &str) -> Result<Self, String> {
-        let entry = catalog_entry(provider_id)
-            .ok_or("A autenticação deste provedor não está cadastrada.")?;
-        match entry.auth_header.as_deref() {
-            Some("x-api-key") => Ok(self.header("x-api-key", header_value(credential)?)),
-            Some("api-key") => Ok(self.header("api-key", header_value(credential)?)),
-            Some("Authorization") => {
-                Ok(self.header(header::AUTHORIZATION, bearer_value(credential)?))
-            }
-            _ => Err("O método de autenticação deste provedor ainda não está implementado.".into()),
-        }
-    }
-}
-
-fn bearer_value(value: &str) -> Result<header::HeaderValue, String> {
-    header::HeaderValue::from_str(&format!("Bearer {value}"))
-        .map_err(|_| "A credencial contém caracteres inválidos para uma requisição.".to_string())
-}
-
-fn safe_transport_error(error: &reqwest::Error) -> String {
-    if error.is_timeout() {
-        "O provedor demorou para responder. Tente novamente.".into()
-    } else if error.is_connect() {
-        "Não foi possível conectar ao provedor. Verifique sua conexão.".into()
-    } else {
-        "A comunicação segura com o provedor falhou.".into()
     }
 }
 
