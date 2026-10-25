@@ -16,6 +16,7 @@ Aplicativo OdeKrai para Windows, desenvolvido com React, TypeScript e Tauri 2. O
 - Pasta pessoal escolhida na primeira execução, identidade `ODEKRAI.md` e memória manual editáveis. O histórico pode ser apagado na interface. O motor de permissões em Rust inclui aprovação nativa, auditoria encadeada e kill switch; nesta fase, só há ferramentas simuladas.
 - Perfil local em SQLite, com avatar reprocessado no Rust e nunca enviado aos provedores.
 - Instância única, CSP de produção restrita e permissões separadas para as janelas auxiliares.
+- Inicialização tolerante a falhas, modo seguro após interrupção e registro local de diagnóstico sem conteúdo de conversas.
 - Adaptadores para 12 APIs Chat Completions, Anthropic Messages e Perplexity Agent API. Vertex AI continua como guia pendente de ADC/OAuth.
 - Pet 2D com 12 personagens CC0 renderizados em 512×512, escolha persistida no SQLite e animações
   CSS.

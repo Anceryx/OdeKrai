@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   activeProviderSettings,
   loadSettings,
@@ -39,9 +39,13 @@ export function useAppState() {
   const [error, setError] = useState('');
   const [lastFailedPrompt, setLastFailedPrompt] = useState('');
   const [toast, setToast] = useState(initialSettingsLoad.warnings.join(' '));
+  const [diagnostics, setDiagnostics] = useState<{ command: string; message: string }[]>([]);
   const [chatMode, setChatMode] = useState(false);
   const request = useRef<string | null>(null);
   const companionStateTimer = useRef<number | undefined>(undefined);
+  const reportDiagnostic = useCallback((command: string, message: string) => {
+    setDiagnostics((items) => [...items.slice(-7), { command, message }]);
+  }, []);
 
   useEffect(() => {
     saveSettings(settings);
@@ -49,10 +53,41 @@ export function useAppState() {
 
   useEffect(() => {
     if (!isTauri()) return;
+    const started = performance.now();
+    void invoke('record_diagnostic_event', {
+      event: 'startup_command_start',
+      command: 'set_close_behavior',
+      outcome: 'ok',
+      durationMs: 0,
+    }).catch((error: unknown) => console.warn('[OdeKrai diagnóstico] Falha no log local.', error));
     void invoke('set_close_behavior', {
       minimizeToTray: settings.closeBehavior === 'minimize_to_tray',
-    }).catch(() => setToast('Não foi possível atualizar o comportamento ao fechar.'));
-  }, [settings.closeBehavior]);
+    })
+      .then(() => {
+        void invoke('record_diagnostic_event', {
+          event: 'startup_command_finish',
+          command: 'set_close_behavior',
+          outcome: 'ok',
+          durationMs: Math.max(0, Math.round(performance.now() - started)),
+        }).catch((error: unknown) =>
+          console.warn('[OdeKrai diagnóstico] Falha no log local.', error),
+        );
+      })
+      .catch(() => {
+        reportDiagnostic(
+          'set_close_behavior',
+          'Não foi possível atualizar o comportamento ao fechar.',
+        );
+        void invoke('record_diagnostic_event', {
+          event: 'startup_command_finish',
+          command: 'set_close_behavior',
+          outcome: 'error',
+          durationMs: Math.max(0, Math.round(performance.now() - started)),
+        }).catch((error: unknown) =>
+          console.warn('[OdeKrai diagnóstico] Falha no log local.', error),
+        );
+      });
+  }, [settings.closeBehavior, reportDiagnostic]);
 
   useEffect(() => {
     const refreshSettings = () => setSettings(loadSettings());
@@ -97,6 +132,8 @@ export function useAppState() {
     setLastFailedPrompt,
     toast,
     setToast,
+    diagnostics,
+    reportDiagnostic,
     chatMode,
     setChatMode,
     request,

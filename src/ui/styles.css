@@ -3720,3 +3720,28 @@ html.island-window-html {
     grid-template-columns: 1fr;
   }
 }
+.diagnostic-banner {
+  margin: 0 24px 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--warning, #d99b28);
+  border-radius: 10px;
+  background: var(--surface-raised, #211d14);
+  color: var(--text-primary, #f3ead8);
+  font-size: 0.875rem;
+}
+
+.diagnostic-banner p {
+  margin: 6px 0 0;
+}
+
+.diagnostic-banner code {
+  font-size: 0.8rem;
+}
+
+.screen-loading,
+.screen-error {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+  color: var(--text-secondary, #b8b2a6);
+}

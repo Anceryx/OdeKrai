@@ -42,7 +42,9 @@ export function PetSprite({
     let unlisten: (() => void) | undefined;
     void invoke<string>('get_selected_pet')
       .then(setStoredPetId)
-      .catch(() => undefined);
+      .catch(() =>
+        console.warn('[OdeKrai diagnóstico] Não foi possível carregar o personagem salvo.'),
+      );
     void listen<string>('selected-pet-updated', ({ payload }) => setStoredPetId(payload)).then(
       (off) => {
         unlisten = off;

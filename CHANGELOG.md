@@ -35,6 +35,8 @@
 
 ### Janela e preferências
 
+- As janelas auxiliares são criadas por comandos assíncronos; a inicialização tem modo seguro após interrupção, e o fechamento tenta encerrar em até três segundos.
+- Falhas de inicialização aparecem no banner Diagnóstico e são registradas em `app_data_dir/logs/diagnostic.log` sem conteúdo de conversas ou segredos.
 - Com “Encerrar”, o X encerra o processo e cancela fluxos e janelas auxiliares; só “Minimizar para a bandeja” mantém o app em segundo plano.
 - O tamanho inicial da janela considera o fator de escala e a área útil do monitor, incluindo a barra de tarefas.
 - Ao fechar a janela, a preferência padrão encerra o aplicativo; a opção alternativa minimiza para a bandeja com ações para abrir e sair.

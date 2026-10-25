@@ -8,18 +8,80 @@ import type { useAppState } from './useAppState';
 import type { Conversation } from '../screens/types';
 import type { ProfileData } from '../Profile';
 
+const STARTUP_TIMEOUT_MS = 5000;
+
+function timeout<T>(promise: Promise<T>, command: string): Promise<T> {
+  let timer: number | undefined;
+  return Promise.race([
+    promise,
+    new Promise<T>(
+      (_, reject) =>
+        (timer = window.setTimeout(
+          () => reject(new Error(`${command} excedeu o tempo limite`)),
+          STARTUP_TIMEOUT_MS,
+        )),
+    ),
+  ]).finally(() => {
+    if (timer !== undefined) window.clearTimeout(timer);
+  });
+}
+
+function diagnosticMessage(command: string) {
+  const messages: Record<string, string> = {
+    get_selected_pet: 'Não foi possível carregar o personagem salvo.',
+    get_permission_settings: 'Não foi possível carregar as permissões.',
+    get_profile: 'Não foi possível carregar o perfil local.',
+    agent_home_status: 'Não foi possível verificar a pasta do OdeKrai.',
+    agent_home_read_core: 'Não foi possível recuperar o perfil aprovado.',
+    list_conversations: 'Não foi possível carregar o histórico local.',
+    load_conversation: 'Não foi possível abrir a conversa anterior.',
+    has_provider_credential: 'Não foi possível verificar a credencial do provedor.',
+  };
+  return messages[command] ?? 'A inicialização encontrou uma falha.';
+}
+
+async function startupInvoke<T>(
+  command: string,
+  args: Record<string, unknown> | undefined,
+  reportDiagnostic: (command: string, message: string) => void,
+): Promise<T> {
+  const started = performance.now();
+  let outcome = 'ok';
+  void invoke('record_diagnostic_event', {
+    event: 'startup_command_start',
+    command,
+    outcome: 'ok',
+    durationMs: 0,
+  }).catch((error: unknown) => console.warn('[OdeKrai diagnóstico] Falha no log local.', error));
+  try {
+    return await timeout(invoke<T>(command, args), command);
+  } catch (error) {
+    outcome = 'error';
+    reportDiagnostic(command, diagnosticMessage(command));
+    throw error;
+  } finally {
+    const durationMs = Math.max(0, Math.round(performance.now() - started));
+    void invoke('record_diagnostic_event', {
+      event: 'startup_command_finish',
+      command,
+      outcome,
+      durationMs,
+    }).catch((error: unknown) => console.warn('[OdeKrai diagnóstico] Falha no log local.', error));
+  }
+}
+
 export function useAppEffects(state: ReturnType<typeof useAppState>) {
   const {
     settings,
     setSelectedPet,
     setPermissionIndicator,
     setToast,
+    reportDiagnostic,
     setProfile,
     setIdentityConfigured,
     setConversations,
     setConversationId,
     setMessages,
-    setError,
     toast,
     setKeySavedForSession,
     request,
@@ -27,121 +89,237 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
   } = state;
   useEffect(() => {
     if (!isTauri()) return;
-    void invoke<string>('get_selected_pet')
-      .then(setSelectedPet)
-      .catch(() => undefined);
-    const refreshPermissionIndicator = () => {
-      void invoke<{ mode: string; halted: boolean }>('get_permission_settings')
-        .then(setPermissionIndicator)
-        .catch(() => setPermissionIndicator(null));
-    };
-    refreshPermissionIndicator();
+    let current = true;
+    void (async () => {
+      let recoveredFromIncompleteRun = false;
+      try {
+        recoveredFromIncompleteRun = await startupInvoke<boolean>(
+          'get_startup_state',
+          undefined,
+          reportDiagnostic,
+        );
+      } catch {
+        recoveredFromIncompleteRun = true;
+      }
+      if (!current) return;
+      const provider = AI_PROVIDERS.find((item) => item.id === settings.activeProviderId);
+      const results = await Promise.allSettled([
+        startupInvoke<string>('get_selected_pet', undefined, reportDiagnostic),
+        startupInvoke<{ mode: string; halted: boolean }>(
+          'get_permission_settings',
+          undefined,
+          reportDiagnostic,
+        ),
+        startupInvoke<ProfileData>('get_profile', undefined, reportDiagnostic),
+        startupInvoke<{ configured: boolean }>('agent_home_status', undefined, reportDiagnostic),
+        startupInvoke<Conversation[]>('list_conversations', undefined, reportDiagnostic),
+        provider
+          ? startupInvoke<boolean>(
+              'has_provider_credential',
+              { providerId: provider.id },
+              reportDiagnostic,
+            )
+          : Promise.resolve(false),
+      ]);
+      if (!current) return;
+      const [pet, permissions, savedProfile, home, history, credential] = results;
+      if (pet.status === 'fulfilled') setSelectedPet(pet.value);
+      if (permissions.status === 'fulfilled') setPermissionIndicator(permissions.value);
+      if (savedProfile.status === 'fulfilled') setProfile(savedProfile.value);
+      if (home.status === 'fulfilled') setIdentityConfigured(home.value.configured);
+      if (credential.status === 'fulfilled') setKeySavedForSession(credential.value);
+      if (history.status === 'fulfilled') {
+        setConversations(history.value);
+        if (history.value[0]) {
+          setConversationId(history.value[0].id);
+          try {
+            setMessages(
+              await startupInvoke<ChatMessage[]>(
+                'load_conversation',
+                { conversationId: history.value[0].id },
+                reportDiagnostic,
+              ),
+            );
+          } catch {
+            // O banner persistente identifica o comando que falhou.
+          }
+        }
+      }
+      if (
+        home.status === 'fulfilled' &&
+        home.value.configured &&
+        (savedProfile.status !== 'fulfilled' || !savedProfile.value.displayName)
+      ) {
+        try {
+          const document = await startupInvoke<{ approved_content: string }>(
+            'agent_home_read_core',
+            undefined,
+            reportDiagnostic,
+          );
+          const recovered = profileFromApprovedCore(document.approved_content);
+          if (recovered) setProfile((profile) => ({ ...profile, ...recovered }));
+        } catch {
+          // O banner persistente identifica o comando que falhou.
+        }
+      }
+      if (recoveredFromIncompleteRun) {
+        reportDiagnostic(
+          'modo_seguro',
+          'A inicialização anterior não terminou; pet e ilha ficarão desligados nesta sessão.',
+        );
+      } else {
+        const companion = settings.companion;
+        if (companion.enabled) {
+          const width = 280 * companion.size;
+          const height = 150 * companion.size;
+          const right = companion.position.endsWith('right');
+          const bottom = companion.position.startsWith('bottom');
+          const x =
+            companion.coordinates?.x ?? (right ? Math.max(0, screen.availWidth - width - 28) : 28);
+          const y =
+            companion.coordinates?.y ??
+            (bottom ? Math.max(0, screen.availHeight - height - 58) : 28);
+          try {
+            await timeout(
+              (async () => {
+                await startupInvoke<void>(
+                  'set_island_position',
+                  { x, y, size: companion.size },
+                  reportDiagnostic,
+                );
+                await startupInvoke<void>(
+                  'set_island_topmost',
+                  { enabled: companion.alwaysOnTop },
+                  reportDiagnostic,
+                );
+                await startupInvoke<void>(
+                  'set_island_visible',
+                  { visible: true },
+                  reportDiagnostic,
+                );
+                await emit('companion-state', { type: 'reveal' });
+              })(),
+              'restore_island',
+            );
+          } catch {
+            reportDiagnostic(
+              'set_island_visible',
+              'Não foi possível restaurar o pet do assistente.',
+            );
+          }
+        }
+        if (companion.freeMode) {
+          const x =
+            companion.desktopCoordinates?.x ??
+            Math.max(0, (screen.availWidth - 176 * companion.size) / 2);
+          const y =
+            companion.desktopCoordinates?.y ??
+            Math.max(0, (screen.availHeight - 176 * companion.size) / 2);
+          try {
+            await timeout(
+              (async () => {
+                await startupInvoke<void>(
+                  'set_character_position',
+                  { x, y, size: companion.size },
+                  reportDiagnostic,
+                );
+                await startupInvoke<void>(
+                  'set_character_visible',
+                  { visible: true },
+                  reportDiagnostic,
+                );
+              })(),
+              'restore_mascot',
+            );
+          } catch {
+            reportDiagnostic(
+              'set_character_visible',
+              'Não foi possível restaurar o OdeKrai no desktop.',
+            );
+          }
+        }
+      }
+      try {
+        await startupInvoke<void>('complete_startup', undefined, reportDiagnostic);
+      } catch {
+        // A falha fica registrada no banner e a janela principal continua utilizável.
+      }
+    })();
     let unlisten: (() => void)[] = [];
     void Promise.all([
       listen('security-halted', () => {
         setToast('O OdeKrai foi parado. Ações e respostas em andamento foram canceladas.');
-        refreshPermissionIndicator();
+        void startupInvoke<{ mode: string; halted: boolean }>(
+          'get_permission_settings',
+          undefined,
+          reportDiagnostic,
+        )
+          .then(setPermissionIndicator)
+          .catch(() => setPermissionIndicator(null));
       }),
       listen('security-resumed', () => {
         setToast('O OdeKrai foi retomado.');
-        refreshPermissionIndicator();
+        void startupInvoke<{ mode: string; halted: boolean }>(
+          'get_permission_settings',
+          undefined,
+          reportDiagnostic,
+        )
+          .then(setPermissionIndicator)
+          .catch(() => setPermissionIndicator(null));
       }),
-      listen('permission-settings-updated', refreshPermissionIndicator),
+      listen('permission-settings-updated', () => {
+        void startupInvoke<{ mode: string; halted: boolean }>(
+          'get_permission_settings',
+          undefined,
+          reportDiagnostic,
+        )
+          .then(setPermissionIndicator)
+          .catch(() => setPermissionIndicator(null));
+      }),
       listen<string>('security-error', ({ payload }) => setToast(payload)),
-    ]).then((off) => {
-      unlisten = off;
-    });
-    return () => unlisten.forEach((off) => off());
-  }, []);
-
-  useEffect(() => {
-    if (!isTauri()) return;
-    let current = true;
-    void (async () => {
-      const [savedProfile, home] = await Promise.allSettled([
-        invoke<ProfileData>('get_profile'),
-        invoke<{ configured: boolean }>('agent_home_status'),
-      ]);
-      if (!current) return;
-      const stored = savedProfile.status === 'fulfilled' ? savedProfile.value : null;
-      if (stored) setProfile(stored);
-      else setToast('Não foi possível ler o perfil local.');
-      if (home.status === 'rejected') {
-        setToast('Não foi possível verificar a pasta do OdeKrai.');
-        return;
-      }
-      setIdentityConfigured(home.value.configured);
-      if (home.value.configured && !stored?.displayName) {
-        try {
-          const document = await invoke<{ approved_content: string }>('agent_home_read_core');
-          if (!current) return;
-          const recovered = profileFromApprovedCore(document.approved_content);
-          if (recovered) {
-            setProfile((profile) => ({ ...profile, ...recovered }));
-            setToast('Perfil recuperado do arquivo base aprovado.');
-          }
-        } catch {
-          if (current) setToast('Não foi possível recuperar o perfil do arquivo base.');
-        }
-      }
-    })();
+    ])
+      .then((off) => {
+        unlisten = off;
+      })
+      .catch(() =>
+        reportDiagnostic('listen', 'Não foi possível iniciar alguns avisos de segurança.'),
+      );
+    const onError = () => {
+      reportDiagnostic(
+        'window.onerror',
+        'Ocorreu um erro no frontend. Consulte o log de diagnóstico.',
+      );
+      void invoke('record_diagnostic_event', {
+        event: 'frontend_window_error',
+        command: 'window.onerror',
+        outcome: 'error',
+        durationMs: 0,
+      }).catch((error: unknown) =>
+        console.warn('[OdeKrai diagnóstico] Falha no log local.', error),
+      );
+    };
+    const onRejection = () => {
+      reportDiagnostic(
+        'unhandledrejection',
+        'Uma operação do frontend falhou. Consulte o log de diagnóstico.',
+      );
+      void invoke('record_diagnostic_event', {
+        event: 'frontend_unhandled_rejection',
+        command: 'unhandledrejection',
+        outcome: 'error',
+        durationMs: 0,
+      }).catch((error: unknown) =>
+        console.warn('[OdeKrai diagnóstico] Falha no log local.', error),
+      );
+    };
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
     return () => {
       current = false;
+      unlisten.forEach((off) => off());
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
     };
-  }, []);
-  useEffect(() => {
-    if (!isTauri()) return;
-    void invoke<Conversation[]>('list_conversations')
-      .then((items) => {
-        setConversations(items);
-        if (items[0]) {
-          setConversationId(items[0].id);
-          void invoke<ChatMessage[]>('load_conversation', { conversationId: items[0].id })
-            .then(setMessages)
-            .catch(() => setError('Não foi possível abrir a conversa anterior.'));
-        }
-      })
-      .catch(() => setError('Não foi possível abrir o histórico local.'));
-  }, []);
-  useEffect(() => {
-    const provider = AI_PROVIDERS.find((item) => item.id === settings.activeProviderId);
-    if (!provider || !isTauri()) {
-      setKeySavedForSession(false);
-      return;
-    }
-    void invoke<boolean>('has_provider_credential', { providerId: provider.id })
-      .then(setKeySavedForSession)
-      .catch(() => setKeySavedForSession(false));
-  }, [settings.activeProviderId]);
-  useEffect(() => {
-    const companion = settings.companion;
-    if (!isTauri() || !companion.enabled) return;
-    const width = 280 * companion.size;
-    const height = 150 * companion.size;
-    const right = companion.position.endsWith('right');
-    const bottom = companion.position.startsWith('bottom');
-    const x =
-      companion.coordinates?.x ?? (right ? Math.max(0, screen.availWidth - width - 28) : 28);
-    const y =
-      companion.coordinates?.y ?? (bottom ? Math.max(0, screen.availHeight - height - 58) : 28);
-    void invoke('set_island_position', { x, y, size: companion.size })
-      .then(() => invoke('set_island_topmost', { enabled: companion.alwaysOnTop }))
-      .then(() => invoke('set_island_visible', { visible: true }))
-      .then(() => emit('companion-state', { type: 'reveal' }))
-      .catch(() => setToast('Não foi possível restaurar o pet do assistente.'));
-  }, []);
-  useEffect(() => {
-    const companion = settings.companion;
-    if (!isTauri() || !companion.freeMode) return;
-    const x =
-      companion.desktopCoordinates?.x ??
-      Math.max(0, (screen.availWidth - 176 * companion.size) / 2);
-    const y =
-      companion.desktopCoordinates?.y ??
-      Math.max(0, (screen.availHeight - 176 * companion.size) / 2);
-    void invoke('set_character_position', { x, y, size: companion.size })
-      .then(() => invoke('set_character_visible', { visible: true }))
-      .catch(() => setToast('Não foi possível restaurar o OdeKrai no desktop.'));
   }, []);
   useEffect(() => {
     if (!toast) return;

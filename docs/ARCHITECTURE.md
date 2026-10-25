@@ -85,4 +85,6 @@ O plugin Tauri `global-shortcut` registra o atalho no processo nativo. O kill sw
 
 ## Inicialização do painel
 
+Janelas auxiliares são construídas somente por caminhos assíncronos. A restauração da ilha e do mascote ocorre após as leituras iniciais, com limite de cinco segundos e sem condicionar a janela principal. Uma inicialização anterior incompleta ativa o modo seguro e mantém essas janelas desligadas nessa sessão. Falhas de inicialização e erros não tratados do frontend aparecem no banner **Diagnóstico** e são registrados em `app_data_dir/logs/diagnostic.log`, sem mensagens de conversa, segredos ou texto livre de erros.
+
 Comandos nativos de leitura usados durante a abertura (pasta do agente, credenciais, perfil, permissões, mascote e histórico) são assíncronos no Tauri para não executar trabalho de disco ou do Gerenciador de Credenciais na thread principal da janela.

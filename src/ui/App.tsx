@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, type FormEvent } from 'react';
+import { lazy, Suspense, useEffect, useMemo, type ComponentType, type FormEvent } from 'react';
 import { resolveConversationSelection } from '../core/chat';
 import type { ChatMessage } from '../core/provider-messages';
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
@@ -6,38 +6,69 @@ import { emit } from '@tauri-apps/api/event';
 import { normalizeSoundPreferences, playSound } from '../core/sounds';
 import { AI_PROVIDERS, type AiProvider } from '../core/providers';
 const Overview = lazy(() =>
-  import('./screens/Overview').then((module) => ({ default: module.Overview })),
+  import('./screens/Overview').then((module) => ({ default: withScreenBoundary(module.Overview) })),
 );
 const AssistantScreen = lazy(() =>
-  import('./screens/Assistant').then((module) => ({ default: module.AssistantScreen })),
+  import('./screens/Assistant').then((module) => ({
+    default: withScreenBoundary(module.AssistantScreen),
+  })),
 );
 const SettingsScreen = lazy(() =>
-  import('./screens/Settings').then((module) => ({ default: module.SettingsScreen })),
+  import('./screens/Settings').then((module) => ({
+    default: withScreenBoundary(module.SettingsScreen),
+  })),
 );
 const ConversationsScreen = lazy(() =>
-  import('./screens/Conversations').then((module) => ({ default: module.ConversationsScreen })),
+  import('./screens/Conversations').then((module) => ({
+    default: withScreenBoundary(module.ConversationsScreen),
+  })),
 );
 const ProvidersScreen = lazy(() =>
-  import('./screens/Providers').then((module) => ({ default: module.ProvidersScreen })),
+  import('./screens/Providers').then((module) => ({
+    default: withScreenBoundary(module.ProvidersScreen),
+  })),
 );
 const IdentityScreen = lazy(() =>
-  import('./screens/Identity').then((module) => ({ default: module.IdentityScreen })),
+  import('./screens/Identity').then((module) => ({
+    default: withScreenBoundary(module.IdentityScreen),
+  })),
 );
 const PermissionsScreen = lazy(() =>
-  import('./screens/Permissions').then((module) => ({ default: module.PermissionsScreen })),
+  import('./screens/Permissions').then((module) => ({
+    default: withScreenBoundary(module.PermissionsScreen),
+  })),
 );
 const ActivityScreen = lazy(() =>
-  import('./screens/Activity').then((module) => ({ default: module.ActivityScreen })),
+  import('./screens/Activity').then((module) => ({
+    default: withScreenBoundary(module.ActivityScreen),
+  })),
 );
 import { initials } from './Profile';
 import { ApprovalWindow, isApprovalWindow } from './SecurityCenter';
 import { PETS } from '../core/pets';
-import { Icon } from './Icon';
 import { navigationItems, SidebarNavigation } from './SidebarNavigation';
 import { setPrimaryProviderSettings, toggleProviderSettings } from '../core/provider-directory';
 import { useAppEffects } from './hooks/useAppEffects';
 
 import { useAppState } from './hooks/useAppState';
+import { ScreenErrorBoundary } from './ScreenErrorBoundary';
+const screenLoading = (
+  <div className="screen-loading" role="status">
+    Carregando tela…
+  </div>
+);
+const withScreenBoundary = <Props extends object>(
+  Screen: ComponentType<Props>,
+): ComponentType<Props> => {
+  function BoundedScreen(props: Props) {
+    return (
+      <ScreenErrorBoundary>
+        <Screen {...props} />
+      </ScreenErrorBoundary>
+    );
+  }
+  return BoundedScreen;
+};
 
 export function App() {
   return isApprovalWindow() ? <ApprovalWindow /> : <MainApp />;
@@ -46,16 +77,41 @@ export function App() {
 function MainApp() {
   useEffect(() => {
     if (!isTauri()) return;
+    const started = performance.now();
+    void invoke('record_diagnostic_event', {
+      event: 'startup_command_start',
+      command: 'get_build_info',
+      outcome: 'ok',
+      durationMs: 0,
+    }).catch((error: unknown) => console.warn('[OdeKrai diagnóstico] Falha no log local.', error));
     void invoke<{
       version: string;
       commit: string;
       build_date: string;
       webview_version: string;
     }>('get_build_info')
-      .then((info) => console.info('[OdeKrai diagnóstico]', info))
-      .catch((error: unknown) =>
-        console.error('[OdeKrai diagnóstico] Falha ao obter cabeçalho:', error),
-      );
+      .then((info) => {
+        console.info('[OdeKrai diagnóstico]', info);
+        void invoke('record_diagnostic_event', {
+          event: 'startup_command_finish',
+          command: 'get_build_info',
+          outcome: 'ok',
+          durationMs: Math.max(0, Math.round(performance.now() - started)),
+        }).catch((error: unknown) =>
+          console.warn('[OdeKrai diagnóstico] Falha no log local.', error),
+        );
+      })
+      .catch((error: unknown) => {
+        console.error('[OdeKrai diagnóstico] Falha ao obter cabeçalho:', error);
+        void invoke('record_diagnostic_event', {
+          event: 'startup_command_finish',
+          command: 'get_build_info',
+          outcome: 'error',
+          durationMs: Math.max(0, Math.round(performance.now() - started)),
+        }).catch((logError: unknown) =>
+          console.warn('[OdeKrai diagnóstico] Falha no log local.', logError),
+        );
+      });
   }, []);
 
   const appState = useAppState();
@@ -93,6 +149,7 @@ function MainApp() {
     setLastFailedPrompt,
     toast,
     setToast,
+    diagnostics,
     chatMode,
     setChatMode,
     request,
@@ -418,13 +475,6 @@ function MainApp() {
               </button>
             )}
             <button
-              className="icon-button"
-              aria-label="Ajuda"
-              onClick={() => setToast('A documentação do projeto está em docs/.')}
-            >
-              <Icon name="help" />
-            </button>
-            <button
               className="help-button"
               onClick={() => setToast('Central de ajuda ainda em desenvolvimento.')}
             >
@@ -432,7 +482,17 @@ function MainApp() {
             </button>
           </div>
         </header>
-        <Suspense fallback={null}>
+        {diagnostics.length > 0 && (
+          <aside className="diagnostic-banner" aria-label="Diagnóstico" role="status">
+            <strong>Diagnóstico</strong>
+            {diagnostics.map((item, index) => (
+              <p key={`${item.command}-${index}`}>
+                <code>{item.command}</code>: {item.message}
+              </p>
+            ))}
+          </aside>
+        )}
+        <Suspense fallback={screenLoading}>
           {chatMode || section === 'chat' ? (
             <ConversationsScreen
               messages={messages}

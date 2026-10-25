@@ -547,7 +547,9 @@ export function ApprovalWindow() {
     if (!pending) {
       void getCurrentWindow()
         .close()
-        .catch(() => undefined);
+        .catch(() =>
+          console.warn('[OdeKrai diagnóstico] Não foi possível fechar a janela de aprovação.'),
+        );
       return;
     }
     setCompletePreview('');
