@@ -43,6 +43,9 @@ jobs:
       - name: Instalar dependências JavaScript
         run: npm ci
 
+      - name: Verificar codificação dos arquivos
+        run: npm run check:encoding
+
       - name: Executar testes
         run: npm test
 

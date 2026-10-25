@@ -74,6 +74,8 @@ Consulte `docs/IMPLEMENTATION-STATUS.md` e `docs/ROADMAP.md` antes de planejar.
 - TypeScript estrito; sem `any` sem justificativa. Prettier (`.prettierrc.json`) e `.editorconfig`.
 - Rust: `cargo fmt`, erros sem vazar segredos, mensagens ao usuário em português.
 - Texto de UI e docs em português do Brasil (`pt-BR`); termos técnicos em inglês quando forem o padrão.
+- Editar arquivos sempre em UTF-8 **sem BOM**. É proibido regravar arquivos com
+  `Set-Content`, `Out-File` ou `Get-Content` sem codificação explícita; preferir edição por patch.
 - Testes: unitários para lógica de `src/core/` e do motor de políticas; mocks para provedores
   (nunca chamar API real em teste automatizado).
 - Respeitar `prefers-reduced-motion` e manter baixo uso de CPU/GPU em idle (o app fica sempre aberto).

@@ -39,7 +39,7 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
     let unlisten: (() => void)[] = [];
     void Promise.all([
       listen('security-halted', () => {
-        setToast('O OdeKrai foi parado. AÃ§Ãµes e respostas em andamento foram canceladas.');
+        setToast('O OdeKrai foi parado. Ações e respostas em andamento foram canceladas.');
         refreshPermissionIndicator();
       }),
       listen('security-resumed', () => {
@@ -65,9 +65,9 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
       if (!current) return;
       const stored = savedProfile.status === 'fulfilled' ? savedProfile.value : null;
       if (stored) setProfile(stored);
-      else setToast('NÃ£o foi possÃ­vel ler o perfil local.');
+      else setToast('Não foi possível ler o perfil local.');
       if (home.status === 'rejected') {
-        setToast('NÃ£o foi possÃ­vel verificar a pasta do OdeKrai.');
+        setToast('Não foi possível verificar a pasta do OdeKrai.');
         return;
       }
       setIdentityConfigured(home.value.configured);
@@ -81,7 +81,7 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
             setToast('Perfil recuperado do arquivo base aprovado.');
           }
         } catch {
-          if (current) setToast('NÃ£o foi possÃ­vel recuperar o perfil do arquivo base.');
+          if (current) setToast('Não foi possível recuperar o perfil do arquivo base.');
         }
       }
     })();
@@ -98,10 +98,10 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
           setConversationId(items[0].id);
           void invoke<ChatMessage[]>('load_conversation', { conversationId: items[0].id })
             .then(setMessages)
-            .catch(() => setError('NÃ£o foi possÃ­vel abrir a conversa anterior.'));
+            .catch(() => setError('Não foi possível abrir a conversa anterior.'));
         }
       })
-      .catch(() => setError('NÃ£o foi possÃ­vel abrir o histÃ³rico local.'));
+      .catch(() => setError('Não foi possível abrir o histórico local.'));
   }, []);
   useEffect(() => {
     const provider = AI_PROVIDERS.find((item) => item.id === settings.activeProviderId);
@@ -128,7 +128,7 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
       .then(() => invoke('set_island_topmost', { enabled: companion.alwaysOnTop }))
       .then(() => invoke('set_island_visible', { visible: true }))
       .then(() => emit('companion-state', { type: 'reveal' }))
-      .catch(() => setToast('NÃ£o foi possÃ­vel restaurar o pet do assistente.'));
+      .catch(() => setToast('Não foi possível restaurar o pet do assistente.'));
   }, []);
   useEffect(() => {
     const companion = settings.companion;
@@ -141,7 +141,7 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
       Math.max(0, (screen.availHeight - 176 * companion.size) / 2);
     void invoke('set_character_position', { x, y, size: companion.size })
       .then(() => invoke('set_character_visible', { visible: true }))
-      .catch(() => setToast('NÃ£o foi possÃ­vel restaurar o OdeKrai no desktop.'));
+      .catch(() => setToast('Não foi possível restaurar o OdeKrai no desktop.'));
   }, []);
   useEffect(() => {
     if (!toast) return;

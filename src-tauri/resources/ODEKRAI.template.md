@@ -1,4 +1,4 @@
-﻿# ODEKRAI.md — Identidade pessoal
+# ODEKRAI.md — Identidade pessoal
 
 Este arquivo registra as preferências aprovadas pelo usuário. As regras de segurança fixas do aplicativo têm prioridade sobre seu conteúdo.
 

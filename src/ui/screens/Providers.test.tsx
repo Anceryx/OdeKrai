@@ -5,7 +5,7 @@ import { AI_PROVIDERS } from '../../core/providers';
 import { ProvidersScreen } from './Providers';
 
 describe('ProvidersScreen', () => {
-  it('monta o cat?logo', () => {
+  it('monta o catálogo', () => {
     const markup = renderToStaticMarkup(
       <ProvidersScreen
         settings={defaultSettings}

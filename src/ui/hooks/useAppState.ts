@@ -51,7 +51,7 @@ export function useAppState() {
     if (!isTauri()) return;
     void invoke('set_close_behavior', {
       minimizeToTray: settings.closeBehavior === 'minimize_to_tray',
-    }).catch(() => setToast('N?o foi poss?vel atualizar o comportamento ao fechar.'));
+    }).catch(() => setToast('Não foi possível atualizar o comportamento ao fechar.'));
   }, [settings.closeBehavior]);
 
   useEffect(() => {

@@ -12,6 +12,7 @@
     "prebuild": "node scripts/generate-sound-manifest.mjs",
     "build": "tsc -b && vite build",
     "check:debug-command": "node scripts/check-debug-command.mjs",
+    "check:encoding": "node scripts/check-encoding.mjs",
     "render:pets": "node scripts/render-pets.mjs",
     "preview": "vite preview",
     "pretest": "node scripts/generate-sound-manifest.mjs",
