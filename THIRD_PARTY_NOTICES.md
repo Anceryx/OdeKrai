@@ -21,9 +21,12 @@ Os arquivos das fontes são empacotados localmente pelo Vite; não há carregame
 
 ## Personagens 2D
 
-Os previews do pacote **Mini Characters (1.0)** foram criados e distribuídos por Kenney
+Os modelos e a textura do pacote **Mini Characters (1.0)** foram criados e distribuídos por Kenney
 (www.kenney.nl), em 17-07-2024. Licença Creative Commons Zero (CC0):
 https://creativecommons.org/publicdomain/zero/1.0/. Atribuição não é obrigatória.
 Texto da licença: `assets/pets/kenney-mini-characters/CC0-LICENSE.txt`.
-Origem do pacote: https://kenney.nl/assets/mini-characters. Os PNGs foram copiados sem
-alteração; o arquivo `character-female-a.png` não estava presente na pasta de entrada.
+Origem do pacote: https://kenney.nl/assets/mini-characters. Os 12 PNGs são renderizações dos
+modelos GLB originais, com textura externa, câmera e iluminação uniformes, pose de repouso/bind
+(nenhum clipe reproduzido), fundo transparente e saída de 512×512 px. Não foram incluídos os
+modelos nem a textura no repositório. O script de desenvolvimento é `scripts/render-pets.mjs`;
+instruções de regeneração: `docs/ASSET-GUIDE.md`.

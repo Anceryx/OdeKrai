@@ -11,6 +11,7 @@
     "build": "tsc -b && vite build",
     "check:debug-command": "node scripts/check-debug-command.mjs",
     "check:release-assets": "node scripts/check-release-assets.mjs",
+    "render:pets": "node scripts/render-pets.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "format": "prettier --write . --ignore-unknown",
