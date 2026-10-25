@@ -573,13 +573,13 @@ fn has_multiple_links(path: &Path) -> bool {
             return true;
         };
         let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
-        return unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0
-            || info.nNumberOfLinks > 1;
+        (unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0)
+            || info.nNumberOfLinks > 1
     }
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        return metadata.nlink() > 1;
+        metadata.nlink() > 1
     }
     #[cfg(not(any(windows, unix)))]
     {
@@ -1173,6 +1173,7 @@ fn verify_audit_path(logs: &Path) -> Result<Vec<AuditLine>, String> {
     Ok(all)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn record(
     app: &tauri::AppHandle,
     state: &SecurityState,
@@ -1495,7 +1496,7 @@ fn submit_action(
                 origin: origin.clone(),
                 risk,
                 rule,
-                summary: summary,
+                summary,
                 preview,
                 digest: digest.clone(),
                 expires: Instant::now() + approval_ttl,

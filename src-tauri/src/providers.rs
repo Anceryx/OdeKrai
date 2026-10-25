@@ -345,7 +345,7 @@ async fn test_provider_connection_inner(
     base_url: &str,
     model: &str,
 ) -> Result<ConnectionTest, String> {
-    credential_entry(&provider_id)?
+    credential_entry(provider_id)?
         .get_password()
         .map_err(|_| "Salve uma credencial para testar a conexão.")?;
     let endpoint = provider_endpoint(provider_id, base_url)?;
@@ -481,6 +481,7 @@ async fn ping_provider_inner(provider_id: &str, base_url: &str, model: &str) -> 
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn send_provider_message(
     caller: tauri::WebviewWindow,
     state: State<'_, ProviderRequests>,
@@ -509,6 +510,7 @@ pub async fn send_provider_message(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn stream_provider_message(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
@@ -551,6 +553,7 @@ pub async fn stream_provider_message(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn send_message_inner(
     state: State<'_, ProviderRequests>,
     provider_id: String,

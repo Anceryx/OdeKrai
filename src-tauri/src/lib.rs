@@ -16,7 +16,7 @@ fn require_main(window: &tauri::WebviewWindow) -> Result<(), String> {
 }
 
 fn require_caller(window: &tauri::WebviewWindow, allowed: &[&str]) -> Result<(), String> {
-    if caller_label_allowed(&window.label(), allowed) {
+    if caller_label_allowed(window.label(), allowed) {
         Ok(())
     } else {
         Err("Comando indisponível para esta janela.".into())
