@@ -1,3 +1,5 @@
+import type { ConversationSummary } from '../../core/chat';
+
 export type Section =
   | 'overview'
   | 'chat'
@@ -7,3 +9,5 @@ export type Section =
   | 'permissions'
   | 'activity'
   | 'agent';
+
+export type Conversation = ConversationSummary;
