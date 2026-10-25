@@ -150,7 +150,7 @@ O estado inicial é a Visão geral; a falta de identidade é apresentada por um 
 
 ## Fechamento e bandeja do Windows
 
-O padrão é Encerrar. Em Minimizar para a bandeja, o X oculta a janela principal e o menu nativo oferece Abrir e Sair. Sair cancela solicitações registradas de provedor, destrói as janelas auxiliares e encerra o processo. O teste unitário cobre a escolha entre ocultar e encerrar; a interação real com a bandeja, reabertura por segunda instância e encerramento de WebView2 ainda requer teste visual/nativo em Windows.
+O padrão é Encerrar. Nessa opção, o X cancela solicitações registradas de provedor, fecha as janelas auxiliares e encerra o processo. Em Minimizar para a bandeja, o X oculta a janela principal e o menu nativo oferece Abrir e Sair; Sair também encerra o processo. O teste unitário cobre a escolha entre ocultar e encerrar; a interação real com a bandeja, reabertura por segunda instância e encerramento de WebView2 ainda requer teste visual/nativo em Windows.
 
 ## Identidade e memória
 

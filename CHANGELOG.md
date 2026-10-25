@@ -31,7 +31,7 @@
 
 ### Janela e preferências
 
-- Com “Encerrar”, o X fecha a janela principal e cancela fluxos e janelas auxiliares; “Minimizar para a bandeja” continua ocultando a janela.
+- Com “Encerrar”, o X encerra o processo e cancela fluxos e janelas auxiliares; só “Minimizar para a bandeja” mantém o app em segundo plano.
 - O tamanho inicial da janela considera o fator de escala e a área útil do monitor, incluindo a barra de tarefas.
 - Ao fechar a janela, a preferência padrão encerra o aplicativo; a opção alternativa minimiza para a bandeja com ações para abrir e sair.
 - As configurações agora estão organizadas em Geral, Janela, Aparência e Dados e privacidade.

@@ -40,7 +40,10 @@ pub fn install_main_close_handler(app: &AppHandle, window: &WebviewWindow) {
                     api.prevent_close();
                     let _ = main_window.hide();
                 }
-                CloseAction::Exit => close_auxiliary_windows(&handle),
+                CloseAction::Exit => {
+                    api.prevent_close();
+                    shutdown(&handle);
+                }
             }
         }
     });
