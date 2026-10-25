@@ -53,6 +53,13 @@ fn approved_core<'a>(content: &'a str, approved_hash: &str) -> Option<&'a str> {
     (hash(content) == approved_hash).then_some(content)
 }
 
+fn require_core_reapproval(mut config: HomeConfig, path: PathBuf) -> HomeConfig {
+    config.path = path;
+    config.approved_hash.clear();
+    config.approved_content.clear();
+    config
+}
+
 fn config_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
@@ -397,6 +404,63 @@ pub fn agent_home_status(
 }
 
 #[tauri::command]
+pub fn agent_home_open_folder(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+) -> Result<(), String> {
+    super::require_main(&caller)?;
+    let (_, home) = configured_home(&app)?.ok_or("Configure a pasta do OdeKrai primeiro.")?;
+    std::process::Command::new("explorer.exe")
+        .arg(home)
+        .spawn()
+        .map(|_| ())
+        .map_err(|_| "Não foi possível abrir a pasta do OdeKrai.".to_string())
+}
+
+#[tauri::command]
+pub fn agent_home_change_path(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    path: String,
+) -> Result<HomeStatus, String> {
+    super::require_main(&caller)?;
+    let (config, current_home) =
+        configured_home(&app)?.ok_or("Configure a pasta do OdeKrai primeiro.")?;
+    let home = validate_path(Path::new(&path), &protected_roots(&app))?;
+    if canonical_string(&home) == canonical_string(&current_home) {
+        let current = read_core(&home)?;
+        return Ok(HomeStatus {
+            configured: true,
+            path: home.to_string_lossy().into_owned(),
+            warning: warning(&home),
+            changed_externally: hash(&current) != config.approved_hash,
+        });
+    }
+    if !home.is_dir() || has_reparse(&home) {
+        return Err("Escolha uma pasta local existente e sem redirecionamentos.".into());
+    }
+    let core_path = home.join("ODEKRAI.md");
+    if has_reparse(&core_path) || !core_path.is_file() {
+        return Err("A pasta escolhida não contém um arquivo base do OdeKrai.".into());
+    }
+    for name in ["memory", "workspace", "skills", "logs"] {
+        let dir = home.join(name);
+        if has_reparse(&dir) || !dir.is_dir() {
+            return Err("A pasta escolhida não contém a estrutura esperada do OdeKrai.".into());
+        }
+    }
+    read_core(&home)?;
+    let config = require_core_reapproval(config, home.clone());
+    write_config(&app, &config)?;
+    Ok(HomeStatus {
+        configured: true,
+        path: home.to_string_lossy().into_owned(),
+        warning: warning(&home),
+        changed_externally: true,
+    })
+}
+
+#[tauri::command]
 pub fn agent_home_init(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
@@ -681,6 +745,20 @@ mod tests {
         assert!(diff_text(approved, changed).contains("+texto modificado"));
         assert!(approved_core(changed, &hash(approved)).is_none());
         assert_eq!(approved_core(approved, &hash(approved)), Some(approved));
+    }
+    #[test]
+    fn changing_agent_home_requires_approval_of_the_new_core_file() {
+        let existing = "# identidade aprovada";
+        let config = HomeConfig {
+            path: PathBuf::from(r"C:\Users\Test\OdeKrai"),
+            approved_hash: hash(existing),
+            approved_content: existing.into(),
+        };
+        let changed = require_core_reapproval(config, PathBuf::from(r"C:\Users\Test\OdeKrai2"));
+
+        assert_eq!(changed.path, PathBuf::from(r"C:\Users\Test\OdeKrai2"));
+        assert!(approved_core(existing, &changed.approved_hash).is_none());
+        assert!(changed.approved_content.is_empty());
     }
     #[test]
     fn memory_names_reject_traversal_and_permission_file() {

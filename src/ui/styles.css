@@ -147,7 +147,91 @@ select:focus-visible {
 .profile-panel {
   display: grid;
   gap: 16px;
-  max-width: 560px;
+  max-width: none;
+}
+.identity-wizard {
+  max-width: 760px;
+  margin: 18px auto;
+  padding: 24px;
+}
+.wizard-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.wizard-steps span {
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--sub);
+  font-size: 12px;
+}
+.wizard-steps span.active {
+  border-color: var(--color-accent);
+  color: #fdba74;
+}
+.identity-wizard-step {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 260px;
+}
+.identity-wizard-step h2,
+.identity-section h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.wizard-actions,
+.identity-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.identity-summary {
+  display: grid;
+  gap: 10px;
+  margin: 4px 0;
+}
+.identity-summary div {
+  display: grid;
+  grid-template-columns: minmax(100px, 160px) 1fr;
+  gap: 12px;
+}
+.identity-summary dt {
+  color: var(--sub);
+}
+.identity-summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.identity-section {
+  margin: 14px 0;
+}
+.identity-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+}
+.memory-file-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.identity-path,
+.identity-diff {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.identity-diff {
+  max-height: 320px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 8px;
+  background: #111114;
+  font-family: var(--font-mono);
+  font-size: 12px;
 }
 .connection-stages {
   display: grid;

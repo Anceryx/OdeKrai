@@ -1,6 +1,7 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { Button, PageHeader } from './DesignSystem';
+import { Button } from './DesignSystem';
+import { sanitizeIdentityName } from '../core/identity';
 
 export type ProfileData = { displayName: string; nickname: string; avatarDataUrl: string | null };
 export const initials = (name: string) =>
@@ -14,26 +15,29 @@ export const initials = (name: string) =>
 export function Profile({
   value,
   onChange,
+  onBeforeSave,
 }: {
   value: ProfileData;
   onChange: (profile: ProfileData) => void;
+  onBeforeSave?: (profile: ProfileData) => Promise<boolean>;
 }) {
   const [draft, setDraft] = useState(value);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
-  const [homeConfigured, setHomeConfigured] = useState(false);
-  useEffect(() => {
-    void invoke<{ configured: boolean }>('agent_home_status')
-      .then((status) => setHomeConfigured(status.configured))
-      .catch(() => setHomeConfigured(false));
-  }, []);
   useEffect(() => setDraft(value), [value]);
   async function save() {
     setBusy(true);
     try {
+      const normalized = {
+        ...draft,
+        displayName: sanitizeIdentityName(draft.displayName, 60),
+        nickname: sanitizeIdentityName(draft.nickname, 40),
+      };
+      if (!normalized.displayName) throw new Error('Informe seu nome.');
+      if (onBeforeSave && !(await onBeforeSave(normalized))) return;
       const saved = await invoke<ProfileData>('save_profile', {
-        displayName: draft.displayName,
-        nickname: draft.nickname,
+        displayName: normalized.displayName,
+        nickname: normalized.nickname,
       });
       onChange(saved);
       setDraft(saved);
@@ -90,50 +94,6 @@ export function Profile({
       setBusy(false);
     }
   }
-  async function updateIdentity() {
-    setBusy(true);
-    try {
-      const core = await invoke<{
-        content: string;
-        current_hash: string;
-        changed_externally: boolean;
-        diff: string;
-      }>('agent_home_read_core');
-      const safeName = draft.displayName
-        .replace(/[^\p{L}\p{N} .'-]/gu, '')
-        .slice(0, 60)
-        .trim();
-      const safeNickname = draft.nickname
-        .replace(/[^\p{L}\p{N} .'-]/gu, '')
-        .slice(0, 60)
-        .trim();
-      if (!safeName) throw new Error('Informe um nome com letras, números e pontuação simples.');
-      const nameLine = core.content.match(/^(- Nome: ).*$/m);
-      const nicknameLine = core.content.match(/^(- Apelido: ).*$/m);
-      if (!nameLine || !nicknameLine)
-        throw new Error('Não foi possível localizar os campos de perfil no ODEKRAI.md.');
-      let next = core.content.replace(
-        /^(- Nome: ).*$/m,
-        (_line, prefix: string) => `${prefix}${safeName}`,
-      );
-      next = next.replace(
-        /^(- Apelido: ).*$/m,
-        (_line, prefix: string) => `${prefix}${safeNickname || 'não informado'}`,
-      );
-      const diff = `- ${nameLine[0].slice(2)}\n+ Nome: ${safeName}\n- ${nicknameLine[0].slice(2)}\n+ Apelido: ${safeNickname || 'não informado'}`;
-      const externalDiff = core.changed_externally
-        ? `\n\nO arquivo também contém alterações externas:\n${core.diff}`
-        : '';
-      if (!window.confirm(`Aprovar esta alteração no ODEKRAI.md?\n\n${diff}${externalDiff}`))
-        return;
-      await invoke('agent_home_save_core', { content: next, expectedHash: core.current_hash });
-      setNotice('Identidade do agente atualizada com sua aprovação.');
-    } catch (error) {
-      setNotice(String(error));
-    } finally {
-      setBusy(false);
-    }
-  }
   if (!isTauri())
     return (
       <div className="page">
@@ -142,74 +102,59 @@ export function Profile({
       </div>
     );
   return (
-    <div className="page profile-page">
-      <PageHeader
-        eyebrow="PREFERÊNCIAS PESSOAIS"
-        title="Seu perfil"
-        subtitle="O perfil fica no dispositivo. A imagem nunca é enviada ao provedor de IA."
-      />
-      <section className="settings-panel profile-panel">
-        <div className="profile-avatar-preview">
-          {draft.avatarDataUrl ? (
-            <img src={draft.avatarDataUrl} alt="Avatar do perfil" />
-          ) : (
-            initials(draft.displayName)
-          )}
-        </div>
-        <div className="profile-actions">
-          <label className="secondary-button">
-            Trocar avatar
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              onChange={(event) => void chooseAvatar(event)}
-              disabled={busy}
-              hidden
-            />
-          </label>
-          {draft.avatarDataUrl && (
-            <button className="text-button" onClick={() => void removeAvatar()} disabled={busy}>
-              Remover avatar
-            </button>
-          )}
-          <small>
-            PNG, JPEG ou WebP; até 5 MB. A imagem será recortada e redimensionada para 256 × 256 px.
-          </small>
-        </div>
-        <label className="field-label">
-          Nome de exibição
+    <section className="settings-panel profile-panel">
+      <h2>Perfil</h2>
+      <div className="profile-avatar-preview">
+        {draft.avatarDataUrl ? (
+          <img src={draft.avatarDataUrl} alt="Avatar do perfil" />
+        ) : (
+          initials(draft.displayName)
+        )}
+      </div>
+      <div className="profile-actions">
+        <label className="secondary-button">
+          Trocar avatar
           <input
-            value={draft.displayName}
-            maxLength={80}
-            onChange={(event) => setDraft({ ...draft, displayName: event.target.value })}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={(event) => void chooseAvatar(event)}
+            disabled={busy}
+            hidden
           />
         </label>
-        <label className="field-label">
-          Apelido (opcional)
-          <input
-            value={draft.nickname}
-            maxLength={40}
-            onChange={(event) => setDraft({ ...draft, nickname: event.target.value })}
-          />
-        </label>
-        <Button
-          variant="primary"
-          onClick={() => void save()}
-          disabled={busy || !draft.displayName.trim()}
-        >
-          Salvar perfil
-        </Button>
-        {homeConfigured && (
-          <button
-            className="secondary-button"
-            onClick={() => void updateIdentity()}
-            disabled={busy || !draft.displayName.trim()}
-          >
-            Atualizar nome no ODEKRAI.md…
+        {draft.avatarDataUrl && (
+          <button className="text-button" onClick={() => void removeAvatar()} disabled={busy}>
+            Remover avatar
           </button>
         )}
-        {notice && <p role="status">{notice}</p>}
-      </section>
-    </div>
+        <small>
+          PNG, JPEG ou WebP; até 5 MB. A imagem será recortada e redimensionada para 256 × 256 px.
+        </small>
+      </div>
+      <label className="field-label">
+        Nome de exibição
+        <input
+          value={draft.displayName}
+          maxLength={60}
+          onChange={(event) => setDraft({ ...draft, displayName: event.target.value })}
+        />
+      </label>
+      <label className="field-label">
+        Apelido (opcional)
+        <input
+          value={draft.nickname}
+          maxLength={40}
+          onChange={(event) => setDraft({ ...draft, nickname: event.target.value })}
+        />
+      </label>
+      <Button
+        variant="primary"
+        onClick={() => void save()}
+        disabled={busy || !draft.displayName.trim()}
+      >
+        Salvar perfil
+      </Button>
+      {notice && <p role="status">{notice}</p>}
+    </section>
   );
 }

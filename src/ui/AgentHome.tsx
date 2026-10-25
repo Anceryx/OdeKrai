@@ -2,6 +2,12 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { Banner, Button, Card, PageHeader, SelectInput, TextInput } from './DesignSystem';
+import { Profile, type ProfileData } from './Profile';
+import {
+  formatConversationNotes,
+  parseConversationNotes,
+  updateIdentityProfile,
+} from '../core/identity';
 
 const TONE_PRESETS = ['direto e cordial', 'acolhedor', 'formal'];
 
@@ -18,21 +24,31 @@ type CoreRead = {
   changed_externally: boolean;
   diff: string;
 };
-type Profile = { name: string; nickname: string; language: string; tone: string; mode: string };
+type IdentityDraft = {
+  name: string;
+  nickname: string;
+  language: string;
+  tone: string;
+  mode: string;
+};
 
 export function AgentHome({
   onStatus,
   initialName = '',
   initialNickname = '',
+  profileValue,
+  onProfileChange,
 }: {
   onStatus?: (status: HomeStatus) => void;
   initialName?: string;
   initialNickname?: string;
+  profileValue: ProfileData;
+  onProfileChange: (profile: ProfileData) => void;
 }) {
   const [status, setStatus] = useState<HomeStatus | null>(null);
   const [path, setPath] = useState('');
   const [customTone, setCustomTone] = useState(false);
-  const [profile, setProfile] = useState<Profile>({
+  const [profile, setProfile] = useState<IdentityDraft>({
     name: initialName,
     nickname: initialNickname,
     language: 'pt-BR',
@@ -47,6 +63,9 @@ export function AgentHome({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [setupStep, setSetupStep] = useState(1);
+  const [personalInstructions, setPersonalInstructions] = useState('');
+  const [slang, setSlang] = useState('');
 
   async function refresh() {
     const next = await invoke<HomeStatus>('agent_home_status');
@@ -60,7 +79,20 @@ export function AgentHome({
       ]);
       setCore(document);
       setCoreDraft(document.content);
-      setNames(files);
+      setNames(files.filter((name) => name !== 'estilo.md'));
+      const style = await invoke<string>('agent_memory_read', { name: 'estilo.md' }).catch(
+        () => '',
+      );
+      const notes = parseConversationNotes(style);
+      setPersonalInstructions(notes.instructions);
+      setSlang(notes.slang);
+      const language = document.content.match(/^- Idioma: (.*)$/m)?.[1];
+      const tone = document.content.match(/^- Tom: (.*)$/m)?.[1];
+      if (language) setProfile((current) => ({ ...current, language }));
+      if (tone) {
+        setProfile((current) => ({ ...current, tone }));
+        setCustomTone(!TONE_PRESETS.includes(tone));
+      }
     }
   }
   useEffect(() => {
@@ -87,20 +119,71 @@ export function AgentHome({
   }
   async function initialize(event: FormEvent) {
     event.preventDefault();
-    if (!window.confirm(`Criar a pasta pessoal do OdeKrai em ${path}?`)) return;
+    if (setupStep < 3) {
+      setSetupStep((step) => step + 1);
+      return;
+    }
+    if (!window.confirm(`Salvar sua identidade e criar a pasta do OdeKrai em ${path}?`)) return;
     await run(async () => {
       await invoke('agent_home_init', { path, profile });
+      const saved = await invoke<ProfileData>('save_profile', {
+        displayName: profile.name,
+        nickname: profile.nickname,
+      });
+      onProfileChange(saved);
       await refresh();
-      setNotice('Pasta pessoal criada. Ajuste as permissões ativas na tela Permissões.');
+      setNotice('Identidade salva. Você pode ajustar as permissões na tela Permissões.');
     });
   }
   async function saveCore() {
-    if (!core || !window.confirm('Aprovar e salvar este ODEKRAI.md como sua identidade?')) return;
+    if (!core || !window.confirm('Confirmar este arquivo base como sua identidade?')) return;
     await run(async () => {
       await invoke('agent_home_save_core', { content: coreDraft, expectedHash: core.current_hash });
       await refresh();
-      setNotice('Identidade aprovada e salva.');
+      setNotice('Arquivo base confirmado e salvo.');
     });
+  }
+  async function saveConversationPreferences() {
+    await run(async () => {
+      const current = await invoke<CoreRead>('agent_home_read_core');
+      if (current.changed_externally) {
+        throw new Error('Confira e confirme primeiro as alterações do arquivo base.');
+      }
+      const next = current.content
+        .replace(/^- Idioma: .*$/m, `- Idioma: ${profile.language}`)
+        .replace(/^- Tom: .*$/m, `- Tom: ${profile.tone}`);
+      if (next !== current.content) {
+        if (!window.confirm('Salvar o idioma e o tom no arquivo base?')) return;
+        await invoke('agent_home_save_core', { content: next, expectedHash: current.current_hash });
+      }
+      const content = formatConversationNotes({ instructions: personalInstructions, slang });
+      await invoke('agent_memory_save', { name: 'estilo.md', content });
+      await refresh();
+      setNotice('Preferências de conversa salvas.');
+    });
+  }
+  async function approveProfileChange(next: ProfileData) {
+    const current = await invoke<CoreRead>('agent_home_read_core');
+    const updated = updateIdentityProfile(current.content, next.displayName, next.nickname);
+    if (!updated) throw new Error('Confira o nome e o apelido no perfil.');
+    if (updated !== current.content || current.changed_externally) {
+      const externalReview = current.changed_externally
+        ? `\n\nO arquivo também mudou fora do aplicativo:\n${current.diff}`
+        : '';
+      if (!window.confirm(`Atualizar o nome e o apelido no arquivo base?${externalReview}`))
+        return false;
+      await invoke('agent_home_save_core', {
+        content: updated,
+        expectedHash: current.current_hash,
+      });
+      setProfile((current) => ({
+        ...current,
+        name: next.displayName,
+        nickname: next.nickname,
+      }));
+      await refresh();
+    }
+    return true;
   }
   async function openMemory(name: string) {
     await run(async () => {
@@ -110,8 +193,15 @@ export function AgentHome({
   }
   async function saveMemory() {
     await run(async () => {
+      if (memoryName.trim().toLocaleLowerCase('pt-BR') === 'estilo.md') {
+        throw new Error(
+          'Use a seção “Como o OdeKrai fala com você” para editar essas preferências.',
+        );
+      }
       await invoke('agent_memory_save', { name: memoryName, content: memoryDraft });
-      setNames(await invoke<string[]>('agent_memory_list'));
+      setNames(
+        (await invoke<string[]>('agent_memory_list')).filter((name) => name !== 'estilo.md'),
+      );
       setNotice('Memória salva.');
     });
   }
@@ -119,7 +209,9 @@ export function AgentHome({
     if (!window.confirm(`Apagar ${memoryName}?`)) return;
     await run(async () => {
       await invoke('agent_memory_delete', { name: memoryName });
-      setNames(await invoke<string[]>('agent_memory_list'));
+      setNames(
+        (await invoke<string[]>('agent_memory_list')).filter((name) => name !== 'estilo.md'),
+      );
       setMemoryName('');
       setMemoryDraft('');
     });
@@ -132,6 +224,8 @@ export function AgentHome({
       setNames([]);
       setMemoryName('');
       setMemoryDraft('');
+      setPersonalInstructions('');
+      setSlang('');
     });
   }
   if (!isTauri()) return <p>A pasta pessoal está disponível no aplicativo Windows.</p>;
@@ -153,216 +247,353 @@ export function AgentHome({
           {status.warning}
         </Banner>
       )}
-      {!status?.configured ? (
-        <form onSubmit={initialize} className="settings-card" style={{ display: 'grid', gap: 12 }}>
-          <h2>Primeira execução</h2>
-          <label>
-            Pasta local
-            <TextInput value={path} onChange={(e) => setPath(e.target.value)} required />
-          </label>
-          <Button
-            variant="secondary"
-            type="button"
-            className="secondary-button"
-            onClick={async () => {
-              const selected = await open({ directory: true, multiple: false });
-              if (typeof selected === 'string') setPath(selected);
-            }}
-          >
-            Escolher pasta
-          </Button>
-          <label>
-            Seu nome
-            <TextInput
-              value={profile.name}
-              onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-              maxLength={60}
-              required
-            />
-          </label>
-          <label>
-            Como quer ser chamado
-            <TextInput
-              value={profile.nickname}
-              onChange={(e) => setProfile({ ...profile, nickname: e.target.value })}
-              maxLength={60}
-              required
-            />
-          </label>
-          <label>
-            Idioma
-            <SelectInput
-              value={profile.language}
-              onChange={(e) => setProfile({ ...profile, language: e.target.value })}
-            >
-              <option value="pt-BR">Português (Brasil)</option>
-              <option value="en">English</option>
-            </SelectInput>
-          </label>
-          <label>
-            Tom
-            <SelectInput
-              value={customTone ? 'personalizado' : profile.tone}
-              onChange={(e) => {
-                setCustomTone(e.target.value === 'personalizado');
-                if (e.target.value !== 'personalizado')
-                  setProfile({ ...profile, tone: e.target.value });
-              }}
-            >
-              {TONE_PRESETS.map((tone) => (
-                <option key={tone} value={tone}>
-                  {tone[0].toLocaleUpperCase('pt-BR') + tone.slice(1)}
-                </option>
-              ))}
-              <option value="personalizado">Personalizado</option>
-            </SelectInput>
-          </label>
-          {customTone && (
-            <label>
-              Tom personalizado
-              <TextInput
-                value={profile.tone}
-                onChange={(e) => setProfile({ ...profile, tone: e.target.value })}
-                maxLength={80}
-                required
-              />
-            </label>
+      {status === null ? (
+        <p>Carregando suas preferências…</p>
+      ) : !status.configured ? (
+        <form onSubmit={initialize} className="settings-card identity-wizard">
+          <div className="wizard-steps" aria-label={`Passo ${setupStep} de 3`}>
+            {['Pasta', 'Você', 'Confirmar'].map((label, index) => (
+              <span className={setupStep === index + 1 ? 'active' : ''} key={label}>
+                {index + 1}. {label}
+              </span>
+            ))}
+          </div>
+          {setupStep === 1 && (
+            <section className="identity-wizard-step">
+              <h2>Escolha a pasta do OdeKrai</h2>
+              <p>Se preferir, use a pasta sugerida.</p>
+              <label>
+                Pasta
+                <TextInput value={path} onChange={(e) => setPath(e.target.value)} required />
+              </label>
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={async () => {
+                  const selected = await open({ directory: true, multiple: false });
+                  if (typeof selected === 'string') setPath(selected);
+                }}
+              >
+                Escolher pasta
+              </Button>
+            </section>
           )}
-          <label>
-            Modo de permissão preferido
-            <SelectInput
-              value={profile.mode}
-              onChange={(e) => setProfile({ ...profile, mode: e.target.value })}
+          {setupStep === 2 && (
+            <section className="identity-wizard-step">
+              <h2>Como devemos chamar você?</h2>
+              <label>
+                Seu nome
+                <TextInput
+                  value={profile.name}
+                  onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                  maxLength={60}
+                  required
+                />
+              </label>
+              <label>
+                Apelido
+                <TextInput
+                  value={profile.nickname}
+                  onChange={(e) => setProfile({ ...profile, nickname: e.target.value })}
+                  maxLength={40}
+                />
+              </label>
+              <label>
+                Idioma
+                <SelectInput
+                  value={profile.language}
+                  onChange={(e) => setProfile({ ...profile, language: e.target.value })}
+                >
+                  <option value="pt-BR">Português (Brasil)</option>
+                  <option value="en">English</option>
+                </SelectInput>
+              </label>
+              <label>
+                Tom
+                <SelectInput
+                  value={customTone ? 'personalizado' : profile.tone}
+                  onChange={(e) => {
+                    setCustomTone(e.target.value === 'personalizado');
+                    if (e.target.value !== 'personalizado')
+                      setProfile({ ...profile, tone: e.target.value });
+                  }}
+                >
+                  {TONE_PRESETS.map((item) => (
+                    <option key={item} value={item}>
+                      {item[0].toLocaleUpperCase('pt-BR') + item.slice(1)}
+                    </option>
+                  ))}
+                  <option value="personalizado">Personalizado</option>
+                </SelectInput>
+              </label>
+              {customTone && (
+                <label>
+                  Tom personalizado
+                  <TextInput
+                    value={profile.tone}
+                    onChange={(e) => setProfile({ ...profile, tone: e.target.value })}
+                    maxLength={80}
+                    required
+                  />
+                </label>
+              )}
+            </section>
+          )}
+          {setupStep === 3 && (
+            <section className="identity-wizard-step">
+              <h2>Confira antes de salvar</h2>
+              <dl className="identity-summary">
+                <div>
+                  <dt>Pasta</dt>
+                  <dd>{path}</dd>
+                </div>
+                <div>
+                  <dt>Nome</dt>
+                  <dd>{profile.name}</dd>
+                </div>
+                <div>
+                  <dt>Apelido</dt>
+                  <dd>{profile.nickname || 'Não informado'}</dd>
+                </div>
+                <div>
+                  <dt>Idioma</dt>
+                  <dd>{profile.language}</dd>
+                </div>
+                <div>
+                  <dt>Tom</dt>
+                  <dd>{profile.tone}</dd>
+                </div>
+              </dl>
+            </section>
+          )}
+          <div className="wizard-actions">
+            {setupStep > 1 && (
+              <Button type="button" onClick={() => setSetupStep((step) => step - 1)}>
+                Voltar
+              </Button>
+            )}
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={busy || (setupStep === 1 && !path.trim())}
             >
-              <option value="sempre_perguntar">Sempre perguntar</option>
-              <option value="aprovar_por_mim">Aprovar por mim</option>
-              <option value="controle_total">Controle total</option>
-            </SelectInput>
-          </label>
-          <p>
-            Esta preferência fica registrada na identidade. Para mudar as permissões ativas, use a
-            tela Permissões.
-          </p>
-          <Button type="submit" variant="primary" disabled={busy}>
-            Criar e aprovar identidade
-          </Button>
+              {setupStep === 3 ? 'Salvar identidade' : 'Continuar'}
+            </Button>
+          </div>
         </form>
       ) : (
         <>
-          <p>
-            Pasta: <code>{status.path}</code>
-          </p>
-          <Card className="settings-card" style={{ display: 'grid', gap: 12 }}>
-            <h2>ODEKRAI.md</h2>
-            <p>
-              Não coloque senhas, tokens ou outros segredos neste arquivo. A versão aprovada é
-              guardada localmente para mostrar alterações.
-            </p>
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={busy}
-              onClick={() => void run(refresh)}
-            >
-              Recarregar arquivo e verificar alterações
-            </button>
-            {core?.changed_externally && (
-              <>
-                <p role="alert">
-                  O arquivo mudou fora do aplicativo. O chat fica bloqueado até sua aprovação.
-                </p>
-                <details>
-                  <summary>Ver diferenças</summary>
-                  <pre style={{ whiteSpace: 'pre-wrap' }}>{core.diff}</pre>
-                </details>
-              </>
-            )}
-            <textarea
-              aria-label="Editar ODEKRAI.md"
-              value={coreDraft}
-              onChange={(e) => setCoreDraft(e.target.value)}
-              rows={14}
-              maxLength={16384}
-            />
-            <button
-              className="primary-button"
-              onClick={() => void saveCore()}
-              disabled={busy || (!core?.changed_externally && coreDraft === core?.content)}
-            >
-              Aprovar e salvar
-            </button>
-          </Card>
-          <Card className="settings-card" style={{ display: 'grid', gap: 12 }}>
-            <h2>Memória</h2>
-            <p>
-              Somente notas manuais. Não coloque senhas, tokens, documentos ou dados bancários na
-              memória. O conteúdo de estilo.md pode ser resumido e enviado ao provedor durante o
-              chat.
-            </p>
-            <div>
-              {names.map((name) => (
-                <button
-                  key={name}
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => void openMemory(name)}
+          <Profile
+            value={profileValue}
+            onChange={onProfileChange}
+            onBeforeSave={approveProfileChange}
+          />
+          <Card className="settings-card identity-section">
+            <h2>Como o OdeKrai fala com você</h2>
+            <div className="identity-fields">
+              <label>
+                Idioma
+                <SelectInput
+                  value={profile.language}
+                  onChange={(event) => setProfile({ ...profile, language: event.target.value })}
                 >
+                  <option value="pt-BR">Português (Brasil)</option>
+                  <option value="en">English</option>
+                </SelectInput>
+              </label>
+              <label>
+                Tom
+                <SelectInput
+                  value={customTone ? 'personalizado' : profile.tone}
+                  onChange={(event) => {
+                    setCustomTone(event.target.value === 'personalizado');
+                    if (event.target.value !== 'personalizado')
+                      setProfile({ ...profile, tone: event.target.value });
+                  }}
+                >
+                  {TONE_PRESETS.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                  <option value="personalizado">Personalizado</option>
+                </SelectInput>
+              </label>
+              {customTone && (
+                <label>
+                  Tom personalizado
+                  <TextInput
+                    value={profile.tone}
+                    maxLength={80}
+                    onChange={(event) => setProfile({ ...profile, tone: event.target.value })}
+                  />
+                </label>
+              )}
+            </div>
+            <label>
+              Instruções pessoais
+              <textarea
+                value={personalInstructions}
+                onChange={(event) => setPersonalInstructions(event.target.value)}
+                maxLength={400}
+                rows={3}
+                placeholder="Ex.: prefiro respostas objetivas."
+              />
+            </label>
+            <label>
+              Gírias e expressões que você usa
+              <textarea
+                value={slang}
+                onChange={(event) => setSlang(event.target.value)}
+                maxLength={400}
+                rows={3}
+                placeholder="Ex.: palavras e expressões que fazem parte do seu jeito de falar."
+              />
+            </label>
+            <p>Essas notas são manuais. Não inclua senhas, tokens ou outros dados secretos.</p>
+            <Button
+              variant="primary"
+              disabled={busy}
+              onClick={() => void saveConversationPreferences()}
+            >
+              Salvar preferências
+            </Button>
+          </Card>
+          <Card className="settings-card identity-section">
+            <h2>Memória</h2>
+            <p>Suas notas ficam visíveis para você e podem ser alteradas a qualquer momento.</p>
+            <div className="memory-file-list">
+              {names.map((name) => (
+                <Button key={name} type="button" onClick={() => void openMemory(name)}>
                   {name}
-                </button>
+                </Button>
               ))}
             </div>
-            <button
+            <Button
               type="button"
-              className="secondary-button"
               onClick={() => {
                 setMemoryName('');
                 setMemoryDraft('');
               }}
             >
-              Nova nota
-            </button>
+              Adicionar nota
+            </Button>
+            <div className="identity-fields">
+              <label>
+                Nome da nota
+                <TextInput
+                  value={memoryName}
+                  onChange={(event) => setMemoryName(event.target.value)}
+                  maxLength={64}
+                  placeholder="minha-nota.md"
+                />
+              </label>
+            </div>
             <label>
-              Nome do arquivo (.md)
-              <input
-                value={memoryName}
-                onChange={(e) => setMemoryName(e.target.value)}
-                maxLength={64}
-                placeholder="estilo.md"
+              Conteúdo
+              <textarea
+                aria-label="Conteúdo da memória"
+                value={memoryDraft}
+                onChange={(event) => setMemoryDraft(event.target.value)}
+                maxLength={8192}
+                rows={6}
               />
             </label>
-            <textarea
-              aria-label="Conteúdo da memória"
-              value={memoryDraft}
-              onChange={(e) => setMemoryDraft(e.target.value)}
-              maxLength={8192}
-              rows={8}
-            />
-            <div>
-              <button
-                className="primary-button"
-                type="button"
+            <div className="identity-actions">
+              <Button
+                variant="primary"
                 disabled={busy || !memoryName}
                 onClick={() => void saveMemory()}
               >
                 Salvar nota
-              </button>{' '}
-              <button
-                className="secondary-button"
-                type="button"
+              </Button>
+              <Button
                 disabled={busy || !names.includes(memoryName)}
                 onClick={() => void deleteMemory()}
               >
                 Apagar nota
-              </button>{' '}
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={busy || names.length === 0}
-                onClick={() => void deleteAllMemory()}
-              >
-                Apagar toda a memória
-              </button>
+              </Button>
+              <Button disabled={busy || names.length === 0} onClick={() => void deleteAllMemory()}>
+                Apagar todas
+              </Button>
             </div>
+          </Card>
+          <Card className="settings-card identity-section">
+            <h2>Pasta do OdeKrai</h2>
+            <p className="identity-path">{status.path}</p>
+            <p>
+              Ao escolher outra pasta do OdeKrai, confira e confirme o arquivo base antes de usá-lo.
+            </p>
+            <div className="identity-actions">
+              <Button
+                onClick={() =>
+                  void invoke('agent_home_open_folder').catch((cause) => setError(String(cause)))
+                }
+              >
+                Abrir pasta
+              </Button>
+              <Button
+                onClick={async () => {
+                  const selected = await open({ directory: true, multiple: false });
+                  if (typeof selected !== 'string') return;
+                  await run(async () => {
+                    const changed = await invoke<HomeStatus>('agent_home_change_path', {
+                      path: selected,
+                    });
+                    setStatus(changed);
+                    setPath(changed.path);
+                    await refresh();
+                    setNotice(
+                      'Pasta alterada. Confira e confirme o arquivo base para continuar usando a identidade.',
+                    );
+                  });
+                }}
+              >
+                Trocar
+              </Button>
+            </div>
+          </Card>
+          <Card className="settings-card identity-section">
+            <h2>Arquivo base</h2>
+            <p>
+              Estado:{' '}
+              <strong>
+                {!core
+                  ? 'Verificando'
+                  : core.changed_externally
+                    ? 'Alterado fora do app'
+                    : 'Aprovado'}
+              </strong>
+            </p>
+            {core?.changed_externally && (
+              <>
+                <Banner tone="warning">
+                  O arquivo mudou. Confira as diferenças e confirme antes de continuar.
+                </Banner>
+                <details open>
+                  <summary>Ver diferenças</summary>
+                  <pre className="identity-diff">{core.diff}</pre>
+                </details>
+              </>
+            )}
+            <Button
+              variant="primary"
+              onClick={() => void saveCore()}
+              disabled={busy || (!core?.changed_externally && coreDraft === core?.content)}
+            >
+              Confirmar arquivo base
+            </Button>
+            <details>
+              <summary>Avançado</summary>
+              <p>Use este editor somente se quiser revisar o conteúdo completo do arquivo.</p>
+              <textarea
+                aria-label="Conteúdo avançado do arquivo base"
+                value={coreDraft}
+                onChange={(event) => setCoreDraft(event.target.value)}
+                rows={14}
+                maxLength={16384}
+              />
+            </details>
           </Card>
         </>
       )}

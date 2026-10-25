@@ -27,7 +27,7 @@ import {
 import { AI_PROVIDERS, type AiProvider } from '../core/providers';
 import { ProviderCatalog } from './ProviderCatalog';
 import { AgentHome } from './AgentHome';
-import { Profile, initials, type ProfileData } from './Profile';
+import { initials, type ProfileData } from './Profile';
 import { ApprovalWindow, isApprovalWindow, SecurityCenter } from './SecurityCenter';
 import { Button, PageHeader, Toggle } from './DesignSystem';
 import { DEFAULT_PET_ID, PETS, PET_ANIMATION_LABELS, type PetAnimationState } from '../core/pets';
@@ -45,8 +45,7 @@ type Section =
   | 'settings'
   | 'permissions'
   | 'activity'
-  | 'agent'
-  | 'profile';
+  | 'agent';
 type Conversation = ConversationSummary;
 
 const nav: { id: Section; label: string; icon: string; group: string }[] = [
@@ -450,7 +449,7 @@ function MainApp() {
         <button
           className="profile-card"
           onClick={() => {
-            setSection('profile');
+            setSection('agent');
             setChatMode(false);
           }}
         >
@@ -510,9 +509,7 @@ function MainApp() {
               {chatMode
                 ? (conversations.find((item) => item.id === conversationId)?.title ??
                   'Nova conversa')
-                : section === 'profile'
-                  ? 'Perfil'
-                  : currentNav?.label}
+                : currentNav?.label}
             </strong>
           </div>
           <div className="top-actions">
@@ -669,9 +666,13 @@ function MainApp() {
             {section === 'permissions' && <SecurityCenter page="permissions" />}
             {section === 'activity' && <SecurityCenter page="activity" />}
             {section === 'agent' && (
-              <AgentHome initialName={profile.displayName} initialNickname={profile.nickname} />
+              <AgentHome
+                initialName={profile.displayName}
+                initialNickname={profile.nickname}
+                profileValue={profile}
+                onProfileChange={setProfile}
+              />
             )}
-            {section === 'profile' && <Profile value={profile} onChange={setProfile} />}
           </div>
         )}
       </main>

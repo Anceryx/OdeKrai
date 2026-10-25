@@ -2,6 +2,12 @@
 
 ## Não lançado
 
+### Identidade e memória
+
+- A primeira configuração agora usa três passos curtos e salva a identidade ao final.
+- Perfil, preferências de conversa, notas de memória, pasta pessoal e arquivo base foram reunidos em uma tela.
+- A troca da pasta pede confirmação do arquivo base antes que a identidade dessa pasta seja usada.
+
 ### Conectores
 
 - A tela de conectores ganhou filtros por provedores conectados, planos gratuitos confirmados e catálogo completo, com busca e detalhes em painel sobreposto.

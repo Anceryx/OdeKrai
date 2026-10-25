@@ -457,6 +457,8 @@ pub fn run() {
             security::submit_simulated_action,
             agent_home::agent_home_status,
             agent_home::agent_home_init,
+            agent_home::agent_home_open_folder,
+            agent_home::agent_home_change_path,
             agent_home::agent_home_read_core,
             agent_home::agent_home_save_core,
             agent_home::agent_memory_list,

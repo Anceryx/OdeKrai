@@ -151,3 +151,7 @@ O estado inicial é a Visão geral; a falta de identidade é apresentada por um 
 ## Fechamento e bandeja do Windows
 
 O padrão é Encerrar. Em Minimizar para a bandeja, o X oculta a janela principal e o menu nativo oferece Abrir e Sair. Sair cancela solicitações registradas de provedor, destrói as janelas auxiliares e encerra o processo. O teste unitário cobre a escolha entre ocultar e encerrar; a interação real com a bandeja, reabertura por segunda instância e encerramento de WebView2 ainda requer teste visual/nativo em Windows.
+
+## Identidade e memória
+
+`npm test` cobre a conversão das instruções pessoais e expressões para as notas locais e a sanitização dos campos de nome. `cargo test --manifest-path src-tauri/Cargo.toml` cobre a exigência de nova aprovação do arquivo base após trocar a pasta. A inspeção visual do assistente de primeira configuração, do painel unificado, da seleção de pasta e da comparação/confirmação do arquivo base ainda está pendente no Windows.
