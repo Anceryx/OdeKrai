@@ -580,7 +580,7 @@ function MainApp() {
               aria-label="Ajuda"
               onClick={() => setToast('A documentação do projeto está em docs/.')}
             >
-              ?
+              <Icon name="help" />
             </button>
             <button
               className="help-button"
