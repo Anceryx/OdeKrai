@@ -20,7 +20,7 @@ const stateClips = {
   thinking: { clip: 'idle', loop: true },
   working: { clip: 'interact-right', loop: true },
   awaiting_approval: { clip: 'emote-no', loop: true },
-  success: { clip: 'jump', loop: false },
+  success: { clip: 'emote-yes', loop: false },
   error: { clip: 'die', loop: false },
   paused: { clip: 'sit', loop: true },
 };

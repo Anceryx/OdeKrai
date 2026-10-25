@@ -13,7 +13,7 @@ O runtime usa imagens PNG estáticas e folhas de sprites WebP. Os modelos 3D Ken
 
 - Para inspecionar os quadros centrais dos clipes de um personagem numa folha temporária, use `npm run render:pets -- --models "C:\Users\<usuário>\Documents\Projetos Olivera\Previews\Models" --contact-sheet character-female-a`. O arquivo PNG é gravado em `%TEMP%`; `--output caminho.png` escolhe outro destino.
 - Depois de selecionar os clipes, regenere PNGs estáticos, folhas WebP e manifestos com `npm run render:pets:animations -- --models "C:\Users\<usuário>\Documents\Projetos Olivera\Previews\Models"`. A geração valida o limite total de 6 MiB para as folhas WebP.
-- O mapeamento renderizado é: `idle` e `thinking` → `idle`; `working` → `interact-right`; `awaiting_approval` → `emote-no`; `success` → `jump`; `error` → `die`; `paused` → `sit`. As folhas contínuas fazem loop; sucesso e erro tocam uma vez e retornam ao idle.
+- O mapeamento renderizado é: `idle` e `thinking` → `idle`; `working` → `interact-right`; `awaiting_approval` → `emote-no`; `success` → `emote-yes`; `error` → `die`; `paused` → `sit`. As folhas contínuas fazem loop; sucesso e erro tocam uma vez e retornam ao idle.
 
 - `--models` aponta à pasta que contém `GLB format/`. O renderizador lê somente os arquivos `character-female-a..f.glb`, `character-male-a..f.glb` e `GLB format/Textures/colormap.png`. O destino padrão é `assets/pets/kenney-mini-characters/`.
 - O Chrome roda headless com WebGL por software (ANGLE/SwiftShader), em um servidor local temporário. O script não faz chamadas a serviços externos. Three.js é usado somente pelo script e está em `devDependencies`; não faz parte do app Tauri nem do bundle Vite.

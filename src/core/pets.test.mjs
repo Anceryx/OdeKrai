@@ -193,7 +193,7 @@ describe('catálogo e imagens do mascote', () => {
       thinking: 'idle',
       working: 'interact-right',
       awaiting_approval: 'emote-no',
-      success: 'jump',
+      success: 'emote-yes',
       error: 'die',
       paused: 'sit',
     };

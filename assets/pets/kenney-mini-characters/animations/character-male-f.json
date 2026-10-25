@@ -32,11 +32,11 @@
       "fps": 13.49999959766866
     },
     "success": {
-      "clip": "jump",
+      "clip": "emote-yes",
       "loop": false,
-      "file": "character-male-f-jump.webp",
+      "file": "character-male-f-emote-yes.webp",
       "frames": 9,
-      "fps": 18
+      "fps": 13.49999959766866
     },
     "error": {
       "clip": "die",
