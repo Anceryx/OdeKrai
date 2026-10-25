@@ -2,6 +2,7 @@ use tauri::{
     Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 
+pub mod agent;
 mod agent_home;
 mod history;
 mod policy;
