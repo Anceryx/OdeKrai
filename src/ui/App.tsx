@@ -1,7 +1,6 @@
 ﻿import { lazy, Suspense, useEffect, useMemo, type FormEvent } from 'react';
 import { resolveConversationSelection } from '../core/chat';
 import type { ChatMessage } from '../core/provider-messages';
-import { loadSettings, saveSettings } from '../core/settings';
 import { emit, listen } from '@tauri-apps/api/event';
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
 import { normalizeSoundPreferences, playSound } from '../core/sounds';
@@ -141,15 +140,6 @@ function MainApp() {
   }
 
   useEffect(() => {
-    saveSettings(settings);
-  }, [settings]);
-  useEffect(() => {
-    if (!isTauri()) return;
-    void invoke('set_close_behavior', {
-      minimizeToTray: settings.closeBehavior === 'minimize_to_tray',
-    }).catch(() => setToast('NÃ£o foi possÃ­vel atualizar o comportamento ao fechar.'));
-  }, [settings.closeBehavior]);
-  useEffect(() => {
     if (!isTauri()) return;
     let current = true;
     void (async () => {
@@ -208,11 +198,6 @@ function MainApp() {
       .then(setKeySavedForSession)
       .catch(() => setKeySavedForSession(false));
   }, [settings.activeProviderId]);
-  useEffect(() => {
-    const refreshSettings = () => setSettings(loadSettings());
-    window.addEventListener('storage', refreshSettings);
-    return () => window.removeEventListener('storage', refreshSettings);
-  }, []);
   useEffect(() => {
     const companion = settings.companion;
     if (!isTauri() || !companion.enabled) return;
