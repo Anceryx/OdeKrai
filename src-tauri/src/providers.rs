@@ -1029,6 +1029,26 @@ mod tests {
         assert!(first.is_cancelled());
         assert!(second.is_cancelled());
     }
+
+    #[tokio::test]
+    async fn cancellable_request_returns_when_its_token_is_cancelled() {
+        let requests = ProviderRequests::default();
+        let security = crate::security::SecurityState::new(false);
+        let request = cancellable_request(
+            &requests,
+            &security,
+            std::future::pending::<Result<(), String>>(),
+        );
+        tokio::pin!(request);
+        tokio::select! {
+            result = &mut request => panic!("request unexpectedly completed: {result:?}"),
+            _ = tokio::task::yield_now() => {},
+        }
+        cancel_requests(&requests);
+        let error = request.await.unwrap_err();
+        assert!(error.contains("kill switch"));
+    }
+
     use serde_json::json;
 
     #[test]
