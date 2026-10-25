@@ -1,7 +1,7 @@
-# Como contribuir
+# Contributing
 
-Contribuições de código devem manter o escopo claro, incluir validação proporcional à mudança e respeitar a licença MIT e as práticas de segurança descritas em `docs/SECURITY.md`.
+Code contributions should have a clear scope, include validation proportional to the change, and follow the MIT license and the security practices described in `docs/SECURITY.md`.
 
-Não envie chaves, tokens, dados pessoais, builds ou assets oficiais sem autorização. Contribuições gráficas precisam identificar autoria, origem e licença de cada material; enviar um arquivo não transfere nem amplia seus direitos. Não use imagens, sons ou personagens de outros projetos sem licença compatível e atribuição adequada.
+Do not submit API keys, tokens, personal data, builds, or official assets without authorization. Graphic contributions must identify the author, source, and license of each item; submitting a file does not transfer or expand usage rights. Do not use images, sounds, or characters from other projects without a compatible license and proper attribution.
 
-Antes de abrir uma contribuição, execute `npm run build` e `git diff --check`, quando o ambiente permitir, e descreva o que foi realmente verificado.
+Before opening a contribution, run `npm run build` and `git diff --check` when the environment allows, and describe what was actually verified.

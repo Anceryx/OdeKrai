@@ -1,19 +1,9 @@
-# Licença e distribuição de assets
+# Asset Licensing and Distribution
 
-O código e as dependências do aplicativo têm seus próprios termos de licença. Eles não concedem
-direito de redistribuir os materiais visuais fornecidos pelo proprietário.
+The code and application dependencies have their own license terms. They do not grant permission to redistribute visual materials supplied by the owner.
 
-O modelo `odekrai-head.glb` e as referências visuais em `assets/odekrai/` são materiais privados do
-proprietário. Não os inclua em instaladores, releases, capturas públicas ou outros artefatos
-distribuídos sem autorização explícita. Esses arquivos permanecem fora do Git.
+The `odekrai-head.glb` model and visual references in `assets/odekrai/` are private materials owned by the project owner. Do not include them in installers, releases, public screenshots, or other distributed artifacts without explicit authorization. These files remain outside Git.
 
-`npm run build` é um build local do frontend e pode copiar o modelo para `dist/assets/`. Para
-preparar o aplicativo distribuível, use `npm run tauri:build`: o `beforeBuildCommand` executa
-`check:release-assets` e bloqueia a preparação se encontrar `odekrai-head*.glb` ou arquivos dentro
-de `official-references/`. Também executa `check:debug-command`, que exige `cfg(debug_assertions)`
-na declaração e no registro da ferramenta manual simulada. Esses verificadores analisam os fontes
-de `dist/`, sem abrir ou imprimir o conteúdo dos assets.
+`npm run build` is a local frontend build and may copy the model to `dist/assets/`. To prepare the distributable application, run `npm run tauri:build`: its `beforeBuildCommand` runs `check:release-assets` and blocks packaging if it finds `odekrai-head*.glb` or files inside `official-references/`. It also runs `check:debug-command`, which requires `cfg(debug_assertions)` in both the declaration and registration of the manual simulated tool. These checks inspect files under `dist/` without opening or printing asset contents.
 
-Se a verificação bloquear, não remova a guarda nem publique o artefato. Prepare um build sem esses
-materiais e repita a verificação. A ausência deles no artefato precisa ser confirmada antes da
-distribuição.
+If a check blocks the build, do not remove the guard or publish the artifact. Prepare a build without those materials and run the check again. Confirm their absence from the artifact before distribution.

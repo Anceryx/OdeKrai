@@ -1,53 +1,42 @@
-# Segurança
+# Security
 
-## Estado de segurança do agente
+## Agent security status
 
-No HEAD atual não há loop de agente, chamadas de tools por modelo, roteador ou failover. Portanto,
-os riscos de execução automática por ToolResult, repetição de tools, duplicação após failover e
-runaway de custo ainda não têm mitigação de produto. Os requisitos planejados são: resultados
-Untrusted delimitados como dados e propagando `ExternalContent`, limites conservadores por execução,
-truncamento sinalizado, orçamento diário de tokens, e failover somente antes da execução de tools.
-Essas proteções só serão consideradas implementadas quando existirem código Rust e testes mock
-associados. Veja [`TRACEABILITY.md`](TRACEABILITY.md).
+The current HEAD has no agent loop, model-initiated tool calls, router, or failover. Therefore, automatic ToolResult execution, tool repetition, duplicate execution after failover, and runaway cost do not yet have product mitigations. Planned requirements are: delimit untrusted results as data and propagate `ExternalContent`, use conservative limits per run, signal truncation, set a daily token budget, and allow failover only before tool execution. These protections will be considered implemented only when associated Rust code and mock tests exist. See [`TRACEABILITY.md`](TRACEABILITY.md).
 
-O conteúdo lido do workspace pode conter instruções maliciosas mesmo quando o arquivo é local. A
-validação de caminho, `.history` e `.trash` não removem esse risco de injeção; no desenho futuro,
-esse conteúdo deverá ser `Untrusted` e qualquer efeito colateral subsequente deverá atravessar o
-motor de políticas como origem externa.
+Content read from the workspace may contain malicious instructions, even when the file is local. Path validation, `.history`, and `.trash` do not remove this injection risk. In the future design, this content must be marked `Untrusted`, and any subsequent side effect must pass through the policy engine as external-origin content.
 
-- Chaves de provedor são salvas pelo backend Tauri via `keyring` no Gerenciador de Credenciais do Windows. O frontend mantém o texto digitado apenas durante a configuração e não recupera segredos já salvos.
-- O chat chama comandos Tauri; não envia chaves diretamente do WebView. Preview web não oferece conexão com provedores.
-- O backend limita provedores conhecidos, HTTPS, hosts por provedor, URLs sem credenciais/parâmetros, redirecionamentos, tamanho de mensagens e tempo de resposta. Erros de transporte não incluem conteúdo da chave.
-- Endpoint e caminho são validados no Rust para o provedor selecionado antes de guardar ou enviar a credencial. O catálogo documenta quais provedores oferecem uma lista de modelos sem geração. Respostas de erro expostas ao usuário são mapeadas por status; corpo bruto do provedor não é exibido nem registrado.
-- O avatar é decodificado no Rust apenas após validar PNG/JPEG/WebP por magic bytes, arquivo até 5 MiB e dimensões/pixels limitados; é centralizado, reduzido a 256 × 256 e reencodado em PNG para remover metadados. A CSP da janela principal permite `data:` em `img-src` para exibir o avatar processado.
-- O envio de prompts é uma ação real ao provedor selecionado e pode gerar custos. Confira permissões, preços e retenção do fornecedor.
-- Vertex ADC/OAuth e AWS IAM/SigV4 não estão disponíveis. Bedrock aceita apenas o fluxo de chave de API compatível descrito pela AWS.
-- O `keyring` ainda precisa ser validado com execução Windows atualizada; teste unitário não comprova persistência real no Credential Manager.
-- A CSP de produção não permite conexão de rede pelo WebView além do IPC local; chamadas HTTPS aos provedores ocorrem no Rust. Capabilities separadas restringem as janelas auxiliares a eventos, e comandos de janela, provedores e histórico verificam o rótulo da janela chamadora no Rust.
-- O histórico SQLite local contém mensagens em texto simples. Proteção de disco e backups dependem da configuração do Windows; não presumir criptografia pelo aplicativo.
-- `ODEKRAI.md` tem limite de 16 KiB, é salvo por ação explícita e só entra no prompt quando seu SHA-256 coincide com a versão aprovada. O Rust envia regras fixas primeiro e recusa mensagens `system` vindas do frontend.
-- Arquivos de `memory/` têm limite de 8 KiB, nomes simples e edição manual. Até 1.024 caracteres de `estilo.md` entram no prompt. Não armazene segredos: identidade e memória são texto simples. O agente não tem comando para escrever em `ODEKRAI.md` ou `logs/`.
-- A validação da pasta recusa UNC, raiz de unidade, pastas protegidas, `..`, nomes reservados e links/junctions. O OneDrive gera aviso. A resistência a trocas simultâneas de caminhos ainda requer avaliação nativa antes de futuras tools de escrita.
+- Provider keys are saved by the Tauri backend through `keyring` in Windows Credential Manager. The frontend holds typed text only while configuring the provider and cannot retrieve saved secrets.
+- Chat calls Tauri commands; it does not send keys directly from the WebView. The web preview does not provide provider connectivity.
+- The backend limits requests to known providers, HTTPS, provider-specific hosts, URLs without credentials or query parameters, no redirects, bounded message sizes, and bounded response times. Transport errors do not include key contents.
+- The Rust backend validates the endpoint and path for the selected provider before storing or sending the credential. The catalog documents which providers offer model listing without generation. Errors shown to users are mapped by status; raw provider response bodies are neither displayed nor logged.
+- The avatar is decoded in Rust only after validating PNG/JPEG/WebP magic bytes, a file size of at most 5 MiB, and bounded dimensions/pixel count. It is centered, reduced to 256 × 256, and re-encoded as PNG to remove metadata. The main window CSP allows `data:` in `img-src` to display the processed avatar.
+- Sending prompts makes a real request to the selected provider and may incur costs. Check the provider's permissions, pricing, and retention policies.
+- Vertex ADC/OAuth and AWS IAM/SigV4 are unavailable. Bedrock accepts only the API-key flow supported by AWS and described in the app.
+- `keyring` still needs validation by running the updated app on Windows; unit tests do not prove persistence in the real Credential Manager.
+- The production CSP does not allow the WebView to make network connections beyond local IPC; HTTPS provider requests run in Rust. Separate capabilities restrict auxiliary windows to events, while window, provider, and history commands check the caller window label in Rust.
+- Local SQLite history contains plain-text messages. Disk and backup protection depend on Windows configuration; do not assume the app encrypts them.
+- `ODEKRAI.md` is limited to 16 KiB, saved through an explicit user action, and included in the prompt only when its SHA-256 matches the approved version. Rust sends fixed rules first and rejects `system` messages from the frontend.
+- Files in `memory/` are limited to 8 KiB, use simple names, and are edited manually. Up to 1,024 characters from `estilo.md` are included in the prompt. Do not store secrets: identity and memory are plain text. The agent has no command to write to `ODEKRAI.md` or `logs/`.
+- Home path validation rejects UNC paths, drive roots, protected folders, `..`, reserved names, and links/junctions. OneDrive triggers a warning. Resistance to concurrent path replacement still needs native evaluation before future write tools.
 
-## Fase 3 — política, aprovação, auditoria e parada
+## Phase 3 — policy, approval, audit, and halt
 
-- `src-tauri/src/policy.rs` é uma função pura com a matriz modo × risco × origem × workspace. O modo efetivo e exceções por ferramenta vêm de `permissions.sqlite3`; o modo descrito em `ODEKRAI.md` é informativo e não controla decisões.
-- `src-tauri/src/security.rs` valida os parâmetros Rust tipados, calcula o risco a partir da ferramenta, rejeita campos desconhecidos, limita cada ferramenta a cinco execuções por minuto e bloqueia pagamentos, caminhos de segredos, conteúdo de arquivo com marcadores conhecidos, `ODEKRAI.md`, `logs/`, diretórios de configuração/banco e extensões locais de banco. Os bloqueios aplicam-se à leitura, gravação e remoção no workspace. As ferramentas disponíveis nesta fase são simuladas; não há envio de mensagens nem pagamentos.
-- `workspace.read_file` só lê arquivos do workspace (limite 64 KiB). `workspace.write_file` limita arquivos a 1 MiB e guarda a versão anterior em `.history`. `workspace.delete_file` move para `.trash` e nunca apaga definitivamente. Caminhos absolutos, traversal, links/junctions, hard links, nomes reservados e pastas internas são recusados; cada execução volta a validar o destino.
-- As decisões que pedem aprovação abrem a janela `approval`, com capability separada. Só essa janela responde; a fila é FIFO, exibe uma ação por vez, aceita até três pendentes, usa hash SHA-256 dos parâmetros, expira por padrão em 120 segundos (configurável entre 30 e 600) e aceita uma aprovação de uso único. Fechar a janela nega a ação atual.
-- O modo global e exceções mais permissivas exigem confirmação em caixa nativa do Windows. `MessageBoxW` roda em executor de bloqueio (`spawn_blocking`); a chamada assíncrona aguarda o resultado sem ocupar a thread da UI. O atalho global padrão é `Ctrl+Shift+F12`; conflitos são reportados nas configurações. O kill switch persiste o estado parado, cancela requisições/streams registrados, nega aprovações pendentes e bloqueia novos envios ao provedor até retomada explícita.
-- Cada decisão e resultado usa JSONL diário em `logs/`, com encadeamento SHA-256 e gravação confirmada antes da execução. Falha ao verificar ou gravar a auditoria bloqueia ações. O log não tem retenção automática nem controles de apagar na interface nesta fase.
+- `src-tauri/src/policy.rs` is a pure function implementing the mode × risk × origin × workspace matrix. The effective mode and per-tool exceptions come from `permissions.sqlite3`; the mode described in `ODEKRAI.md` is informational and does not control decisions.
+- `src-tauri/src/security.rs` validates typed Rust parameters, calculates risk from the tool, rejects unknown fields, limits each tool to five executions per minute, and blocks payments, secret paths, file contents with known secret markers, `ODEKRAI.md`, `logs/`, configuration/database directories, and local database extensions. These blocks apply to reads, writes, and removals in the workspace. Tools available in this phase are simulated; no messages are sent and no payments are made.
+- `workspace.read_file` reads workspace files only (64 KiB limit). `workspace.write_file` limits files to 1 MiB and stores the previous version in `.history`. `workspace.delete_file` moves files to `.trash` and never permanently deletes them. Absolute paths, traversal, links/junctions, hard links, reserved names, and internal folders are rejected; the destination is validated again for every execution.
+- Approval requests open the `approval` window with a separate capability. Only that window can respond. The queue is FIFO, shows one action at a time, accepts up to three pending requests, uses a SHA-256 hash of the parameters, expires after 120 seconds by default (configurable from 30 to 600), and accepts a one-time approval. Closing the window denies the current action.
+- Changing the global mode and enabling more permissive per-tool exceptions require confirmation in a native Windows dialog. `MessageBoxW` runs on a blocking worker (`spawn_blocking`); the async call awaits its result without occupying the UI thread. The default global shortcut is `Ctrl+Shift+F12`; conflicts are reported in settings. The kill switch persists the halted state, cancels registered requests/streams, denies pending approvals, and blocks new provider requests until explicitly resumed.
+- Each decision and result is written to a daily JSONL file in `logs/`, with SHA-256 chaining and a confirmed write before execution. Audit verification or write failures block actions. Logs have no automatic retention or delete controls in the UI in this phase.
 
-### Ameaças e limites
+### Threats and limitations
 
-- **Prompt injection e conteúdo externo:** a política mantém a origem como dado Rust; ações tainted com risco acima de leitura pedem aprovação em qualquer modo. Ainda não existe agent loop que atribua origem a conteúdo de provedores; ferramentas desta fase só podem ser disparadas manualmente pelo usuário em builds de desenvolvimento.
-- **Falsificação de aprovação e alteração de parâmetros:** o comando de resposta valida o rótulo `approval`, o ID e o hash da ação pendente; o Rust recalcula o hash e revalida caminhos imediatamente antes da execução. A UI nunca fornece a decisão de risco.
-- **XSS no WebView:** a janela de aprovação tem capability mínima, CSP local sem conexões remotas e mostra a prévia como texto puro React. Uma vulnerabilidade que execute código na própria janela de aprovação ainda poderia induzir um clique; nenhuma aprovação é transferida para a janela principal.
-- **TOCTOU:** canonicalização, detecção de reparse point/hard link e validação imediatamente antes da operação reduzem trocas de destino. Um processo local com os mesmos privilégios ainda pode disputar alterações durante a operação; a implementação não usa handles de diretório imutáveis para toda a caminhada.
-- **Adulteração de logs:** a cadeia detecta alterações e quebras acidentais. Ela não impede edição e não resiste a malware ou processo local capaz de reescrever os arquivos e recalcular os hashes; não é uma assinatura com chave protegida.
-- **Flood de aprovações:** uma fila limitada a três e uma janela visível por vez; excedentes são negados e auditados.
-- **Risco residual geral:** configurações SQLite e logs são arquivos locais. Um processo com os mesmos privilégios do usuário pode alterá-los. Este motor reduz erro/abuso do agente e injeção; não protege contra malware local.
+- **Prompt injection and external content:** the policy keeps origin as Rust-side data; tainted actions above read risk require approval in every mode. There is no agent loop to assign origin to provider content yet; tools in this phase can only be triggered manually by the user in development builds.
+- **Approval forgery and parameter changes:** the response command validates the `approval` label, pending action ID, and hash; Rust recalculates the hash and revalidates paths immediately before execution. The UI never supplies the risk decision.
+- **WebView XSS:** the approval window has a minimal capability and a local CSP without remote connections, and React renders the preview as plain text. A vulnerability executing code inside the approval window could still induce a click; approvals are never transferred to the main window.
+- **TOCTOU:** canonicalization, reparse-point/hard-link detection, and validation immediately before the operation reduce destination replacement risks. A local process with the same privileges can still race changes during the operation; the implementation does not use immutable directory handles for the entire path walk.
+- **Log tampering:** the chain detects changes and accidental breaks. It does not prevent edits and cannot resist malware or a local process able to rewrite files and recalculate hashes; it is not a signature protected by a key.
+- **Approval flooding:** the queue is limited to three requests with one visible window at a time; excess requests are denied and audited.
+- **General residual risk:** SQLite settings and logs are local files. A process running with the same user privileges can change them. This engine reduces agent mistakes/abuse and injection risks; it does not protect against local malware.
 
-Os comandos `npm run tauri:build` verificam os assets e a guarda `cfg(debug_assertions)` antes de
-empacotar. Consulte [`TRACEABILITY.md`](TRACEABILITY.md) para requisito, implementação, teste e
-status detalhados.
+The `npm run tauri:build` command checks assets and the `cfg(debug_assertions)` guard before packaging. See [`TRACEABILITY.md`](TRACEABILITY.md) for detailed requirements, implementation, tests, and status.
