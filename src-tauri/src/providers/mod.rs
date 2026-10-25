@@ -9,6 +9,7 @@ use std::{
 use tauri::{ipc::Channel, Manager, State};
 use tokio_util::sync::CancellationToken;
 
+mod anthropic;
 mod cancellation;
 mod credentials;
 mod perplexity;
@@ -563,28 +564,15 @@ async fn request_provider(
         .map_err(|_| "Não foi possível preparar uma conexão segura.".to_string())?;
 
     let request = match provider_id {
-        "anthropic" => {
-            let system = messages
-                .iter()
-                .filter(|message| message.role == "system")
-                .map(|message| message.content.as_str())
-                .collect::<Vec<_>>()
-                .join("\n\n");
-            let conversation = messages
-                .iter()
-                .filter(|message| message.role != "system")
-                .map(|message| json!({ "role": message.role, "content": message.content }))
-                .collect::<Vec<_>>();
-            let mut body = json!({ "model": model, "max_tokens": 2048, "messages": conversation, "stream": on_chunk.is_some() });
-            if !system.is_empty() {
-                body["system"] = json!(system);
-            }
-            client
-                .post(endpoint)
-                .pipe_auth(provider_id, &credential)?
-                .header("anthropic-version", "2023-06-01")
-                .json(&body)
-        }
+        "anthropic" => client
+            .post(endpoint)
+            .pipe_auth(provider_id, &credential)?
+            .header("anthropic-version", "2023-06-01")
+            .json(&anthropic::request_body(
+                model,
+                messages,
+                on_chunk.is_some(),
+            )),
         "perplexity" => client
             .post(endpoint)
             .pipe_auth(provider_id, &credential)?
