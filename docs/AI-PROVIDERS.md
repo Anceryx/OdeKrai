@@ -51,4 +51,6 @@ Credenciais ficam no Gerenciador de Credenciais do Windows pelo crate `keyring`.
 - [Amazon Bedrock Chat Completions](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html)
 - [Vertex AI ADC](https://docs.cloud.google.com/docs/authentication/application-default-credentials)
 
-Os logotipos incorporados usam o pacote `simple-icons`, CC0-1.0; os demais cards usam iniciais.
+Todos os 16 provedores do catálogo exibem um SVG de marca local. Os arquivos foram incorporados de `@lobehub/icons-static-svg` 1.98.0, sob MIT; os provedores sem variações de cor usam seus símbolos monocromáticos.
+
+Os links de cadastro, chaves, limites e documentação abrem no navegador padrão por meio do plugin oficial `opener` do Tauri. A janela principal só pode abrir endereços HTTPS; se o sistema não conseguir iniciar o navegador, o painel mostra o endereço para cópia manual. Essa integração precisa de validação visual e nativa no Windows.

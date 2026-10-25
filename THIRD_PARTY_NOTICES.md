@@ -28,3 +28,32 @@ modelos GLB originais, com textura externa, câmera e iluminação uniformes, po
 (nenhum clipe reproduzido), fundo transparente e saída de 512×512 px. Não foram incluídos os
 modelos nem a textura no repositório. O script de desenvolvimento é `scripts/render-pets.mjs`;
 instruções de regeneração: `docs/ASSET-GUIDE.md`.
+
+## Logotipos de provedores de IA
+
+- 16 arquivos SVG de marca foram incorporados do pacote `@lobehub/icons-static-svg` 1.98.0, por LobeHub, sob licença MIT. Origem: https://github.com/lobehub/lobe-icons. Os arquivos foram copiados localmente para `src/assets/providers/`; os nomes dos provedores são marcas de seus respectivos titulares.
+- MIT License (Copyright (c) 2023 LobeHub):
+
+```text
+MIT License
+
+Copyright (c) 2023 LobeHub
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

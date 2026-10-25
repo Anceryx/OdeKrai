@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AI_PROVIDERS, providerById } from './providers';
+import { providerLogoFor } from './provider-logos';
 
 describe('catálogo de provedores', () => {
   it('mantém identificadores únicos para o catálogo de conectores', () => {
@@ -23,6 +24,10 @@ describe('catálogo de provedores', () => {
       'AWS Bedrock',
       'Vertex AI',
     ]);
+  });
+
+  it('tem um SVG de marca local para cada provedor do catálogo', () => {
+    expect(AI_PROVIDERS.every((provider) => Boolean(providerLogoFor(provider.id)))).toBe(true);
   });
 
   it('separa conectores prontos para Chat Completions dos guias ainda sem adaptador', () => {

@@ -51,6 +51,7 @@ const providerDefinitions: AiProvider[] = [
     modelHint: 'ID de modelo disponível na sua conta',
     authMode: 'bearer',
     requirements: ['Chave de API da plataforma OpenAI', 'ID de modelo habilitado no projeto'],
+    logo: 'openai',
     color: '#F5F5F5',
   },
   {
@@ -100,6 +101,7 @@ const providerDefinitions: AiProvider[] = [
     modelHint: 'ID do modelo listado no console xAI',
     authMode: 'bearer',
     requirements: ['Chave de API da xAI', 'Modelo habilitado no console'],
+    logo: 'xai',
     color: '#F5F5F5',
   },
   {
@@ -131,6 +133,7 @@ const providerDefinitions: AiProvider[] = [
     modelHint: 'ID do modelo Command',
     authMode: 'bearer',
     requirements: ['Chave da API Cohere', 'Modelo com suporte à Compatibility API'],
+    logo: 'cohere',
     color: '#39594D',
   },
   {
@@ -144,6 +147,7 @@ const providerDefinitions: AiProvider[] = [
     modelHint: 'ID do modelo disponível no GroqCloud',
     authMode: 'bearer',
     requirements: ['Chave de API Groq', 'Modelo disponível na conta'],
+    logo: 'groq',
     color: '#F5F5F5',
     freePlan: {
       limitsUrl: 'https://console.groq.com/docs/rate-limits',
@@ -193,6 +197,7 @@ const providerDefinitions: AiProvider[] = [
     modelHint: 'ID do modelo Cerebras',
     authMode: 'bearer',
     requirements: ['Chave de API Cerebras', 'Modelo habilitado na conta'],
+    logo: 'cerebras',
     color: '#F5F5F5',
     freePlan: {
       limitsUrl: 'https://inference-docs.cerebras.ai/support/pricing',
@@ -210,6 +215,7 @@ const providerDefinitions: AiProvider[] = [
     modelHint: 'ID completo do modelo no catálogo Together',
     authMode: 'bearer',
     requirements: ['Chave de API Together AI', 'ID completo do modelo, incluindo namespace'],
+    logo: 'together',
     color: '#F5F5F5',
   },
   {
@@ -241,6 +247,7 @@ const providerDefinitions: AiProvider[] = [
     modelHint: 'ID do modelo, incluindo accounts/.../models/...',
     authMode: 'bearer',
     requirements: ['Chave de API Fireworks', 'ID completo do modelo'],
+    logo: 'fireworks',
     color: '#F5F5F5',
   },
   {
@@ -277,6 +284,7 @@ const providerDefinitions: AiProvider[] = [
       'Chave de API Amazon Bedrock (não chave IAM de longa duração)',
       'Model ID e permissões de inferência; alguns modelos exigem acesso adicional',
     ],
+    logo: 'bedrock',
     color: '#FF9900',
     region: true,
   },

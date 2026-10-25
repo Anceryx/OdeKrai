@@ -1,16 +1,9 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import {
-  siAnthropic,
-  siDeepseek,
-  siGooglecloud,
-  siGooglegemini,
-  siMistralai,
-  siOpenrouter,
-  siPerplexity,
-  type SimpleIcon,
-} from 'simple-icons';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { AI_PROVIDERS, providerCatalogEntry, type AiProvider } from '../core/providers';
+import { openProviderLink } from '../core/provider-links';
+import { providerLogoFor } from '../core/provider-logos';
 import {
   filterProviderDirectory,
   removeProviderCredential,
@@ -24,15 +17,6 @@ import {
   type ProviderSettings,
 } from '../core/settings';
 
-const logoMap: Record<string, SimpleIcon> = {
-  anthropic: siAnthropic,
-  deepseek: siDeepseek,
-  'google-cloud': siGooglecloud,
-  gemini: siGooglegemini,
-  mistral: siMistralai,
-  openrouter: siOpenrouter,
-  perplexity: siPerplexity,
-};
 type Props = {
   settings: AppSettings;
   keySaved: boolean;
@@ -69,6 +53,7 @@ export function ProviderCatalog({
   const [connectedIds, setConnectedIds] = useState<Set<string>>(new Set());
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [notice, setNotice] = useState('');
+  const [externalLinkError, setExternalLinkError] = useState('');
   const [busy, setBusy] = useState(false);
   const [credentialAvailable, setCredentialAvailable] = useState(keySaved);
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
@@ -78,6 +63,7 @@ export function ProviderCatalog({
     setDraft(settings.providers[selected.id] ?? defaultProviderSettings(selected.id));
     setSecret('');
     setNotice('');
+    setExternalLinkError('');
     setTechnicalError('');
     setModels([]);
     setStages([]);
@@ -474,13 +460,22 @@ export function ProviderCatalog({
               </div>
             </div>
             <p className="provider-description">{selected.description}</p>
+            {externalLinkError && (
+              <p className="provider-key-note" role="alert">
+                Não foi possível abrir o navegador. Copie este endereço e abra-o manualmente:{' '}
+                <code>{externalLinkError}</code>
+              </p>
+            )}
             {selected.freePlan && (
               <div className="provider-free-note">
                 <strong>Plano gratuito disponível</strong>
                 {selected.freePlan.note && <span>{selected.freePlan.note}</span>}
-                <a href={selected.freePlan.limitsUrl} target="_blank" rel="noreferrer">
+                <ProviderExternalLink
+                  href={selected.freePlan.limitsUrl}
+                  onError={setExternalLinkError}
+                >
                   Consultar limites oficiais ↗
-                </a>
+                </ProviderExternalLink>
                 <p>
                   Alguns provedores podem usar dados do plano gratuito. Leia os termos antes de
                   enviar mensagens.
@@ -507,15 +502,15 @@ export function ProviderCatalog({
                 <ol className="provider-steps">
                   <li>
                     <strong>1. Crie sua conta</strong>
-                    <a href={selected.docsUrl} target="_blank" rel="noreferrer">
+                    <ProviderExternalLink href={selected.docsUrl} onError={setExternalLinkError}>
                       Criar conta ↗
-                    </a>
+                    </ProviderExternalLink>
                   </li>
                   <li>
                     <strong>2. Gere uma chave de API</strong>
-                    <a href={selected.consoleUrl} target="_blank" rel="noreferrer">
+                    <ProviderExternalLink href={selected.consoleUrl} onError={setExternalLinkError}>
                       Gerar chave ↗
-                    </a>
+                    </ProviderExternalLink>
                   </li>
                   <li>
                     <strong>3. Salve a chave no OdeKrai</strong>
@@ -727,15 +722,15 @@ export function ProviderCatalog({
               </div>
             )}
             <div className="provider-detail-links">
-              <a href={selected.docsUrl} target="_blank" rel="noreferrer">
+              <ProviderExternalLink href={selected.docsUrl} onError={setExternalLinkError}>
                 Documentação oficial ↗
-              </a>
-              <a href={selected.consoleUrl} target="_blank" rel="noreferrer">
+              </ProviderExternalLink>
+              <ProviderExternalLink href={selected.consoleUrl} onError={setExternalLinkError}>
                 {selected.integration === 'guide'
                   ? 'Abrir console do provedor'
                   : 'Obter chave ou credenciais'}{' '}
                 ↗
-              </a>
+              </ProviderExternalLink>
             </div>
           </aside>
         )}
@@ -751,33 +746,39 @@ export function ProviderCatalog({
   );
 }
 function ProviderLogo({ provider, large = false }: { provider: AiProvider; large?: boolean }) {
-  const icon = provider.logo ? logoMap[provider.logo] : undefined;
-  const fallback =
-    provider.name === 'OpenAI'
-      ? 'O'
-      : provider.name === 'xAI'
-        ? 'x'
-        : provider.name === 'AWS Bedrock'
-          ? 'aws'
-          : provider.name === 'Azure OpenAI'
-            ? 'az'
-            : provider.name
-                .split(/\s+/)
-                .map((part) => part[0])
-                .join('')
-                .slice(0, 3);
+  const icon = providerLogoFor(provider.id);
   return (
     <span
       className={`provider-logo ${large ? 'large' : ''}`}
       style={{ '--provider-color': provider.color } as React.CSSProperties}
     >
-      {icon ? (
-        <svg viewBox="0 0 24 24" role="img" aria-label={`${provider.name} logo`}>
-          <path d={icon.path} fill="currentColor" />
-        </svg>
-      ) : (
-        <span aria-hidden="true">{fallback}</span>
-      )}
+      <img src={icon} alt="" aria-hidden="true" />
     </span>
   );
+}
+
+function ProviderExternalLink({
+  href,
+  onError,
+  children,
+}: {
+  href: string;
+  onError: (url: string) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      onClick={(event) => {
+        event.preventDefault();
+        setExternalLinkErrorSafely(href, onError);
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+
+function setExternalLinkErrorSafely(href: string, onError: (url: string) => void) {
+  void openProviderLink(href, openUrl).catch(() => onError(href));
 }

@@ -2009,16 +2009,17 @@ html.island-window-html {
   font: 700 11px var(--font-sans);
   letter-spacing: -0.3px;
 }
-.provider-logo svg {
+.provider-logo img {
   width: 18px;
   height: 18px;
+  filter: brightness(0) invert(1);
 }
 .provider-logo.large {
   width: 44px;
   height: 44px;
   border-radius: 12px;
 }
-.provider-logo.large svg {
+.provider-logo.large img {
   width: 23px;
   height: 23px;
 }

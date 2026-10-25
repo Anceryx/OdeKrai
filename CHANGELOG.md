@@ -99,3 +99,9 @@
 - Adicionados plugin de instância única, CSP de produção restrita, capabilities por janela e validação do chamador para comandos de janela.
 - Adicionados histórico local de conversas em SQLite e streaming com cancelamento para Anthropic e adaptadores Chat Completions.
 - Revisada a documentação de status, testes, arquitetura, privacidade e segurança.
+
+### Correções de inicialização e conectores
+
+- Leituras nativas usadas na abertura da interface agora são executadas por comandos assíncronos do Tauri.
+- Links de cadastro, geração de chave, limites e documentação dos provedores abrem no navegador padrão do Windows.
+- Os 16 provedores do catálogo agora exibem seus símbolos de marca em SVG local.
