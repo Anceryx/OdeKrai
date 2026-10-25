@@ -6,7 +6,7 @@ describe('carregamento de sons', () => {
     vi.restoreAllMocks();
   });
 
-  it('mantém ausência de arquivo silenciosa e reutiliza o resultado em cache', async () => {
+  it('memoriza falhas de carregamento e mantém a ausência de som silenciosa', async () => {
     vi.resetModules();
     const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 404 }));
     class FakeAudioContext {
@@ -23,9 +23,37 @@ describe('carregamento de sons', () => {
     const { normalizeSoundPreferences, playSound } = await import('./sounds');
     const preferences = normalizeSoundPreferences({ enabled: true, volume: 0.2 });
 
-    await expect(playSound('notification', preferences)).resolves.toBeUndefined();
-    await expect(playSound('notification', preferences)).resolves.toBeUndefined();
+    await expect(playSound('error', preferences)).resolves.toBeUndefined();
+    await expect(playSound('error', preferences)).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolve os formatos existentes em ordem WAV, OGG e MP3', async () => {
+    const { soundSources, loadFirstAvailableSound } = await import('./sounds');
+    const attempted: string[] = [];
+    const loaded = await loadFirstAvailableSound(
+      ['/sounds/success.wav', '/sounds/success.ogg', '/sounds/success.mp3'],
+      async (source) => {
+        attempted.push(source);
+        return source.endsWith('.ogg') ? 'decoded' : null;
+      },
+    );
+    expect(loaded).toBe('decoded');
+    expect(attempted).toEqual(['/sounds/success.wav', '/sounds/success.ogg']);
+    expect(
+      soundSources('success', undefined, [
+        '/sounds/success.mp3',
+        '/sounds/success.ogg',
+        '/sounds/success.wav',
+      ]),
+    ).toEqual(['/sounds/success.wav', '/sounds/success.ogg', '/sounds/success.mp3']);
+  });
+
+  it('usa a substituição salva antes dos formatos padrão disponíveis', async () => {
+    const { soundSources } = await import('./sounds');
+    expect(
+      soundSources('success', '/sounds/hover.ogg', ['/sounds/hover.ogg', '/sounds/success.wav']),
+    ).toEqual(['/sounds/hover.ogg', '/sounds/success.wav']);
   });
 
   it('não carrega arquivos quando o som está desativado ou sem volume', async () => {

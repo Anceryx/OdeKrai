@@ -36,11 +36,11 @@ describe('máquina de estados do Companion', () => {
     expect(
       normalizeSoundPreferences({
         replacements: {
-          click: '/sounds/click-soft.ogg',
+          hover: '/sounds/hover.ogg',
           error: 'https://example.test/sound.wav',
           success: '/outside/ok.wav',
         },
       }).replacements,
-    ).toEqual({ click: '/sounds/click-soft.ogg' });
+    ).toEqual({ hover: '/sounds/hover.ogg' });
   });
 });
