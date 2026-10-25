@@ -35,6 +35,7 @@ import { PetSprite } from './PetSprite';
 import appIcon from '../assets/odekrai-app-icon.png';
 import { MessageMarkdown } from './MessageMarkdown';
 import { HistoryDeletionSettings } from './HistoryDeletionSettings';
+import { setPrimaryProviderSettings, toggleProviderSettings } from '../core/provider-directory';
 
 type Section =
   | 'overview'
@@ -230,11 +231,17 @@ function MainApp() {
   const currentNav = useMemo(() => nav.find((item) => item.id === section), [section]);
 
   function selectProvider(provider: AiProvider) {
-    if (provider.id !== selectedProviderId) {
-      setKeySavedForSession(false);
-    }
     setSelectedProviderId(provider.id);
-    setSettings((current) => ({ ...current, activeProviderId: provider.id }));
+  }
+
+  function setPrimaryProvider(providerId: string) {
+    setSettings((current) => setPrimaryProviderSettings(current, providerId));
+    setSelectedProviderId(providerId);
+  }
+
+  function setProviderEnabled(providerId: string, enabled: boolean) {
+    setSettings((current) => toggleProviderSettings(current, providerId, enabled));
+    if (!enabled && settings.activeProviderId === providerId) setKeySavedForSession(false);
   }
 
   function beginChat() {
@@ -624,16 +631,23 @@ function MainApp() {
                 keySaved={keySavedForSession}
                 selectedId={selectedProviderId}
                 onSelect={selectProvider}
+                onSetPrimary={setPrimaryProvider}
+                onToggleEnabled={setProviderEnabled}
                 onSave={(provider) => {
                   setSettings((current) => ({
                     ...current,
-                    activeProviderId: provider.providerId,
                     providers: { ...current.providers, [provider.providerId]: provider },
                   }));
-                  setKeySavedForSession(true);
+                  if (provider.providerId === settings.activeProviderId)
+                    setKeySavedForSession(true);
                 }}
                 onChat={beginChat}
-                onCredentialRemoved={() => setKeySavedForSession(false)}
+                onCredentialRemoved={(providerId) => {
+                  if (settings.activeProviderId === providerId) {
+                    setSettings((current) => ({ ...current, activeProviderId: '' }));
+                    setKeySavedForSession(false);
+                  }
+                }}
               />
             )}
             {section === 'companion' && (

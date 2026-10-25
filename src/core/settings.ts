@@ -14,6 +14,7 @@ export type ProviderSettings = {
   authMode: ProviderAuthMode;
   region?: string;
   lastTest?: { status: 'passed' | 'failed' | 'partial'; at: string; message: string };
+  enabled?: boolean;
 };
 
 export type AppSettings = {
@@ -52,6 +53,7 @@ export function defaultProviderSettings(providerId: string): ProviderSettings {
     baseUrl: provider.baseUrl ?? '',
     model: '',
     authMode: provider.authMode,
+    enabled: true,
     region: provider.region ? 'us-east-1' : undefined,
   };
 }
@@ -156,6 +158,7 @@ export function loadSettingsWithWarnings(): { settings: AppSettings; warnings: s
           ...defaultProviderSettings(provider.id),
           baseUrl,
           model: typeof saved.model === 'string' ? saved.model : '',
+          enabled: typeof saved.enabled === 'boolean' ? saved.enabled : true,
           region: typeof saved.region === 'string' ? saved.region : undefined,
           lastTest: validTest(saved.lastTest) ? saved.lastTest : undefined,
         };
@@ -182,7 +185,7 @@ export function loadSettingsWithWarnings(): { settings: AppSettings; warnings: s
     const activeProviderId =
       'activeProviderId' in value &&
       typeof value.activeProviderId === 'string' &&
-      providerById(value.activeProviderId)
+      (value.activeProviderId === '' || providerById(value.activeProviderId))
         ? value.activeProviderId
         : (oldId ?? 'openai');
     const migrated = { ...value } as Record<string, unknown>;

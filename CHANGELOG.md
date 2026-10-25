@@ -2,6 +2,14 @@
 
 ## Não lançado
 
+### Conectores
+
+- A tela de conectores ganhou filtros por provedores conectados, planos gratuitos confirmados e catálogo completo, com busca e detalhes em painel sobreposto.
+- Credenciais conectadas mostram os estados salva, testada e ativa, com controles para ativar, definir o provedor principal e remover a credencial.
+- O fluxo orienta a criação da conta, geração da chave, carregamento de modelos e teste da conexão. O endereço da API fica em Avançado.
+- Groq, Gemini, Mistral, Cerebras e OpenRouter têm selo de plano gratuito confirmado e link para limites oficiais. No OpenRouter, o selo se refere a modelos `:free`.
+- Cerebras foi adicionado ao catálogo com Chat Completions compatível com OpenAI e carregamento de modelos.
+
 ### Conversas
 
 - A área de Conversas agora tem lista pesquisável com título, data, prévia e opções de renomear/apagar; o cabeçalho da conversa permite editar o título e mostra o modelo ativo.

@@ -27,6 +27,8 @@ island/mascote.
 - `window_config_tests::main_window_uses_requested_default_and_minimum_size`: dimensões, mínimos e centralização da janela principal em `tauri.conf.json`.
 - Testes Rust da validação do endpoint, mapeamento de status, recusa de formatos de imagem e normalização de avatar; sem chamadas às APIs reais.
 - Testes Vitest da migração v1 e isolamento de endpoint/modelo entre provedores.
+- `provider-directory.test.ts`: filtros das abas, ativação/desativação e remoção da credencial após sucesso.
+- `providers.test.ts`: Cerebras no catálogo e provedores marcados com plano gratuito.
 - `npm run tauri:build`: compila o aplicativo Tauri. A ausência de assets proprietários no bundle deve ser conferida no resultado do build.
 - `git diff --check`: whitespace e marcadores de conflito.
 

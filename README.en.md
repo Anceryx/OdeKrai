@@ -4,7 +4,7 @@ A personal AI assistant for Windows, built with React, TypeScript, and Tauri 2. 
 
 ## Implemented features
 
-- App with overview, chat, a catalog of 15 providers, and assistant settings.
+- App with overview, chat, a catalog of 16 providers, and assistant settings.
 - Native Tauri windows for the floating island and free mascot mode.
 - Local preferences without API keys.
 - Credential storage through Windows Credential Manager and message requests through the Rust process.

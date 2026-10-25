@@ -152,4 +152,35 @@ describe('preferências persistidas', () => {
     expect(result.warnings).toHaveLength(1);
     expect(result.warnings[0]).toContain('Groq');
   });
+
+  it('mantém a ausência de provedor principal após desativar todos', () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    });
+    const settings = loadSettings();
+    settings.activeProviderId = '';
+    saveSettings(settings);
+    expect(loadSettings().activeProviderId).toBe('');
+  });
+
+  it('persiste o estado ativado ou desativado de um provedor', () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    });
+    const settings = loadSettings();
+    settings.providers.groq = {
+      providerId: 'groq',
+      name: 'Groq',
+      baseUrl: 'https://api.groq.com/openai/v1',
+      model: 'test-model',
+      authMode: 'bearer',
+      enabled: false,
+    };
+    saveSettings(settings);
+    expect(loadSettings().providers.groq.enabled).toBe(false);
+  });
 });

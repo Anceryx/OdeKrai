@@ -4,7 +4,7 @@ Aplicativo OdeKrai para Windows, desenvolvido com React, TypeScript e Tauri 2. O
 
 ## Recursos implementados
 
-- Aplicativo com visão geral, conversas, catálogo de 15 provedores e configurações do assistente.
+- Aplicativo com visão geral, conversas, catálogo de 16 provedores e configurações do assistente.
 - Janelas nativas do Tauri para a ilha flutuante e o modo livre do mascote.
 - Preferências locais sem chaves de API.
 - Armazenamento de credenciais via Gerenciador de Credenciais do Windows e envio de mensagens pelo processo Rust.
