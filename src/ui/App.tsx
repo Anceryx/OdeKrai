@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+﻿import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { ChatMessage } from '../core/provider-messages';
 import { resolveConversationSelection } from '../core/chat';
 import {
@@ -12,16 +12,32 @@ import { emit, listen } from '@tauri-apps/api/event';
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
 import { normalizeSoundPreferences, playSound } from '../core/sounds';
 import { AI_PROVIDERS, type AiProvider } from '../core/providers';
-import { Overview } from './screens/Overview';
-import { AssistantScreen } from './screens/Assistant';
-import { SettingsScreen } from './screens/Settings';
-import { ConversationsScreen } from './screens/Conversations';
-import { ProvidersScreen } from './screens/Providers';
-import { IdentityScreen } from './screens/Identity';
+const Overview = lazy(() =>
+  import('./screens/Overview').then((module) => ({ default: module.Overview })),
+);
+const AssistantScreen = lazy(() =>
+  import('./screens/Assistant').then((module) => ({ default: module.AssistantScreen })),
+);
+const SettingsScreen = lazy(() =>
+  import('./screens/Settings').then((module) => ({ default: module.SettingsScreen })),
+);
+const ConversationsScreen = lazy(() =>
+  import('./screens/Conversations').then((module) => ({ default: module.ConversationsScreen })),
+);
+const ProvidersScreen = lazy(() =>
+  import('./screens/Providers').then((module) => ({ default: module.ProvidersScreen })),
+);
+const IdentityScreen = lazy(() =>
+  import('./screens/Identity').then((module) => ({ default: module.IdentityScreen })),
+);
+const PermissionsScreen = lazy(() =>
+  import('./screens/Permissions').then((module) => ({ default: module.PermissionsScreen })),
+);
+const ActivityScreen = lazy(() =>
+  import('./screens/Activity').then((module) => ({ default: module.ActivityScreen })),
+);
 import { initials, type ProfileData } from './Profile';
 import { ApprovalWindow, isApprovalWindow } from './SecurityCenter';
-import { PermissionsScreen } from './screens/Permissions';
-import { ActivityScreen } from './screens/Activity';
 import { DEFAULT_PET_ID, PETS } from '../core/pets';
 import { Icon, type IconName } from './Icon';
 import { setPrimaryProviderSettings, toggleProviderSettings } from '../core/provider-directory';
@@ -582,118 +598,120 @@ function MainApp() {
             </button>
           </div>
         </header>
-        {chatMode || section === 'chat' ? (
-          <ConversationsScreen
-            messages={messages}
-            conversations={conversations}
-            conversationId={conversationId}
-            onConversation={(id) => {
-              if (busy) return;
-              const selectedId = resolveConversationSelection(conversations, id);
-              if (!selectedId) return;
-              setConversationId(selectedId);
-              setError('');
-              void invoke<ChatMessage[]>('load_conversation', { conversationId: selectedId })
-                .then((loaded) => setMessages(loaded))
-                .catch(() => setError('NÃ£o foi possÃ­vel abrir a conversa.'));
-            }}
-            onNewConversation={() => {
-              if (!busy) {
-                setConversationId(null);
-                setMessages([]);
+        <Suspense fallback={null}>
+          {chatMode || section === 'chat' ? (
+            <ConversationsScreen
+              messages={messages}
+              conversations={conversations}
+              conversationId={conversationId}
+              onConversation={(id) => {
+                if (busy) return;
+                const selectedId = resolveConversationSelection(conversations, id);
+                if (!selectedId) return;
+                setConversationId(selectedId);
                 setError('');
-                setLastFailedPrompt('');
-              }
-            }}
-            onDeleteConversation={(id) => void deleteConversation(id)}
-            onRenameConversation={(id, title) => void renameConversation(id, title)}
-            busy={busy}
-            draft={draft}
-            setDraft={setDraft}
-            error={error}
-            submit={submitMessage}
-            cancel={cancelRequest}
-            providerName={activeProvider.name}
-            providerModel={activeProvider.model}
-            providerConfigured={keySavedForSession}
-            assistantUsesMascot={settings.useMascotAsAssistantAvatar}
-            onFixConfiguration={() => {
-              setSection('providers');
-              setChatMode(false);
-            }}
-            onRetry={() => void sendMessage(lastFailedPrompt, true)}
-            canRetry={Boolean(lastFailedPrompt)}
-            profile={profile}
-            selectedPet={selectedPet}
-          />
-        ) : (
-          <div className="content-scroll">
-            {section === 'overview' && (
-              <Overview
-                onChat={beginChat}
-                onOpen={(target) => setSection(target)}
-                provider={activeProvider}
-                keyReady={keySavedForSession}
-                profile={profile}
-                selectedPet={selectedPet}
-                needsIdentity={identityConfigured === false && !identityCardDismissed}
-                onConfigureIdentity={() => setSection('agent')}
-                onDismissIdentity={() => setIdentityCardDismissed(true)}
-              />
-            )}
-            {section === 'providers' && (
-              <ProvidersScreen
-                settings={settings}
-                keySaved={keySavedForSession}
-                selectedId={selectedProviderId}
-                onSelect={selectProvider}
-                onSetPrimary={setPrimaryProvider}
-                onToggleEnabled={setProviderEnabled}
-                onSave={(provider) => {
-                  setSettings((current) => ({
-                    ...current,
-                    providers: { ...current.providers, [provider.providerId]: provider },
-                  }));
-                  if (provider.providerId === settings.activeProviderId)
-                    setKeySavedForSession(true);
-                }}
-                onChat={beginChat}
-                onCredentialRemoved={(providerId) => {
-                  if (settings.activeProviderId === providerId) {
-                    setSettings((current) => ({ ...current, activeProviderId: '' }));
-                    setKeySavedForSession(false);
-                  }
-                }}
-              />
-            )}
-            {section === 'companion' && (
-              <AssistantScreen
-                settings={settings}
-                update={setSettings}
-                onError={setToast}
-                selectedPet={selectedPet}
-                onSelectPet={(petId) => void choosePet(petId)}
-              />
-            )}
-            {section === 'settings' && (
-              <SettingsScreen
-                settings={settings}
-                update={setSettings}
-                onDeleteAllHistory={deleteAllConversations}
-              />
-            )}
-            {section === 'permissions' && <PermissionsScreen />}
-            {section === 'activity' && <ActivityScreen />}
-            {section === 'agent' && (
-              <IdentityScreen
-                initialName={profile.displayName}
-                initialNickname={profile.nickname}
-                profileValue={profile}
-                onProfileChange={setProfile}
-              />
-            )}
-          </div>
-        )}
+                void invoke<ChatMessage[]>('load_conversation', { conversationId: selectedId })
+                  .then((loaded) => setMessages(loaded))
+                  .catch(() => setError('NÃ£o foi possÃ­vel abrir a conversa.'));
+              }}
+              onNewConversation={() => {
+                if (!busy) {
+                  setConversationId(null);
+                  setMessages([]);
+                  setError('');
+                  setLastFailedPrompt('');
+                }
+              }}
+              onDeleteConversation={(id) => void deleteConversation(id)}
+              onRenameConversation={(id, title) => void renameConversation(id, title)}
+              busy={busy}
+              draft={draft}
+              setDraft={setDraft}
+              error={error}
+              submit={submitMessage}
+              cancel={cancelRequest}
+              providerName={activeProvider.name}
+              providerModel={activeProvider.model}
+              providerConfigured={keySavedForSession}
+              assistantUsesMascot={settings.useMascotAsAssistantAvatar}
+              onFixConfiguration={() => {
+                setSection('providers');
+                setChatMode(false);
+              }}
+              onRetry={() => void sendMessage(lastFailedPrompt, true)}
+              canRetry={Boolean(lastFailedPrompt)}
+              profile={profile}
+              selectedPet={selectedPet}
+            />
+          ) : (
+            <div className="content-scroll">
+              {section === 'overview' && (
+                <Overview
+                  onChat={beginChat}
+                  onOpen={(target) => setSection(target)}
+                  provider={activeProvider}
+                  keyReady={keySavedForSession}
+                  profile={profile}
+                  selectedPet={selectedPet}
+                  needsIdentity={identityConfigured === false && !identityCardDismissed}
+                  onConfigureIdentity={() => setSection('agent')}
+                  onDismissIdentity={() => setIdentityCardDismissed(true)}
+                />
+              )}
+              {section === 'providers' && (
+                <ProvidersScreen
+                  settings={settings}
+                  keySaved={keySavedForSession}
+                  selectedId={selectedProviderId}
+                  onSelect={selectProvider}
+                  onSetPrimary={setPrimaryProvider}
+                  onToggleEnabled={setProviderEnabled}
+                  onSave={(provider) => {
+                    setSettings((current) => ({
+                      ...current,
+                      providers: { ...current.providers, [provider.providerId]: provider },
+                    }));
+                    if (provider.providerId === settings.activeProviderId)
+                      setKeySavedForSession(true);
+                  }}
+                  onChat={beginChat}
+                  onCredentialRemoved={(providerId) => {
+                    if (settings.activeProviderId === providerId) {
+                      setSettings((current) => ({ ...current, activeProviderId: '' }));
+                      setKeySavedForSession(false);
+                    }
+                  }}
+                />
+              )}
+              {section === 'companion' && (
+                <AssistantScreen
+                  settings={settings}
+                  update={setSettings}
+                  onError={setToast}
+                  selectedPet={selectedPet}
+                  onSelectPet={(petId) => void choosePet(petId)}
+                />
+              )}
+              {section === 'settings' && (
+                <SettingsScreen
+                  settings={settings}
+                  update={setSettings}
+                  onDeleteAllHistory={deleteAllConversations}
+                />
+              )}
+              {section === 'permissions' && <PermissionsScreen />}
+              {section === 'activity' && <ActivityScreen />}
+              {section === 'agent' && (
+                <IdentityScreen
+                  initialName={profile.displayName}
+                  initialNickname={profile.nickname}
+                  profileValue={profile}
+                  onProfileChange={setProfile}
+                />
+              )}
+            </div>
+          )}
+        </Suspense>
       </main>
       {toast && (
         <div className="toast" role="status">
