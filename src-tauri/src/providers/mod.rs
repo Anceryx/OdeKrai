@@ -14,9 +14,17 @@ mod cancellation;
 mod chat_completions;
 mod credentials;
 mod endpoint;
+mod llm_provider;
 use endpoint::provider_endpoint;
 mod perplexity;
+mod stream;
+mod types;
 use credentials::{credential_entry, supports_credentials};
+use llm_provider::{AnthropicProvider, ChatCompletionsProvider, LlmProvider, PerplexityProvider};
+use stream::StreamState;
+pub use types::{
+    Block, ChatRequest, Message, ProviderCapabilities, ProviderEvent, ToolCall, ToolDef, Usage,
+};
 static INTERNAL_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 pub use cancellation::cancel_all;
 #[cfg(test)]
@@ -57,6 +65,7 @@ struct CatalogEntry {
     model_list_path: Option<String>,
     model_list_shape: Option<String>,
     host_rule: Option<String>,
+    capabilities: ProviderCapabilities,
 }
 
 fn catalog_entry(provider_id: &str) -> Option<CatalogEntry> {
@@ -79,13 +88,54 @@ pub struct ProviderCitation {
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProviderReply {
     pub content: String,
     pub citations: Vec<ProviderCitation>,
+    pub tool_calls: Vec<ToolCall>,
+    pub usage: Option<Usage>,
+    pub stop_reason: Option<String>,
 }
 
 #[derive(Default)]
 pub struct ProviderRequests(Mutex<HashMap<String, CancellationToken>>);
+
+fn effective_capabilities(
+    app: &tauri::AppHandle,
+    provider_id: &str,
+    model: &str,
+) -> Result<ProviderCapabilities, String> {
+    let capabilities = catalog_entry(provider_id)
+        .ok_or("O catálogo deste provedor não está disponível.")?
+        .capabilities;
+    if !capabilities.tools {
+        return Ok(capabilities);
+    }
+    let cached =
+        crate::history::cached_tool_support(app, provider_id, model).unwrap_or(Some(false));
+    Ok(capabilities_with_model_cache(capabilities, cached))
+}
+
+fn capabilities_with_model_cache(
+    mut capabilities: ProviderCapabilities,
+    cached_tools_supported: Option<bool>,
+) -> ProviderCapabilities {
+    if cached_tools_supported == Some(false) {
+        capabilities.tools = false;
+    }
+    capabilities
+}
+
+#[tauri::command]
+pub fn get_provider_capabilities(
+    caller: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    provider_id: String,
+    model: String,
+) -> Result<ProviderCapabilities, String> {
+    super::require_main(&caller)?;
+    effective_capabilities(&app, &provider_id, &model)
+}
 
 #[tauri::command]
 pub fn save_provider_credential(
@@ -402,13 +452,14 @@ async fn ping_provider_inner(provider_id: &str, base_url: &str, model: &str) -> 
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn send_provider_message(
+    app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
     state: State<'_, ProviderRequests>,
     security: State<'_, crate::security::SecurityState>,
     provider_id: String,
     base_url: String,
     model: String,
-    messages: Vec<ProviderMessage>,
+    messages: Vec<Message>,
     request_id: String,
 ) -> Result<ProviderReply, String> {
     super::require_main(&caller)?;
@@ -416,11 +467,13 @@ pub async fn send_provider_message(
         return Err("O OdeKrai está parado pelo kill switch.".into());
     }
     send_message_inner(
+        app,
         state,
         provider_id,
         base_url,
         model,
         messages,
+        Vec::new(),
         request_id,
         None,
         security,
@@ -438,9 +491,10 @@ pub async fn stream_provider_message(
     provider_id: String,
     base_url: String,
     model: String,
-    messages: Vec<ProviderMessage>,
+    messages: Vec<Message>,
+    tools: Vec<ToolDef>,
     request_id: String,
-    on_chunk: Channel<String>,
+    on_chunk: Channel<ProviderEvent>,
 ) -> Result<ProviderReply, String> {
     super::require_main(&caller)?;
     if security.is_halted() {
@@ -453,18 +507,20 @@ pub async fn stream_provider_message(
     if let Some(prompt) = super::agent_home::system_prompt(&app)? {
         messages.insert(
             0,
-            ProviderMessage {
+            Message {
                 role: "system".into(),
-                content: prompt,
+                blocks: vec![Block::Text { text: prompt }],
             },
         );
     }
     send_message_inner(
+        app,
         state,
         provider_id,
         base_url,
         model,
         messages,
+        tools,
         request_id,
         Some(on_chunk),
         security,
@@ -474,13 +530,15 @@ pub async fn stream_provider_message(
 
 #[allow(clippy::too_many_arguments)]
 async fn send_message_inner(
+    app: tauri::AppHandle,
     state: State<'_, ProviderRequests>,
     provider_id: String,
     base_url: String,
     model: String,
-    messages: Vec<ProviderMessage>,
+    messages: Vec<Message>,
+    tools: Vec<ToolDef>,
     request_id: String,
-    on_chunk: Option<Channel<String>>,
+    on_chunk: Option<Channel<ProviderEvent>>,
     security: State<'_, crate::security::SecurityState>,
 ) -> Result<ProviderReply, String> {
     if security.is_halted() {
@@ -497,19 +555,16 @@ async fn send_message_inner(
     if model.trim().is_empty() || model.len() > 200 {
         return Err("Informe um ID de modelo válido.".into());
     }
-    if messages.is_empty()
-        || messages.len() > 100
-        || messages.iter().any(|message| {
-            !matches!(message.role.as_str(), "system" | "user" | "assistant")
-                || message.content.len() > MAX_MESSAGE_BYTES
-        })
-        || messages
-            .iter()
-            .map(|message| message.content.len())
-            .sum::<usize>()
-            > MAX_MESSAGE_BYTES
-    {
+    if !valid_messages(&messages) || !valid_tools(&tools) {
         return Err("A conversa está vazia ou excede o limite permitido.".into());
+    }
+    if !tools.is_empty() {
+        let capabilities = effective_capabilities(&app, &provider_id, &model)?;
+        if !capabilities.tools || !capabilities.verified {
+            return Err(
+                "O uso de ferramentas não está verificado para este provedor ou modelo.".into(),
+            );
+        }
     }
     if on_chunk.is_none() && messages.iter().any(|message| message.role == "system") {
         return Err("A mensagem de sistema só pode ser criada pelo aplicativo.".into());
@@ -536,7 +591,18 @@ async fn send_message_inner(
 
     let result = tokio::select! {
         _ = cancellation.cancelled() => Err("Solicitação cancelada.".into()),
-        response = request_provider(&provider_id, &base_url, &model, &messages, on_chunk) => response,
+        response = request_provider(
+            &app,
+            &provider_id,
+            &base_url,
+            ChatRequest {
+                model,
+                messages,
+                tools,
+                streaming: on_chunk.is_some(),
+            },
+            on_chunk,
+        ) => response,
     };
     if let Ok(mut requests) = state.0.lock() {
         requests.remove(&request_id);
@@ -544,12 +610,58 @@ async fn send_message_inner(
     result
 }
 
+fn valid_messages(messages: &[Message]) -> bool {
+    if messages.is_empty() || messages.len() > 100 {
+        return false;
+    }
+    let mut total_bytes = 0usize;
+    for message in messages {
+        if !matches!(
+            message.role.as_str(),
+            "system" | "user" | "assistant" | "tool"
+        ) {
+            return false;
+        }
+        for block in &message.blocks {
+            let size = match block {
+                Block::Text { text } | Block::ToolResult { content: text, .. } => text.len(),
+                Block::ToolCall { id, name, args } => {
+                    id.len() + name.len() + args.to_string().len()
+                }
+            };
+            if size > MAX_MESSAGE_BYTES {
+                return false;
+            }
+            total_bytes = total_bytes.saturating_add(size);
+            if total_bytes > MAX_MESSAGE_BYTES {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+fn valid_tools(tools: &[ToolDef]) -> bool {
+    tools.len() <= 64
+        && tools.iter().all(|tool| {
+            !tool.name.is_empty()
+                && tool.name.len() <= 64
+                && tool
+                    .name
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+                && tool.description.len() <= 4_000
+                && tool.json_schema.is_object()
+                && tool.json_schema.to_string().len() <= 64 * 1024
+        })
+}
+
 async fn request_provider(
+    app: &tauri::AppHandle,
     provider_id: &str,
     base_url: &str,
-    model: &str,
-    messages: &[ProviderMessage],
-    on_chunk: Option<Channel<String>>,
+    request_data: ChatRequest,
+    on_chunk: Option<Channel<ProviderEvent>>,
 ) -> Result<ProviderReply, String> {
     let endpoint = provider_endpoint(provider_id, base_url)?;
     let entry = credential_entry(provider_id)?;
@@ -566,109 +678,92 @@ async fn request_provider(
         .build()
         .map_err(|_| "Não foi possível preparar uma conexão segura.".to_string())?;
 
-    let request = match provider_id {
-        "anthropic" => client
-            .post(endpoint)
-            .pipe_auth(provider_id, &credential)?
-            .header("anthropic-version", "2023-06-01")
-            .json(&anthropic::request_body(
-                model,
-                messages,
-                on_chunk.is_some(),
-            )),
-        "perplexity" => client
-            .post(endpoint)
-            .pipe_auth(provider_id, &credential)?
-            .json(&perplexity::perplexity_body(model, messages)),
-        "azure-openai" => client
-            .post(endpoint)
-            .pipe_auth(provider_id, &credential)?
-            .json(&chat_completions::request_body(
-                model,
-                messages,
-                on_chunk.is_some(),
-            )),
-        _ => client
-            .post(endpoint)
-            .pipe_auth(provider_id, &credential)?
-            .json(&chat_completions::request_body(
-                model,
-                messages,
-                on_chunk.is_some(),
-            )),
+    let chat_capabilities = effective_capabilities(app, provider_id, &request_data.model)?;
+    let protocol_capabilities = match provider_id {
+        "anthropic" => AnthropicProvider.capabilities(),
+        "perplexity" => PerplexityProvider.capabilities(),
+        _ => ChatCompletionsProvider {
+            capabilities: chat_capabilities,
+            include_usage: provider_id == "openai",
+        }
+        .capabilities(),
     };
+    let capabilities = ProviderCapabilities {
+        streaming: chat_capabilities.streaming && protocol_capabilities.streaming,
+        tools: chat_capabilities.tools && protocol_capabilities.tools,
+        vision: chat_capabilities.vision && protocol_capabilities.vision,
+        image_generation: chat_capabilities.image_generation
+            && protocol_capabilities.image_generation,
+        verified: chat_capabilities.verified && protocol_capabilities.verified,
+    };
+    if (!request_data.tools.is_empty()
+        || request_data.messages.iter().any(|message| {
+            message
+                .blocks
+                .iter()
+                .any(|block| matches!(block, Block::ToolCall { .. } | Block::ToolResult { .. }))
+        }))
+        && (!capabilities.tools || !capabilities.verified)
+    {
+        return Err("O uso de ferramentas não está verificado para este provedor.".into());
+    }
 
-    let mut response = request
-        .send()
-        .await
-        .map_err(|error| safe_transport_error(&error))?;
+    let response = match provider_id {
+        "anthropic" => {
+            AnthropicProvider
+                .chat_stream(&client, endpoint, provider_id, &credential, &request_data)
+                .await?
+        }
+        "perplexity" => {
+            PerplexityProvider
+                .chat_stream(&client, endpoint, provider_id, &credential, &request_data)
+                .await?
+        }
+        _ => {
+            ChatCompletionsProvider {
+                capabilities: chat_capabilities,
+                include_usage: provider_id == "openai",
+            }
+            .chat_stream(&client, endpoint, provider_id, &credential, &request_data)
+            .await?
+        }
+    };
     let status = response.status();
     if !status.is_success() {
+        if status.as_u16() == 400 && !request_data.tools.is_empty() {
+            let response_body = response.text().await.unwrap_or_default();
+            if cache_unsupported_tools_response(status.as_u16(), true, &response_body, || {
+                crate::history::cache_tools_unsupported(app, provider_id, &request_data.model)
+            })? {
+                let message =
+                    "Este modelo recusou o uso de ferramentas. O OdeKrai guardou essa informação para este modelo."
+                        .to_string();
+                if let Some(channel) = on_chunk.as_ref() {
+                    let _ = channel.send(ProviderEvent::Error {
+                        kind: "unsupported_tools".into(),
+                        status: Some(400),
+                        message: message.clone(),
+                    });
+                }
+                return Err(message);
+            }
+        }
+        if let Some(channel) = on_chunk.as_ref() {
+            let status_code = status.as_u16();
+            let _ = channel.send(ProviderEvent::Error {
+                kind: "http".into(),
+                status: Some(status_code),
+                message: provider_http_error(status_code),
+            });
+        }
         return Err(provider_http_error(status.as_u16()));
     }
     if let Some(channel) = on_chunk {
         if provider_id != "perplexity" {
-            let mut pending = Vec::new();
-            let mut content = String::new();
-            let mut finished = false;
-            while let Some(chunk) = response
-                .chunk()
-                .await
-                .map_err(|error| safe_transport_error(&error))?
-            {
-                pending.extend_from_slice(&chunk);
-                if pending.len() > MAX_MESSAGE_BYTES {
-                    return Err("A resposta excede o limite permitido.".into());
-                }
-                while let Some((end, delimiter_len)) = pending
-                    .windows(4)
-                    .position(|part| part == b"\r\n\r\n")
-                    .map(|end| (end, 4))
-                    .or_else(|| {
-                        pending
-                            .windows(2)
-                            .position(|part| part == b"\n\n")
-                            .map(|end| (end, 2))
-                    })
-                {
-                    let event = pending.drain(..end + delimiter_len).collect::<Vec<_>>();
-                    for line in String::from_utf8_lossy(&event).lines() {
-                        if let Some(data) = line.trim_end_matches('\r').strip_prefix("data: ") {
-                            if data == "[DONE]" {
-                                finished = true;
-                                continue;
-                            }
-                            let payload: Value = serde_json::from_str(data).map_err(|_| {
-                                "O provedor retornou um evento inválido.".to_string()
-                            })?;
-                            if payload["type"] == "message_stop" {
-                                finished = true;
-                            }
-                            if payload["type"] == "error" {
-                                return Err("O provedor interrompeu a resposta.".into());
-                            }
-                            let delta = stream_delta(provider_id, &payload);
-                            if let Some(delta) = delta {
-                                content.push_str(delta);
-                                if content.len() > MAX_MESSAGE_BYTES {
-                                    return Err("A resposta excede o limite permitido.".into());
-                                }
-                                let _ = channel.send(delta.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-            if !finished {
-                return Err("A resposta do provedor foi interrompida.".into());
-            }
-            if content.trim().is_empty() {
-                return Err("O provedor retornou uma resposta vazia.".into());
-            }
-            return Ok(ProviderReply {
-                content,
-                citations: Vec::new(),
-            });
+            return consume_stream_response(provider_id, response, move |event| {
+                let _ = channel.send(event);
+            })
+            .await;
         }
     }
     let payload: Value = response
@@ -678,6 +773,147 @@ async fn request_provider(
     parse_provider_reply(provider_id, &payload)
 }
 
+fn looks_like_unsupported_tools(response_body: &str) -> bool {
+    let body = response_body.to_ascii_lowercase();
+    [
+        "does not support tools",
+        "doesn't support tools",
+        "does not support tool calling",
+        "tool calling is not supported",
+        "function calling is not supported",
+        "tools are not supported for this model",
+        "tool use is not supported for this model",
+    ]
+    .iter()
+    .any(|phrase| body.contains(phrase))
+}
+
+fn cache_unsupported_tools_response(
+    status: u16,
+    tools_requested: bool,
+    response_body: &str,
+    cache: impl FnOnce() -> Result<(), String>,
+) -> Result<bool, String> {
+    if status == 400 && tools_requested && looks_like_unsupported_tools(response_body) {
+        cache()?;
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+async fn consume_stream_response<F>(
+    provider_id: &str,
+    mut response: reqwest::Response,
+    mut emit: F,
+) -> Result<ProviderReply, String>
+where
+    F: FnMut(ProviderEvent),
+{
+    let mut pending = Vec::new();
+    let mut content = String::new();
+    let mut finished = false;
+    let mut stream_state = StreamState::default();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| safe_transport_error(&error))?
+    {
+        pending.extend_from_slice(&chunk);
+        if pending.len() > MAX_MESSAGE_BYTES {
+            return Err("A resposta excede o limite permitido.".into());
+        }
+        while let Some((end, delimiter_len)) = pending
+            .windows(4)
+            .position(|part| part == b"\r\n\r\n")
+            .map(|end| (end, 4))
+            .or_else(|| {
+                pending
+                    .windows(2)
+                    .position(|part| part == b"\n\n")
+                    .map(|end| (end, 2))
+            })
+        {
+            let event = pending.drain(..end + delimiter_len).collect::<Vec<_>>();
+            for line in String::from_utf8_lossy(&event).lines() {
+                if let Some(data) = line.trim_end_matches('\r').strip_prefix("data: ") {
+                    if data == "[DONE]" {
+                        finished = true;
+                        match stream_state.finish() {
+                            Ok(outputs) => {
+                                for output in outputs {
+                                    if let ProviderEvent::TextDelta { text } = &output {
+                                        content.push_str(text);
+                                    }
+                                    emit(output);
+                                }
+                            }
+                            Err(error) => {
+                                emit(ProviderEvent::Error {
+                                    kind: "invalid_tool_arguments".into(),
+                                    status: None,
+                                    message: error.clone(),
+                                });
+                                return Err(error);
+                            }
+                        }
+                        continue;
+                    }
+                    let payload: Value = match serde_json::from_str(data) {
+                        Ok(payload) => payload,
+                        Err(_) => {
+                            let message = "O provedor retornou um evento inválido.".to_string();
+                            emit(ProviderEvent::Error {
+                                kind: "invalid_event".into(),
+                                status: None,
+                                message: message.clone(),
+                            });
+                            return Err(message);
+                        }
+                    };
+                    if payload["type"] == "message_stop" {
+                        finished = true;
+                    }
+                    let outputs = match stream_state.consume(provider_id, &payload) {
+                        Ok(outputs) => outputs,
+                        Err(error) => {
+                            emit(ProviderEvent::Error {
+                                kind: "provider_stream".into(),
+                                status: None,
+                                message: error.clone(),
+                            });
+                            return Err(error);
+                        }
+                    };
+                    for output in outputs {
+                        if let ProviderEvent::TextDelta { text } = &output {
+                            content.push_str(text);
+                            if content.len() > MAX_MESSAGE_BYTES {
+                                return Err("A resposta excede o limite permitido.".into());
+                            }
+                        }
+                        emit(output);
+                    }
+                }
+            }
+        }
+    }
+    if !finished {
+        return Err("A resposta do provedor foi interrompida.".into());
+    }
+    let tool_calls = stream_state.tool_calls().to_vec();
+    if content.trim().is_empty() && tool_calls.is_empty() {
+        return Err("O provedor retornou uma resposta vazia.".into());
+    }
+    Ok(ProviderReply {
+        content,
+        citations: Vec::new(),
+        tool_calls,
+        usage: stream_state.usage(),
+        stop_reason: stream_state.stop_reason(),
+    })
+}
+#[cfg(test)]
 fn stream_delta<'a>(provider_id: &str, payload: &'a Value) -> Option<&'a str> {
     if provider_id == "anthropic" {
         if payload["type"] == "content_block_delta" && payload["delta"]["type"] == "text_delta" {
@@ -750,30 +986,94 @@ fn parse_provider_reply(provider_id: &str, payload: &Value) -> Result<ProviderRe
         return perplexity::parse_reply(payload);
     }
 
-    let content = if provider_id == "anthropic" {
-        payload["content"]
+    let (content, tool_calls, usage, stop_reason) = if provider_id == "anthropic" {
+        let blocks = payload["content"]
             .as_array()
-            .into_iter()
-            .flatten()
+            .ok_or_else(|| "O provedor retornou resposta em formato inesperado.".to_string())?;
+        let content = blocks
+            .iter()
             .filter(|part| part["type"] == "text")
             .filter_map(|part| part["text"].as_str())
             .collect::<Vec<_>>()
-            .join("")
+            .join("");
+        let tool_calls = blocks
+            .iter()
+            .filter(|part| part["type"] == "tool_use")
+            .map(|part| {
+                let args = part
+                    .get("input")
+                    .cloned()
+                    .filter(Value::is_object)
+                    .ok_or_else(|| {
+                        "O provedor retornou argumentos de ferramenta inválidos.".to_string()
+                    })?;
+                Ok(ToolCall {
+                    id: part["id"].as_str().unwrap_or_default().to_owned(),
+                    name: part["name"].as_str().unwrap_or_default().to_owned(),
+                    args,
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        let usage = Some(Usage {
+            input: payload["usage"]["input_tokens"].as_u64().unwrap_or(0),
+            output: payload["usage"]["output_tokens"].as_u64().unwrap_or(0),
+        });
+        (
+            content,
+            tool_calls,
+            usage,
+            payload["stop_reason"].as_str().map(str::to_owned),
+        )
     } else {
-        payload["choices"][0]["message"]["content"]
-            .as_str()
-            .unwrap_or_default()
-            .to_string()
+        let message = &payload["choices"][0]["message"];
+        let content = message["content"].as_str().unwrap_or_default().to_owned();
+        let tool_calls = message["tool_calls"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|call| {
+                let raw = call["function"]["arguments"].as_str().unwrap_or_default();
+                let args = serde_json::from_str(raw).map_err(|_| {
+                    "O provedor retornou argumentos de ferramenta inválidos.".to_string()
+                })?;
+                Ok(ToolCall {
+                    id: call["id"].as_str().unwrap_or_default().to_owned(),
+                    name: call["function"]["name"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_owned(),
+                    args,
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        let usage = payload
+            .get("usage")
+            .filter(|value| value.is_object())
+            .map(|usage| Usage {
+                input: usage["prompt_tokens"].as_u64().unwrap_or(0),
+                output: usage["completion_tokens"].as_u64().unwrap_or(0),
+            });
+        (
+            content,
+            tool_calls,
+            usage,
+            payload["choices"][0]["finish_reason"]
+                .as_str()
+                .map(str::to_owned),
+        )
     };
-    if content.trim().is_empty() {
+
+    if content.trim().is_empty() && tool_calls.is_empty() {
         return Err("O provedor retornou uma resposta vazia ou em formato inesperado.".into());
     }
     Ok(ProviderReply {
         content: content.trim().to_string(),
         citations: Vec::new(),
+        tool_calls,
+        usage,
+        stop_reason,
     })
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -872,6 +1172,128 @@ mod tests {
         assert_eq!(anthropic.auth_header.as_deref(), Some("x-api-key"));
         assert_eq!(anthropic.chat_path.as_deref(), Some("/v1/messages"));
         assert_eq!(anthropic.model_list_path.as_deref(), Some("/v1/models"));
+    }
+
+    #[test]
+    fn provider_catalog_declares_only_verified_tool_adapters() {
+        let entries = serde_json::from_str::<Vec<CatalogEntry>>(include_str!(
+            "../../resources/provider-catalog.json"
+        ))
+        .unwrap();
+        for entry in entries {
+            if entry.id == "openai" || entry.id == "anthropic" {
+                assert!(entry.capabilities.tools);
+                assert!(entry.capabilities.verified);
+            } else {
+                assert!(!entry.capabilities.tools, "{}", entry.id);
+                assert!(!entry.capabilities.verified, "{}", entry.id);
+            }
+        }
+    }
+
+    #[test]
+    fn cached_model_rejection_overrides_declared_tools_support() {
+        let declared = ProviderCapabilities {
+            streaming: true,
+            tools: true,
+            vision: false,
+            image_generation: false,
+            verified: true,
+        };
+        assert!(!capabilities_with_model_cache(declared, Some(false)).tools);
+        assert!(capabilities_with_model_cache(declared, None).tools);
+    }
+
+    #[test]
+    fn unsupported_tool_response_detection_is_narrow_and_sanitized() {
+        assert!(looks_like_unsupported_tools(
+            r#"{"error":{"message":"This model does not support tools"}}"#
+        ));
+        assert!(!looks_like_unsupported_tools(
+            r#"{"error":{"message":"Invalid JSON body"}}"#
+        ));
+    }
+
+    #[test]
+    fn mock_http_400_for_unsupported_tools_populates_model_cache_without_exposing_body() {
+        let mut cache_written = false;
+        let provider_body =
+            r#"{"error":{"message":"This model does not support tools; secret detail"}}"#;
+        let handled = cache_unsupported_tools_response(400, true, provider_body, || {
+            cache_written = true;
+            Ok(())
+        })
+        .unwrap();
+        assert!(handled && cache_written);
+        let safe_message = provider_http_error(400);
+        assert!(!safe_message.contains("secret detail"));
+
+        let mut not_cached = false;
+        assert!(
+            !cache_unsupported_tools_response(400, true, "Invalid request", || {
+                not_cached = true;
+                Ok(())
+            })
+            .unwrap()
+        );
+        assert!(!not_cached);
+    }
+
+    #[test]
+    fn parses_nonstream_tool_calls_and_usage_for_both_verified_adapters() {
+        let openai = parse_provider_reply(
+            "openai",
+            &json!({
+                "choices": [{ "finish_reason": "tool_calls", "message": {
+                    "content": null,
+                    "tool_calls": [{ "id": "call-1", "function": {
+                        "name": "lookup", "arguments": "{\"q\":\"ok\"}"
+                    }}]
+                }}],
+                "usage": { "prompt_tokens": 8, "completion_tokens": 2 }
+            }),
+        )
+        .unwrap();
+        assert!(openai.content.is_empty());
+        assert_eq!(openai.tool_calls[0].args, json!({ "q": "ok" }));
+        assert_eq!(
+            openai.usage,
+            Some(Usage {
+                input: 8,
+                output: 2
+            })
+        );
+
+        let anthropic = parse_provider_reply(
+            "anthropic",
+            &json!({
+                "stop_reason": "tool_use",
+                "content": [{ "type": "tool_use", "id": "toolu-1", "name": "lookup", "input": { "q": "ok" } }],
+                "usage": { "input_tokens": 8, "output_tokens": 2 }
+            }),
+        )
+        .unwrap();
+        assert_eq!(anthropic.tool_calls[0].args, json!({ "q": "ok" }));
+        assert_eq!(
+            anthropic.usage,
+            Some(Usage {
+                input: 8,
+                output: 2
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_nonstream_tool_arguments() {
+        let response = json!({
+            "choices": [{ "finish_reason": "tool_calls", "message": {
+                "content": null,
+                "tool_calls": [{ "id": "call-1", "function": {
+                    "name": "lookup", "arguments": "{broken"
+                }}]
+            }}]
+        });
+        assert!(parse_provider_reply("openai", &response).is_err());
     }
 
     #[test]
@@ -1044,5 +1466,159 @@ mod tests {
             ),
             Some("Tudo bem")
         );
+    }
+
+    #[tokio::test]
+    async fn mock_chat_completions_stream_emits_text_tool_call_usage_and_done() {
+        use std::io::{Read, Write};
+
+        let first_arguments = r#"{"q":"#;
+        let second_arguments = r#""ok"}"#;
+        let frames = [
+            json!({ "choices": [{ "delta": { "content": "Texto" } }] }),
+            json!({ "choices": [{ "delta": { "tool_calls": [{ "index": 0, "id": "call-1", "function": { "name": "lookup", "arguments": first_arguments } }] } }] }),
+            json!({ "choices": [{ "delta": { "tool_calls": [{ "index": 0, "function": { "arguments": second_arguments } }] } }] }),
+            json!({ "choices": [{ "delta": {}, "finish_reason": "tool_calls" }] }),
+            json!({ "choices": [], "usage": { "prompt_tokens": 11, "completion_tokens": 5 } }),
+        ];
+        let body = frames
+            .iter()
+            .map(|frame| format!("data: {frame}\n\n"))
+            .collect::<String>()
+            + "data: [DONE]\n\n";
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server_body = body.clone();
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0u8; 1024];
+            loop {
+                let read = socket.read(&mut chunk).unwrap();
+                if read == 0 {
+                    break;
+                }
+                request.extend_from_slice(&chunk[..read]);
+                if request.windows(4).any(|part| part == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            write!(
+                socket,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                server_body.len(),
+                server_body
+            )
+            .unwrap();
+        });
+        let response = Client::new()
+            .get(format!("http://{address}/stream"))
+            .send()
+            .await
+            .unwrap();
+        let mut events = Vec::new();
+        let reply = consume_stream_response("openai", response, |event| events.push(event))
+            .await
+            .unwrap();
+        server.join().unwrap();
+
+        assert_eq!(reply.content, "Texto");
+        assert_eq!(reply.tool_calls.len(), 1);
+        assert_eq!(reply.tool_calls[0].args, json!({ "q": "ok" }));
+        assert_eq!(
+            reply.usage,
+            Some(Usage {
+                input: 11,
+                output: 5
+            })
+        );
+        assert!(events.contains(&ProviderEvent::TextDelta {
+            text: "Texto".into()
+        }));
+        assert!(events.contains(&ProviderEvent::Usage {
+            input: 11,
+            output: 5
+        }));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            ProviderEvent::ToolCallComplete { id, .. } if id == "call-1"
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            ProviderEvent::Done {
+                stop_reason: Some(reason)
+            } if reason == "tool_calls"
+        )));
+    }
+
+    #[tokio::test]
+    async fn cancellation_after_partial_stream_chunk_drops_the_remaining_response() {
+        use std::io::{Read, Write};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0u8; 1024];
+            while !request.windows(4).any(|part| part == b"\r\n\r\n") {
+                let count = socket.read(&mut buffer).unwrap();
+                if count == 0 {
+                    return;
+                }
+                request.extend_from_slice(&buffer[..count]);
+            }
+            let partial = format!(
+                "data: {}\n\n",
+                json!({ "choices": [{ "delta": {
+                    "content": "received",
+                    "tool_calls": [{ "index": 0, "id": "call-1", "function": {
+                        "name": "lookup", "arguments": "{\\\"key\\\":"
+                    }}]
+                }}] })
+            );
+            let _ = write!(
+                socket,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n{:X}\r\n{}\r\n",
+                partial.len(), partial
+            );
+            let _ = socket.flush();
+            std::thread::sleep(Duration::from_millis(500));
+            let _ = socket.write_all(b"0\r\n\r\n");
+        });
+
+        let response = Client::new()
+            .get(format!("http://{address}/stream"))
+            .send()
+            .await
+            .unwrap();
+        let (text_seen, text_received) = tokio::sync::oneshot::channel();
+        let mut text_seen = Some(text_seen);
+        let consume = consume_stream_response("openai", response, move |event| {
+            if matches!(event, ProviderEvent::TextDelta { .. }) {
+                if let Some(sender) = text_seen.take() {
+                    let _ = sender.send(());
+                }
+            }
+        });
+        tokio::pin!(consume);
+        let cancellation = CancellationToken::new();
+        let cancel_after_first_delta = cancellation.clone();
+        tokio::select! {
+            result = &mut consume => panic!("stream terminou antes do cancelamento: {result:?}"),
+            _ = async move {
+                let _ = text_received.await;
+                cancel_after_first_delta.cancel();
+                cancellation.cancelled().await;
+            } => {}
+        }
+        drop(consume);
+        server.join().unwrap();
     }
 }

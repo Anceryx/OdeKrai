@@ -430,6 +430,7 @@ pub fn run() {
             providers::list_provider_models,
             providers::test_provider_connection,
             providers::ping_provider,
+            providers::get_provider_capabilities,
             profile::get_profile,
             profile::save_profile,
             profile::save_profile_avatar,

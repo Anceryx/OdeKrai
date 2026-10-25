@@ -1,4 +1,4 @@
-use super::{ProviderCitation, ProviderMessage, ProviderReply};
+use super::{Block, ChatRequest, ProviderCitation, ProviderMessage, ProviderReply};
 use reqwest::Url;
 use serde_json::{json, Value};
 
@@ -20,6 +20,25 @@ pub(super) fn perplexity_body(model: &str, messages: &[ProviderMessage]) -> Valu
         body["instructions"] = json!(instructions);
     }
     body
+}
+
+pub(super) fn chat_request_body(request: &ChatRequest) -> Value {
+    let messages = request
+        .messages
+        .iter()
+        .map(|message| ProviderMessage {
+            role: message.role.clone(),
+            content: message
+                .blocks
+                .iter()
+                .filter_map(|block| match block {
+                    Block::Text { text } => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect::<String>(),
+        })
+        .collect::<Vec<_>>();
+    perplexity_body(&request.model, &messages)
 }
 
 pub(super) fn parse_reply(payload: &Value) -> Result<ProviderReply, String> {
@@ -51,7 +70,13 @@ pub(super) fn parse_reply(payload: &Value) -> Result<ProviderReply, String> {
     }
     citations.sort_by(|left, right| left.url.cmp(&right.url));
     citations.dedup_by(|left, right| left.url == right.url);
-    Ok(ProviderReply { content, citations })
+    Ok(ProviderReply {
+        content,
+        citations,
+        tool_calls: Vec::new(),
+        usage: None,
+        stop_reason: None,
+    })
 }
 
 fn citation_from_value(value: &Value) -> Option<ProviderCitation> {

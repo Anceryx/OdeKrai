@@ -38,8 +38,74 @@ fn init_schema(db: &Connection) -> Result<(), String> {
         CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
         CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('user','assistant')), content TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
         CREATE INDEX IF NOT EXISTS messages_conversation ON messages(conversation_id, id);
-        CREATE TABLE IF NOT EXISTS pet_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);")
+        CREATE TABLE IF NOT EXISTS pet_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS provider_tool_support (
+            provider_id TEXT NOT NULL,
+            model TEXT NOT NULL,
+            tools_supported INTEGER NOT NULL CHECK(tools_supported IN (0, 1)),
+            PRIMARY KEY(provider_id, model)
+        );")
         .map_err(|_| "Não foi possível preparar o histórico local.".to_string())?;
+    Ok(())
+}
+
+pub(crate) fn cached_tool_support(
+    app: &tauri::AppHandle,
+    provider_id: &str,
+    model: &str,
+) -> Result<Option<bool>, String> {
+    validate_provider_model(provider_id, model)?;
+    cached_tool_support_db(&database(app)?, provider_id, model)
+}
+
+pub(crate) fn cache_tools_unsupported(
+    app: &tauri::AppHandle,
+    provider_id: &str,
+    model: &str,
+) -> Result<(), String> {
+    validate_provider_model(provider_id, model)?;
+    cache_tool_support_db(&database(app)?, provider_id, model, false)
+}
+
+fn validate_provider_model(provider_id: &str, model: &str) -> Result<(), String> {
+    if provider_id.is_empty()
+        || provider_id.len() > 80
+        || model.trim().is_empty()
+        || model.len() > 200
+        || provider_id.chars().any(char::is_control)
+        || model.chars().any(char::is_control)
+    {
+        return Err("O provedor ou modelo informado é inválido.".into());
+    }
+    Ok(())
+}
+
+fn cached_tool_support_db(
+    db: &Connection,
+    provider_id: &str,
+    model: &str,
+) -> Result<Option<bool>, String> {
+    db.query_row(
+        "SELECT tools_supported FROM provider_tool_support WHERE provider_id=?1 AND model=?2",
+        params![provider_id, model],
+        |row| row.get::<_, bool>(0),
+    )
+    .optional()
+    .map_err(|_| "Não foi possível consultar as capacidades locais do modelo.".to_string())
+}
+
+fn cache_tool_support_db(
+    db: &Connection,
+    provider_id: &str,
+    model: &str,
+    supported: bool,
+) -> Result<(), String> {
+    db.execute(
+        "INSERT INTO provider_tool_support(provider_id, model, tools_supported) VALUES (?1, ?2, ?3)
+         ON CONFLICT(provider_id, model) DO UPDATE SET tools_supported=excluded.tools_supported",
+        params![provider_id, model, supported],
+    )
+    .map_err(|_| "Não foi possível atualizar as capacidades locais do modelo.".to_string())?;
     Ok(())
 }
 
@@ -296,6 +362,29 @@ mod tests {
         let db = Connection::open_in_memory().unwrap();
         init_schema(&db).unwrap();
         assert!(db.execute("INSERT INTO messages (conversation_id, role, content) VALUES ('missing','user','olá')", []).is_err());
+    }
+
+    #[test]
+    fn tool_support_cache_is_scoped_to_provider_and_model() {
+        let db = Connection::open_in_memory().unwrap();
+        init_schema(&db).unwrap();
+        assert_eq!(
+            cached_tool_support_db(&db, "openai", "model-a").unwrap(),
+            None
+        );
+        cache_tool_support_db(&db, "openai", "model-a", false).unwrap();
+        assert_eq!(
+            cached_tool_support_db(&db, "openai", "model-a").unwrap(),
+            Some(false)
+        );
+        assert_eq!(
+            cached_tool_support_db(&db, "openai", "model-b").unwrap(),
+            None
+        );
+        assert_eq!(
+            cached_tool_support_db(&db, "anthropic", "model-a").unwrap(),
+            None
+        );
     }
 
     #[test]

@@ -327,10 +327,17 @@ function MainApp() {
           },
           ...items,
         ]);
-      const onChunk = new Channel<string>();
+      const onChunk = new Channel<
+        | { type: 'textDelta'; text: string }
+        | { type: 'toolCallComplete'; id: string; name: string; args: unknown }
+        | { type: 'usage'; input: number; output: number }
+        | { type: 'done'; stopReason: string | null }
+        | { type: 'error'; kind: string; status: number | null; message: string }
+      >();
       let streamed = '';
-      onChunk.onmessage = (chunk) => {
-        streamed += chunk;
+      onChunk.onmessage = (event) => {
+        if (event.type !== 'textDelta') return;
+        streamed += event.text;
         setMessages([
           ...next,
           { role: 'assistant', content: streamed, created_at: Math.floor(Date.now() / 1000) },
@@ -342,7 +349,11 @@ function MainApp() {
           providerId: provider.id,
           baseUrl: activeProvider.baseUrl,
           model: activeProvider.model,
-          messages: next,
+          messages: next.map((message) => ({
+            role: message.role,
+            blocks: [{ type: 'text' as const, text: message.content }],
+          })),
+          tools: [],
           requestId,
           onChunk,
         },

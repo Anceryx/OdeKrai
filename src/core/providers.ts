@@ -32,6 +32,15 @@ export type ProviderCatalogEntry = {
   verifiedAt: string | null;
   verification: 'verified' | 'unverified';
   fields: string[];
+  capabilities: ProviderCapabilities;
+};
+
+export type ProviderCapabilities = {
+  streaming: boolean;
+  tools: boolean;
+  vision: boolean;
+  imageGeneration: boolean;
+  verified: boolean;
 };
 
 import rawCatalog from '../../src-tauri/resources/provider-catalog.json';

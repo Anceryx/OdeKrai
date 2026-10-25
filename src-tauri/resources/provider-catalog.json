@@ -10,7 +10,14 @@
     "docsUrl": "https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create",
     "verifiedAt": "2026-10-24",
     "verification": "verified",
-    "fields": []
+    "fields": [],
+    "capabilities": {
+      "streaming": true,
+      "tools": true,
+      "vision": false,
+      "imageGeneration": false,
+      "verified": true
+    }
   },
   {
     "id": "anthropic",
@@ -23,7 +30,14 @@
     "docsUrl": "https://platform.claude.com/docs/en/api/messages/create",
     "verifiedAt": "2026-10-24",
     "verification": "verified",
-    "fields": []
+    "fields": [],
+    "capabilities": {
+      "streaming": true,
+      "tools": true,
+      "vision": false,
+      "imageGeneration": false,
+      "verified": true
+    }
   },
   {
     "id": "gemini",
@@ -36,7 +50,14 @@
     "docsUrl": "https://ai.google.dev/gemini-api/docs/openai",
     "verifiedAt": "2026-10-24",
     "verification": "verified",
-    "fields": []
+    "fields": [],
+    "capabilities": {
+      "streaming": true,
+      "tools": false,
+      "vision": false,
+      "imageGeneration": false,
+      "verified": false
+    }
   },
   {
     "id": "xai",
@@ -49,7 +70,14 @@
     "docsUrl": "https://docs.x.ai/developers/rest-api-reference/inference/chat-completions",
     "verifiedAt": "2026-10-24",
     "verification": "verified",
-    "fields": []
+    "fields": [],
+    "capabilities": {
+      "streaming": true,
+      "tools": false,
+      "vision": false,
+      "imageGeneration": false,
+      "verified": false
+    }
   },
   {
     "id": "mistral",
@@ -62,7 +90,14 @@
     "docsUrl": "https://docs.mistral.ai/api/endpoint/models",
     "verifiedAt": "2026-10-24",
     "verification": "verified",
-    "fields": []
+    "fields": [],
+    "capabilities": {
+      "streaming": true,
+      "tools": false,
+      "vision": false,
+      "imageGeneration": false,
+      "verified": false
+    }
   },
   {
     "id": "cohere",
@@ -75,7 +110,14 @@
     "docsUrl": "https://docs.cohere.com/docs/compatibility-api",
     "verifiedAt": "2026-10-24",
     "verification": "verified",
-    "fields": []
+    "fields": [],
+    "capabilities": {
+      "streaming": true,
+      "tools": false,
+      "vision": false,
+      "imageGeneration": false,
+      "verified": false
+    }
   },
   {
     "id": "groq",
@@ -88,7 +130,14 @@
     "docsUrl": "https://console.groq.com/docs/api-reference",
     "verifiedAt": "2026-10-24",
     "verification": "verified",
-    "fields": []
+    "fields": [],
+    "capabilities": {
+      "streaming": true,
+      "tools": false,
+      "vision": false,
+      "imageGeneration": false,
+      "verified": false
+    }
   },
   {
     "id": "cerebras",
@@ -101,7 +150,14 @@
     "docsUrl": "https://inference-docs.cerebras.ai/api-reference/chat-completions",
     "verifiedAt": "2026-10-25",
     "verification": "verified",
-    "fields": []
+    "fields": [],
+    "capabilities": {
+      "streaming": true,
+      "tools": false,
+      "vision": false,
+      "imageGeneration": false,
+      "verified": false
+    }
   },
   {
     "id": "deepseek",
@@ -114,7 +170,14 @@
     "docsUrl": "https://api-docs.deepseek.com/api/list-models/",
     "verifiedAt": "2026-10-24",
     "verification": "verified",
-    "fields": []
+    "fields": [],
+    "capabilities": {
+      "streaming": true,
+      "tools": false,
+      "vision": false,
+      "imageGeneration": false,
+      "verified": false
+    }
   },
   {
     "id": "perplexity",
@@ -127,7 +190,14 @@
     "docsUrl": "https://docs.perplexity.ai/docs/agent-api/quickstart",
     "verifiedAt": "2026-10-24",
     "verification": "verified",
-    "fields": []
+    "fields": [],
+    "capabilities": {
+      "streaming": true,
+      "tools": false,
+      "vision": false,
+      "imageGeneration": false,
+      "verified": false
+    }
   },
   {
     "id": "together",
@@ -140,7 +210,14 @@
     "docsUrl": "https://docs.together.ai/docs/inference/openai-compatibility",
     "verifiedAt": null,
     "verification": "unverified",
-    "fields": []
+    "fields": [],
+    "capabilities": {
+      "streaming": true,
+      "tools": false,
+      "vision": false,
+      "imageGeneration": false,
+      "verified": false
+    }
   },
   {
     "id": "openrouter",
@@ -153,7 +230,14 @@
     "docsUrl": "https://openrouter.ai/docs/api/api-reference/models/get-models",
     "verifiedAt": "2026-10-24",
     "verification": "verified",
-    "fields": []
+    "fields": [],
+    "capabilities": {
+      "streaming": true,
+      "tools": false,
+      "vision": false,
+      "imageGeneration": false,
+      "verified": false
+    }
   },
   {
     "id": "fireworks",
@@ -166,7 +250,14 @@
     "docsUrl": "https://docs.fireworks.ai/guides/querying-text-models",
     "verifiedAt": null,
     "verification": "unverified",
-    "fields": []
+    "fields": [],
+    "capabilities": {
+      "streaming": true,
+      "tools": false,
+      "vision": false,
+      "imageGeneration": false,
+      "verified": false
+    }
   },
   {
     "id": "azure-openai",
@@ -179,7 +270,14 @@
     "docsUrl": "https://learn.microsoft.com/en-us/rest/api/aifoundry/azureopenai/models",
     "verifiedAt": "2026-10-24",
     "verification": "verified",
-    "fields": ["resourceHost", "deployment"]
+    "fields": ["resourceHost", "deployment"],
+    "capabilities": {
+      "streaming": true,
+      "tools": false,
+      "vision": false,
+      "imageGeneration": false,
+      "verified": false
+    }
   },
   {
     "id": "bedrock",
@@ -192,7 +290,14 @@
     "docsUrl": "https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html",
     "verifiedAt": "2026-10-24",
     "verification": "verified",
-    "fields": ["region", "bedrockApiKey", "modelId"]
+    "fields": ["region", "bedrockApiKey", "modelId"],
+    "capabilities": {
+      "streaming": true,
+      "tools": false,
+      "vision": false,
+      "imageGeneration": false,
+      "verified": false
+    }
   },
   {
     "id": "vertex-ai",
@@ -205,6 +310,13 @@
     "docsUrl": "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/samples/generativeaionvertexai-gemini-chat-completions-non-streaming",
     "verifiedAt": null,
     "verification": "unverified",
-    "fields": ["projectId", "location", "oauthAdc"]
+    "fields": ["projectId", "location", "oauthAdc"],
+    "capabilities": {
+      "streaming": false,
+      "tools": false,
+      "vision": false,
+      "imageGeneration": false,
+      "verified": false
+    }
   }
 ]
