@@ -1,24 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { hasDebugGuard } from './check-debug-command.mjs';
+import { verifyDebugCommandSources } from './check-debug-command.mjs';
+
+const guardedDeclaration =
+  '#[cfg(debug_assertions)]\n#[tauri::command]\npub fn submit_simulated_action(';
+const guardedRegistration = '#[cfg(debug_assertions)]\nsecurity::submit_simulated_action,';
 
 describe('proteção de comandos exclusivos de debug', () => {
-  it('aceita a declaração e o registro condicionados a debug_assertions', () => {
-    const declaration =
-      /#\[cfg\(debug_assertions\)\]\s*#\[tauri::command\]\s*pub\s+fn\s+submit_simulated_action\s*\(/;
-    const registration = /#\[cfg\(debug_assertions\)\]\s*security::submit_simulated_action\s*,/;
-    expect(
-      hasDebugGuard(
-        '#[cfg(debug_assertions)]\n#[tauri::command]\npub fn submit_simulated_action(',
-        declaration,
-      ),
-    ).toBe(true);
-    expect(
-      hasDebugGuard('#[cfg(debug_assertions)]\nsecurity::submit_simulated_action,', registration),
-    ).toBe(true);
+  it('aceita declaração e registro encontrados em arquivos Rust distintos', () => {
+    expect(verifyDebugCommandSources([guardedDeclaration, guardedRegistration])).toBe(true);
   });
 
-  it('rejeita o comando quando a guarda de release está ausente', () => {
-    const registration = /#\[cfg\(debug_assertions\)\]\s*security::submit_simulated_action\s*,/;
-    expect(hasDebugGuard('security::submit_simulated_action,', registration)).toBe(false);
+  it('rejeita a declaração sem cfg(debug_assertions)', () => {
+    expect(
+      verifyDebugCommandSources([
+        '#[tauri::command]\npub fn submit_simulated_action(',
+        guardedRegistration,
+      ]),
+    ).toBe(false);
+  });
+
+  it('rejeita registro do comando fora de cfg(debug_assertions)', () => {
+    expect(
+      verifyDebugCommandSources([
+        guardedDeclaration,
+        guardedRegistration,
+        'security::submit_simulated_action,',
+      ]),
+    ).toBe(false);
   });
 });
