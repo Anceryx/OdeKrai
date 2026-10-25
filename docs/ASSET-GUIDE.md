@@ -28,8 +28,9 @@ O ícone do aplicativo em `src-tauri/icons/icon.ico` é um recurso provisório g
   `character-female-a..f.glb`, `character-male-a..f.glb` e a textura `GLB format/Textures/colormap.png`.
   O caminho de saída é `assets/pets/kenney-mini-characters/`; ele pode ser alterado no script para
   uma revisão temporária. O Chrome roda headless com WebGL por software (ANGLE/SwiftShader), em um
-  servidor local temporário, sem acesso de rede. Nenhum pacote novo é necessário; a ferramenta usa
-  o Three.js já instalado no projeto e não faz parte do app Tauri nem do bundle do Vite.
+  servidor local temporário. O script carrega os modelos e a textura somente por esse servidor e
+  não faz chamadas a serviços externos. Nenhum pacote novo é necessário; a ferramenta usa o Three.js
+  já instalado no projeto e não faz parte do app Tauri nem do bundle do Vite.
 - O enquadramento, a perspectiva, as luzes e a transparência são fixos. Os modelos são centralizados
   no chão e normalizados para 1,88 unidade de altura para manter margem no quadro. A imagem renderizada
   é 512×512; o app limita a escala-base do pet de mesa a 160×160 CSS px e aplica a escala escolhida.
