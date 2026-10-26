@@ -1,124 +1,134 @@
-# Registro de alterações
+# Changelog
 
-## Não lançado
+Este arquivo segue o formato Keep a Changelog. Todas as versões listadas são pré-lançamentos SemVer 0.x.
 
-- Adicionadas habilidades Rust para exportar eventos RFC 5545 `.ics`, documentos Markdown/texto e CSV. O evento é aberto no calendário padrão para confirmação; não foi adicionada integração por API ou OAuth.
+## [Não lançado]
 
-- Adicionadas a tela de recursos do computador, recomendações indicativas de perfis Qwen e catálogo de GGUF. Requisitos mínimos/contexto não verificados; a interface não baixa nem executa modelos.
+Sem mudanças registradas.
 
-### Áudio
+## [v0.1.0] — Fundação
 
-- O painel do Assistente lista os 16 eventos sonoros, permite ouvir prévias e escolher arquivos disponíveis; o carregamento automático tenta WAV, OGG e MP3, memorizando falhas.
+### Alterado
 
-### Identidade e memória
+- Base inicial do aplicativo Tauri com interface React e Vite.
+- Primeira integração do mascote e da ilha de trabalho.
+- Estrutura inicial para conectores nativos e execução no Windows.
 
-- Na abertura, o nome e o apelido também são recuperados do conteúdo aprovado do arquivo base se o perfil local estiver vazio.
-- A primeira configuração agora usa três passos curtos e salva a identidade ao final.
-- Perfil, preferências de conversa, notas de memória, pasta pessoal e arquivo base foram reunidos em uma tela.
-- A troca da pasta pede confirmação do arquivo base antes que a identidade dessa pasta seja usada.
+## [v0.2.0] — Provedores, janelas e histórico — Fase 1
 
-### Conectores
+### Alterado
 
-- Adicionado o conector IA local para Ollama e llama.cpp server compatíveis com OpenAI, com busca de modelos nas portas padrão, HTTP limitado a loopback e chave opcional no Gerenciador de Credenciais.
+- Estabilização de provedores, janelas e histórico.
+- Metadados de autenticação Anthropic alinhados ao contrato utilizado.
+- Base da Fase 1 registrada nos commits do marco.
 
-- As etapas “Criar conta” e “Gerar chave” agora apontam para o cadastro/console e a página de credenciais de cada provedor; links HTTPS estão autorizados apenas nos domínios oficiais listados.
-- A consulta de credenciais da aba “Conectados” agora é sequencial e diferencia falhas de consulta de uma lista realmente vazia.
-- A tela de conectores ganhou filtros por provedores conectados, planos gratuitos confirmados e catálogo completo, com busca e detalhes em painel sobreposto.
-- Credenciais conectadas mostram os estados salva, testada e ativa, com controles para ativar, definir o provedor principal e remover a credencial.
-- O fluxo orienta a criação da conta, geração da chave, carregamento de modelos e teste da conexão. O endereço da API fica em Avançado.
-- Groq, Gemini, Mistral, Cerebras e OpenRouter têm selo de plano gratuito confirmado e link para limites oficiais. No OpenRouter, o selo se refere a modelos `:free`.
-- Cerebras foi adicionado ao catálogo com Chat Completions compatível com OpenAI e carregamento de modelos.
+## [v0.3.0] — Identidade e memória local — Fase 2
 
-### Conversas
+### Alterado
 
-- A área de Conversas agora tem lista pesquisável com título, data, prévia e opções de renomear/apagar; o cabeçalho da conversa permite editar o título e mostra o modelo ativo.
-- Mensagens do usuário ficam à direita e respostas à esquerda, com avatares, horário e opção de usar o mascote como avatar do OdeKrai. Respostas mostram Markdown básico sem interpretar HTML bruto.
-- O campo cresce com o texto; Enter envia e Shift+Enter cria uma nova linha. A resposta em andamento pode ser parada ou tentada novamente após erro.
+- Identidade local aprovada para o assistente.
+- Memória manual local e template de identidade.
+- Estrutura da pasta pessoal do agente.
 
-### Dados e privacidade
+## [v0.4.0] — Segurança e permissões — Fases 2.1, 3 e 3.1
 
-- A exclusão de todo o histórico fica em Configurações → Dados e privacidade e exige duas etapas de confirmação.
+### Alterado
 
-### Janela e preferências
+- Políticas de risco e permissões implementadas em Rust.
+- Aprovações, auditoria, kill switch e ferramentas de workspace.
+- Controles de segurança e validações de encerramento das fases 3 e 3.1.
 
-- A ilha e o modo livre agora compartilham uma única janela de pet, com alternância salva no SQLite. A transparência dos cantos permanece interativa.
-- As janelas auxiliares são criadas por comandos assíncronos; a inicialização tem modo seguro após interrupção, e o fechamento tenta encerrar em até três segundos.
-- Falhas de inicialização aparecem no banner Diagnóstico e são registradas em `app_data_dir/logs/diagnostic.log` sem conteúdo de conversas ou segredos.
-- Com “Encerrar”, o X encerra o processo e cancela fluxos e janelas auxiliares; só “Minimizar para a bandeja” mantém o app em segundo plano.
-- O tamanho inicial da janela considera o fator de escala e a área útil do monitor, incluindo a barra de tarefas.
-- Ao fechar a janela, a preferência padrão encerra o aplicativo; a opção alternativa minimiza para a bandeja com ações para abrir e sair.
-- As configurações agora estão organizadas em Geral, Janela, Aparência e Dados e privacidade.
+## [v0.5.0] — Nova interface e mascotes 2D
 
-### Tipografia
+### Alterado
 
-- Unificada a fonte sans-serif em Inter Variable, empacotada localmente sob a licença OFL 1.1; trechos de código mantêm fonte monoespaçada do sistema.
+- Interface reorganizada e textos padronizados.
+- Personagens 2D Kenney renderizados para o aplicativo.
+- Seleção do mascote e escala da janela ajustadas.
 
-### Personagens Kenney em alta resolução
+## [v0.6.0] — Chat, conectores gratuitos e identidade unificada
 
-- Substituídos os previews 64×64 por renderizações transparentes 512×512 dos 12 modelos Kenney CC0; agora também há imagem para `character-female-a`.
-- Adicionado script de desenvolvimento para regenerar as imagens a partir dos GLBs externos, sem incluir os modelos-fonte no repositório.
-- A tela Assistente do OdeKrai identifica a seção como “Escolha seu mascote”; o mascote da área de trabalho passou a ocupar até 160 px na escala-base.
-- Seleções SQLite que não existem mais no catálogo são migradas para `character-female-a`.
+### Alterado
 
-### UI-3
+- Conversas pesquisáveis em duas colunas.
+- Catálogo de planos gratuitos e gestão de provedores conectados.
+- Perfil e pasta pessoal integrados em uma identidade.
 
-- Adicionados sprites 2D CC0 do pacote Kenney, seleção persistida no SQLite, fallback para a imagem ausente e animações CSS ligadas aos estados do assistente.
-- O pet escolhido aparece na Visão geral, nas respostas do chat e nas janelas auxiliares. O renderer 3D legado foi removido do aplicativo.
-- Validação visual nativa do Windows permanece pendente.
+## [v0.7.0] — Estabilidade de inicialização e ícones Phosphor
 
-### UI-2
+### Alterado
 
-- Centralizados os tokens visuais e adicionados componentes compartilhados para controles e cabeçalhos; a seleção usa o acento laranja e a interface respeita movimento reduzido.
-- Padronizadas as telas principais, os controles da barra de conversas e o espaço reservado para o pet na Visão geral.
-- Revisados textos visíveis para remover “COMPANION”, substituir “Ilha” por “Pet” e explicar permissões e identidade em linguagem direta.
-- Substituídos os glifos usados como ícones por Phosphor Icons Light, com importações nomeadas e componente compartilhado.
+- Leituras nativas de inicialização executadas de forma assíncrona.
+- Ícones Phosphor aplicados aos elementos da interface.
+- Fechamento e abertura de janelas revisados no histórico do marco.
 
-### UI-1
+## [v0.8.0] — Qualidade, CI Rust, tool calling e sons
 
-- Ajustadas as dimensões iniciais e mínimas da janela principal; teste Rust protege a configuração.
-- Janelas auxiliares de ilha, mascote e aprovação são criadas sob demanda e fechadas quando deixam de ser necessárias.
-- Endpoints salvos em domínio de outro provedor são restaurados ao padrão e exibem aviso; o catálogo também permite restaurar endpoint e modelo.
-- Removido o cartão de perfil duplicado no rodapé da barra lateral; o caminho superior abre o Perfil, identificado no breadcrumb.
-- Conversas anteriores exibem título e data do SQLite e permanecem selecionáveis.
-- A primeira execução permite escolher uma pasta pelo diálogo nativo; idioma e tom usam opções estruturadas com tom personalizado.
-- O aplicativo mantém a rolagem principal na área de conteúdo, com barra lateral e rodapé estáveis.
+### Alterado
 
-### Revisão de fechamento da Fase 3.1
+- CI passou a verificar código Rust e lint.
+- Adaptadores neutros para tool calling e capacidades exibidas por provedor.
+- Manifesto, seleção e prévia de efeitos sonoros.
 
-- Bloqueadas operações simuladas sobre `ODEKRAI.md`, `logs/`, configurações, bancos locais e conteúdo reconhecido como segredo.
-- Movida a confirmação `MessageBoxW` para o executor de operações bloqueantes do Tauri; comandos de modo e override agora aguardam assincronamente.
-- Adicionados verificadores de release para assets privados e para o comando de disparo manual exclusivo de debug; `tauri:build` interrompe se detectar assets proprietários.
-- Adicionada matriz de rastreabilidade das Fases 2.1 e 3, com pendências de teste e validação nativa.
+## [v0.9.0] — Endurecimento, refatoração e motor do agente
 
-### Fase 3
+### Alterado
 
-- Adicionados motor de políticas em Rust, modos persistidos em SQLite, exceções por ferramenta com confirmação nativa e tabela modo × risco.
-- Adicionadas janela de aprovação de uso único, fila limitada e expiração configurável; parâmetros são vinculados por hash SHA-256 e só a janela `approval` pode responder.
-- Adicionados log JSONL diário encadeado, viewer/exportação, verificação da cadeia, atalho global e kill switch com cancelamento de streams.
-- Adicionadas ferramentas simuladas de workspace com backup reversível e lixeira; mensagens nunca são enviadas e pagamentos são bloqueados.
-- A validação visual e nativa de janelas, atalho, DPI e foco em Windows permanece pendente.
+- Módulos de provedores, segurança e interface extraídos em unidades menores.
+- Motor Rust limitado por turnos, tempo e tokens.
+- Proteções fail-closed e remoção de caminhos de panic de produção.
 
-### Fase 2
+## [v0.10.0] — Diagnóstico, travamentos e mascote animado
 
-- Adicionadas pasta pessoal, identidade aprovada por hash, memória manual editável e prompt composto no Rust.
-- Adicionada exclusão de conversas e de todo o histórico; corrigida a formatação global e atualizada a documentação de privacidade.
+### Alterado
 
-- Adicionadas janelas Tauri separadas para a ilha e o marcador geométrico temporário.
-- Adicionados estados do Companion conectados ao ciclo real de solicitação do chat.
-- Adicionados controles e persistência de posição, tamanho, prioridade, modo livre e efeitos sonoros.
-- Adicionado motor de áudio com cache, volume, mute, substituição local e fallback silencioso. Nenhum arquivo de som foi incluído.
-- A validação visual e nativa completa em Windows continua pendente.
+- Diagnóstico de inicialização e modo seguro apresentados na interface.
+- Ciclo de vida de janelas auxiliares estabilizado.
+- Mascote 2D animado com estados de interação.
 
-### Fase 1
+## [v0.11.0] — Testes no Windows, privacidade do log, sons e monitor do pet
 
-- Corrigido o cabeçalho de autenticação da Anthropic para `x-api-key` e adicionada verificação de cabeçalhos por provedor com servidor simulado.
-- Persistido o ID do provedor com migração das preferências antigas.
-- Adicionados plugin de instância única, CSP de produção restrita, capabilities por janela e validação do chamador para comandos de janela.
-- Adicionados histórico local de conversas em SQLite e streaming com cancelamento para Anthropic e adaptadores Chat Completions.
-- Revisada a documentação de status, testes, arquitetura, privacidade e segurança.
+### Alterado
 
-### Correções de inicialização e conectores
+- Harness de janelas Tauri ajustado para testes no Windows.
+- Logs com detalhes sensíveis reduzidos.
+- Sons de eventos e posição do mascote persistida por monitor.
 
-- Leituras nativas usadas na abertura da interface agora são executadas por comandos assíncronos do Tauri.
-- Links de cadastro, geração de chave, limites e documentação dos provedores abrem no navegador padrão do Windows.
-- Os 16 provedores do catálogo agora exibem seus símbolos de marca em SVG local.
+## [v0.12.0] — Roteador de provedores, tokens e IA local
+
+### Alterado
+
+- Failover de provedores com auditoria e limites diários de tokens.
+- Conector OpenAI compatível para servidores locais já iniciados.
+- Catálogo e escolha de modelos locais com confirmação para download.
+
+## [v0.13.0] — Chat, pet e perfil
+
+### Alterado
+
+- Navegação do chat redimensionável e recolhível.
+- Abertura de links validada no backend.
+- Recuperação de identidade e ajustes no pet e no perfil.
+
+## [v0.14.0] — Agente e habilidades
+
+### Alterado
+
+- Broker assíncrono de aprovações e registro Rust de habilidades.
+- Loop Rust conectado às habilidades e aprovações existentes.
+- Ferramentas limitadas de arquivos, calendário, rascunhos de email e busca web aprovada.
+
+[v0.1.0]: https://github.com/Anceryx/OdeKrai/compare/5ccaef5...v0.1.0
+[v0.2.0]: https://github.com/Anceryx/OdeKrai/compare/v0.1.0...v0.2.0
+[v0.3.0]: https://github.com/Anceryx/OdeKrai/compare/v0.2.0...v0.3.0
+[v0.4.0]: https://github.com/Anceryx/OdeKrai/compare/v0.3.0...v0.4.0
+[v0.5.0]: https://github.com/Anceryx/OdeKrai/compare/v0.4.0...v0.5.0
+[v0.6.0]: https://github.com/Anceryx/OdeKrai/compare/v0.5.0...v0.6.0
+[v0.7.0]: https://github.com/Anceryx/OdeKrai/compare/v0.6.0...v0.7.0
+[v0.8.0]: https://github.com/Anceryx/OdeKrai/compare/v0.7.0...v0.8.0
+[v0.9.0]: https://github.com/Anceryx/OdeKrai/compare/v0.8.0...v0.9.0
+[v0.10.0]: https://github.com/Anceryx/OdeKrai/compare/v0.9.0...v0.10.0
+[v0.11.0]: https://github.com/Anceryx/OdeKrai/compare/v0.10.0...v0.11.0
+[v0.12.0]: https://github.com/Anceryx/OdeKrai/compare/v0.11.0...v0.12.0
+[v0.13.0]: https://github.com/Anceryx/OdeKrai/compare/v0.12.0...v0.13.0
+[v0.14.0]: https://github.com/Anceryx/OdeKrai/compare/v0.13.0...v0.14.0
