@@ -16,11 +16,13 @@ describe('AssistantScreen', () => {
     expect(markup).toContain('Tentar de novo');
   });
 
-  it('monta as op??es do mascote', () => {
+  it('monta as opções do mascote e os eventos sonoros agrupados', () => {
     const markup = renderToStaticMarkup(
       <AssistantScreen
         settings={defaultSettings}
         update={() => undefined}
+        petVisible
+        onPetVisibilityChange={() => undefined}
         onError={() => undefined}
         selectedPet="character-female-a"
         onSelectPet={() => undefined}
@@ -31,5 +33,11 @@ describe('AssistantScreen', () => {
     expect(markup).toContain('Modo do pet');
     expect(markup).toContain('>Ilha<');
     expect(markup).toContain('>Livre<');
+    expect(markup).toContain('>Pet</h4>');
+    expect(markup).toContain('>Chat</h4>');
+    expect(markup).toContain('>Segurança</h4>');
+    expect(markup).toContain('Aprovação necessária');
+    expect(markup).toContain('Tocar prévia');
+    expect(markup).toContain('Sem arquivo');
   });
 });

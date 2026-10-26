@@ -17,13 +17,19 @@ describe('manifesto de sons', () => {
     await mkdir(path.join(temporaryDirectory, 'nested'));
     await writeFile(path.join(temporaryDirectory, 'bell.ogg'), '');
     await writeFile(path.join(temporaryDirectory, 'drag-start.mp3'), '');
+    await writeFile(path.join(temporaryDirectory, 'approval_needed.ogg'), '');
+    await writeFile(path.join(temporaryDirectory, 'action_done.ogg'), '');
+    await writeFile(path.join(temporaryDirectory, 'halted.ogg'), '');
     await writeFile(path.join(temporaryDirectory, 'License.txt'), 'CC0');
     await writeFile(path.join(temporaryDirectory, '.gitkeep'), '');
     await writeFile(path.join(temporaryDirectory, 'nested', 'hidden.wav'), '');
 
     await expect(buildSoundManifest(temporaryDirectory)).resolves.toEqual([
+      '/sounds/action_done.ogg',
+      '/sounds/approval_needed.ogg',
       '/sounds/bell.ogg',
       '/sounds/drag-start.mp3',
+      '/sounds/halted.ogg',
     ]);
   });
 

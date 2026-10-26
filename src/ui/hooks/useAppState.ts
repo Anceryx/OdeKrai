@@ -16,6 +16,7 @@ export function useAppState() {
   const [initialSettingsLoad] = useState(loadSettingsWithWarnings);
   const [section, setSection] = useState<Section>('overview');
   const [settings, setSettings] = useState<AppSettings>(initialSettingsLoad.settings);
+  const [petVisible, setPetVisible] = useState(!isTauri());
   const [identityConfigured, setIdentityConfigured] = useState<boolean | null>(null);
   const [identityCardDismissed, setIdentityCardDismissed] = useState(false);
   const [permissionIndicator, setPermissionIndicator] = useState<{
@@ -101,6 +102,8 @@ export function useAppState() {
     setSection,
     settings,
     setSettings,
+    petVisible,
+    setPetVisible,
     identityConfigured,
     setIdentityConfigured,
     identityCardDismissed,

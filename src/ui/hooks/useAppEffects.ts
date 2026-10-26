@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { emit, listen } from '@tauri-apps/api/event';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { AI_PROVIDERS } from '../../core/providers';
+import { loadSettings } from '../../core/settings';
+import { normalizeSoundPreferences, playSound } from '../../core/sounds';
 import type { ChatMessage } from '../../core/provider-messages';
 import { profileFromApprovedCore } from '../../core/identity';
 import type { useAppState } from './useAppState';
@@ -73,6 +75,7 @@ async function startupInvoke<T>(
 export function useAppEffects(state: ReturnType<typeof useAppState>) {
   const {
     settings,
+    setPetVisible,
     setSelectedPet,
     setPermissionIndicator,
     setToast,
@@ -206,6 +209,7 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
                   reportDiagnostic,
                 );
                 await startupInvoke<void>('set_pet_visible', { visible: true }, reportDiagnostic);
+                setPetVisible(true);
                 await emit('companion-state', { type: 'reveal' });
               })(),
               'restore_pet',
@@ -225,6 +229,7 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
     void Promise.all([
       listen('security-halted', () => {
         setToast('O OdeKrai foi parado. Ações e respostas em andamento foram canceladas.');
+        void playSound('halted', normalizeSoundPreferences(loadSettings().companion.sounds));
         void startupInvoke<{ mode: string; halted: boolean }>(
           'get_permission_settings',
           undefined,
@@ -233,6 +238,7 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
           .then(setPermissionIndicator)
           .catch(() => setPermissionIndicator(null));
       }),
+      listen<boolean>('pet-visibility-changed', ({ payload }) => setPetVisible(payload)),
       listen('security-resumed', () => {
         setToast('O OdeKrai foi retomado.');
         void startupInvoke<{ mode: string; halted: boolean }>(

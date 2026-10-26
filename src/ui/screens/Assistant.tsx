@@ -5,7 +5,7 @@ import {
   normalizeSoundPreferences,
   playSound,
   SOUND_EVENT_LABELS,
-  SOUND_EVENTS,
+  SOUND_EVENT_GROUPS,
   SOUND_MANIFEST,
   soundSources,
 } from '../../core/sounds';
@@ -29,12 +29,16 @@ export function PetActionError({ message, onRetry }: { message: string; onRetry:
 export function AssistantScreen({
   settings,
   update,
+  petVisible,
+  onPetVisibilityChange,
   onError,
   selectedPet,
   onSelectPet,
 }: {
   settings: AppSettings;
   update: (settings: AppSettings) => void;
+  petVisible: boolean;
+  onPetVisibilityChange: (visible: boolean) => void;
   onError: (message: string) => void;
   selectedPet: string;
   onSelectPet: (petId: string) => void;
@@ -71,13 +75,19 @@ export function AssistantScreen({
         await applyPosition({ ...settings.companion, enabled: true });
         await invoke('set_pet_topmost', { enabled: settings.companion.alwaysOnTop });
         await invoke('set_pet_visible', { visible: true });
+        onPetVisibilityChange(true);
         await emit('companion-state', { type: 'reveal' });
         setPetError('');
         setRetryPetAction(null);
-        void playSound('wake', normalizeSoundPreferences(settings.companion.sounds));
+        void playSound('wake', normalizeSoundPreferences(settings.companion.sounds), {
+          petVisible: true,
+        });
       } else {
+        await playSound('sleep', normalizeSoundPreferences(settings.companion.sounds), {
+          petVisible: true,
+        });
         await invoke('set_pet_visible', { visible: false });
-        void playSound('sleep', normalizeSoundPreferences(settings.companion.sounds));
+        onPetVisibilityChange(false);
       }
     } catch {
       update({ ...settings, companion: { ...settings.companion, enabled: !enabled } });
@@ -372,55 +382,62 @@ export function AssistantScreen({
           />
         </div>
         <div className="sound-events-list">
-          {SOUND_EVENTS.map((event) => {
-            const replacement = settings.companion.sounds.replacements[event];
-            const currentFile = replacement ?? soundSources(event)[0];
-            return (
-              <div className="sound-event-row" key={event}>
-                <div className="sound-event-description">
-                  <strong>{SOUND_EVENT_LABELS[event]}</strong>
-                  <span>
-                    {currentFile ? currentFile.split('/').at(-1) : 'Nenhum arquivo disponível'}
-                  </span>
-                </div>
-                <div className="sound-event-controls">
-                  <select
-                    aria-label={`Arquivo para ${SOUND_EVENT_LABELS[event]}`}
-                    value={replacement ?? ''}
-                    onChange={(change) => {
-                      const replacements = { ...settings.companion.sounds.replacements };
-                      if (change.target.value) replacements[event] = change.target.value;
-                      else delete replacements[event];
-                      update({
-                        ...settings,
-                        companion: {
-                          ...settings.companion,
-                          sounds: { ...settings.companion.sounds, replacements },
-                        },
-                      });
-                    }}
-                  >
-                    <option value="">Automático (formato disponível)</option>
-                    {SOUND_MANIFEST.map((file) => (
-                      <option key={file} value={file}>
-                        {file.split('/').at(-1)}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    className="ui-button ui-button--secondary"
-                    type="button"
-                    disabled={!currentFile}
-                    onClick={() =>
-                      void playSound(event, normalizeSoundPreferences(settings.companion.sounds))
-                    }
-                  >
-                    Tocar prévia
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+          {SOUND_EVENT_GROUPS.map(({ label, events }) => (
+            <section className="sound-event-group" key={label}>
+              <h4>{label}</h4>
+              {events.map((event) => {
+                const replacement = settings.companion.sounds.replacements[event];
+                const currentFile = soundSources(event, replacement)[0];
+                return (
+                  <div className="sound-event-row" key={event}>
+                    <div className="sound-event-description">
+                      <strong>{SOUND_EVENT_LABELS[event]}</strong>
+                      <span>{currentFile ? currentFile.split('/').at(-1) : 'Sem arquivo'}</span>
+                    </div>
+                    <div className="sound-event-controls">
+                      <select
+                        aria-label={`Arquivo para ${SOUND_EVENT_LABELS[event]}`}
+                        value={replacement ?? ''}
+                        onChange={(change) => {
+                          const replacements = { ...settings.companion.sounds.replacements };
+                          if (change.target.value) replacements[event] = change.target.value;
+                          else delete replacements[event];
+                          update({
+                            ...settings,
+                            companion: {
+                              ...settings.companion,
+                              sounds: { ...settings.companion.sounds, replacements },
+                            },
+                          });
+                        }}
+                      >
+                        <option value="">Automático (formato disponível)</option>
+                        {SOUND_MANIFEST.map((file) => (
+                          <option key={file} value={file}>
+                            {file.split('/').at(-1)}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="ui-button ui-button--secondary"
+                        type="button"
+                        disabled={!currentFile || (label === 'Pet' && !petVisible)}
+                        onClick={() =>
+                          void playSound(
+                            event,
+                            normalizeSoundPreferences(settings.companion.sounds),
+                            { petVisible },
+                          )
+                        }
+                      >
+                        Tocar prévia
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </section>
+          ))}
         </div>
       </section>
     </div>

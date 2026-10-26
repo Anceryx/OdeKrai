@@ -104,7 +104,16 @@ export function IslandWindow() {
           className="island-mascot"
           data-tauri-drag-region={settings.companion.freeMode ? '' : undefined}
           aria-label="Abrir o assistente do OdeKrai"
-          onClick={() => void send({ type: state === 'expanded' ? 'close' : 'open' })}
+          onClick={() => {
+            const preferences = normalizeSoundPreferences(settings.companion.sounds);
+            void playSound('click', preferences, {
+              petVisible: true,
+            });
+            if (settings.companion.freeMode) {
+              void playSound('happy', preferences, { petVisible: true });
+            }
+            void send({ type: state === 'expanded' ? 'close' : 'open' });
+          }}
         >
           <PetSprite
             className="island-mascot-renderer"
@@ -140,16 +149,59 @@ export function IslandWindow() {
               <i />
               {islandLabels[state]}
             </span>
-            <button onClick={() => void emit('pet-action', 'open')}>Abrir o OdeKrai</button>
-            <button onClick={() => void emit('pet-action', 'new-chat')}>Nova conversa</button>
-            <button onClick={() => void emit('pet-action', 'stop')}>Parar tudo</button>
-            <button onClick={() => void emit('pet-action', 'mute')}>Silenciar</button>
             <button
               onClick={() => {
+                void playSound('click', normalizeSoundPreferences(settings.companion.sounds), {
+                  petVisible: true,
+                });
+                void emit('pet-action', 'open');
+              }}
+            >
+              Abrir o OdeKrai
+            </button>
+            <button
+              onClick={() => {
+                void playSound('click', normalizeSoundPreferences(settings.companion.sounds), {
+                  petVisible: true,
+                });
+                void emit('pet-action', 'new-chat');
+              }}
+            >
+              Nova conversa
+            </button>
+            <button
+              onClick={() => {
+                void playSound('click', normalizeSoundPreferences(settings.companion.sounds), {
+                  petVisible: true,
+                });
+                void emit('pet-action', 'stop');
+              }}
+            >
+              Parar tudo
+            </button>
+            <button
+              onClick={() => {
+                void playSound('click', normalizeSoundPreferences(settings.companion.sounds), {
+                  petVisible: true,
+                });
+                void emit('pet-action', 'mute');
+              }}
+            >
+              Silenciar
+            </button>
+            <button
+              onClick={async () => {
                 const current = loadSettings();
+                void playSound('click', normalizeSoundPreferences(settings.companion.sounds), {
+                  petVisible: true,
+                });
+                await playSound('sleep', normalizeSoundPreferences(settings.companion.sounds), {
+                  petVisible: true,
+                });
                 saveSettings({ ...current, companion: { ...current.companion, enabled: false } });
-                void send({ type: 'hide' }, 'sleep');
-                void invoke('set_pet_visible', { visible: false });
+                await send({ type: 'hide' });
+                await invoke('set_pet_visible', { visible: false });
+                await emit('pet-visibility-changed', false);
               }}
             >
               Ocultar

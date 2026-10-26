@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { loadSettings } from '../core/settings';
+import { normalizeSoundPreferences, playSound, SoundTriggerGate } from '../core/sounds';
 import { Button, PageHeader, SelectableCard } from './DesignSystem';
 
 type Mode = 'sempre_perguntar' | 'aprovar_por_mim' | 'controle_total';
@@ -178,10 +180,13 @@ export function SecurityCenter({ page }: { page: 'permissions' | 'activity' }) {
 
   async function runSample(action: object) {
     try {
-      const result = await invoke<{ message: string }>('submit_simulated_action', {
+      const result = await invoke<{ message: string; status: string }>('submit_simulated_action', {
         request: { action },
       });
       setError(result.message);
+      if (result.status === 'completed') {
+        void playSound('action_done', normalizeSoundPreferences(loadSettings().companion.sounds));
+      }
       if (page === 'activity') await refresh();
     } catch (cause) {
       setError(typeof cause === 'string' ? cause : 'A simulação não foi concluída.');
@@ -520,6 +525,7 @@ export function ApprovalWindow() {
   const [, setClock] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const approvalSoundGate = useRef(new SoundTriggerGate());
 
   async function refresh() {
     try {
@@ -554,17 +560,23 @@ export function ApprovalWindow() {
     }
     setCompletePreview('');
     setFull(false);
+    if (approvalSoundGate.current.claim(pending.id)) {
+      void playSound('approval_needed', normalizeSoundPreferences(loadSettings().companion.sounds));
+    }
   }, [pending?.id]);
 
   async function respond(approve: boolean) {
     if (!pending || busy) return;
     setBusy(true);
     try {
-      await invoke('approval_respond', {
+      const result = await invoke<{ status: string }>('approval_respond', {
         id: pending.id,
         displayHash: pending.displayHash,
         approve,
       });
+      if (result.status === 'completed') {
+        void playSound('action_done', normalizeSoundPreferences(loadSettings().companion.sounds));
+      }
       await refresh();
     } catch (cause) {
       setError(typeof cause === 'string' ? cause : 'A resposta não foi aplicada.');

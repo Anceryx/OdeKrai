@@ -1,10 +1,24 @@
-import { lazy, Suspense, useEffect, useMemo, type ComponentType, type FormEvent } from 'react';
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  type ComponentType,
+  type FormEvent,
+} from 'react';
 import { resolveConversationSelection } from '../core/chat';
 import type { ChatMessage } from '../core/provider-messages';
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { normalizeSoundPreferences, playSound } from '../core/sounds';
+import {
+  normalizeSoundPreferences,
+  playSound,
+  SOUND_EVENTS,
+  SoundTriggerGate,
+  type SoundEvent,
+} from '../core/sounds';
 import { AI_PROVIDERS, type AiProvider } from '../core/providers';
 const Overview = lazy(() =>
   import('./screens/Overview').then((module) => ({ default: withScreenBoundary(module.Overview) })),
@@ -49,6 +63,7 @@ import { ApprovalWindow, isApprovalWindow } from './SecurityCenter';
 import { PETS } from '../core/pets';
 import { navigationItems, SidebarNavigation } from './SidebarNavigation';
 import { setPrimaryProviderSettings, toggleProviderSettings } from '../core/provider-directory';
+import { loadSettings } from '../core/settings';
 import { useAppEffects } from './hooks/useAppEffects';
 
 import { useAppState } from './hooks/useAppState';
@@ -116,11 +131,16 @@ function MainApp() {
   }, []);
 
   const appState = useAppState();
+  const thinkingSoundGate = useRef(new SoundTriggerGate());
+  const lastThinkingSoundKey = useRef<string | null>(null);
+  const diagnosticsSoundPlayed = useRef(false);
   const {
     section,
     setSection,
     settings,
     setSettings,
+    petVisible,
+    setPetVisible,
     identityConfigured,
     identityCardDismissed,
     setIdentityCardDismissed,
@@ -200,6 +220,29 @@ function MainApp() {
   }
 
   useAppEffects(appState);
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<{ event: string; petVisible?: boolean }>('sound-request', ({ payload }) => {
+      if (!SOUND_EVENTS.includes(payload.event as SoundEvent)) return;
+      void playSound(
+        payload.event as SoundEvent,
+        normalizeSoundPreferences(loadSettings().companion.sounds),
+        { petVisible: payload.petVisible },
+      );
+    }).then((stop) => {
+      unlisten = stop;
+    });
+    return () => unlisten?.();
+  }, []);
+  useEffect(() => {
+    if (diagnostics.length === 0) {
+      diagnosticsSoundPlayed.current = false;
+      return;
+    }
+    if (diagnosticsSoundPlayed.current) return;
+    diagnosticsSoundPlayed.current = true;
+    void playSound('notification', normalizeSoundPreferences(settings.companion.sounds));
+  }, [diagnostics.length, settings.companion.sounds]);
   const currentNav = useMemo(() => navigationItems.find((item) => item.id === section), [section]);
 
   function selectProvider(provider: AiProvider) {
@@ -243,6 +286,13 @@ function MainApp() {
     setError('');
     setLastFailedPrompt('');
     setBusy(true);
+    const thinkingSoundKey = reuseLastUserMessage
+      ? lastThinkingSoundKey.current
+      : crypto.randomUUID();
+    if (!reuseLastUserMessage) lastThinkingSoundKey.current = thinkingSoundKey;
+    if (thinkingSoundKey && thinkingSoundGate.current.claim(thinkingSoundKey)) {
+      void playSound('thinking', normalizeSoundPreferences(settings.companion.sounds));
+    }
     if (isTauri())
       void emit('companion-state', {
         type: 'activity',
@@ -323,6 +373,7 @@ function MainApp() {
           created_at: Math.floor(Date.now() / 1000),
         },
       ]);
+      lastThinkingSoundKey.current = null;
       void playSound('success', normalizeSoundPreferences(settings.companion.sounds));
       window.clearTimeout(companionStateTimer.current);
       if (isTauri()) {
@@ -613,6 +664,8 @@ function MainApp() {
                 <AssistantScreen
                   settings={settings}
                   update={setSettings}
+                  petVisible={petVisible}
+                  onPetVisibilityChange={setPetVisible}
                   onError={setToast}
                   selectedPet={selectedPet}
                   onSelectPet={(petId) => void choosePet(petId)}

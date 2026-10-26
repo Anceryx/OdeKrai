@@ -1237,8 +1237,18 @@ select:focus-visible {
 }
 .sound-events-list {
   display: grid;
-  gap: 8px;
+  gap: 18px;
   width: 100%;
+}
+.sound-event-group {
+  display: grid;
+  gap: 8px;
+}
+.sound-event-group h4 {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: 700;
 }
 .sound-event-row {
   display: grid;
