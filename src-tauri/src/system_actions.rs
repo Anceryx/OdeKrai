@@ -1,0 +1,580 @@
+use rusqlite::OptionalExtension;
+use serde_json::Value;
+use std::path::{Path, PathBuf};
+use tauri_plugin_opener::OpenerExt;
+use url::Url;
+
+const SETTINGS_PAGES: &[(&str, &str)] = &[
+    ("som", "ms-settings:sound"),
+    ("tela", "ms-settings:display"),
+    ("rede", "ms-settings:network-status"),
+    ("bluetooth", "ms-settings:bluetooth"),
+    ("notificacoes", "ms-settings:privacy-notifications"),
+    ("aplicativos", "ms-settings:appsfeatures"),
+    ("privacidade", "ms-settings:privacy"),
+    ("camera", "ms-settings:privacy-webcam"),
+    ("microfone", "ms-settings:privacy-microphone"),
+    ("localizacao", "ms-settings:privacy-location"),
+    ("bateria", "ms-settings:batterysaver"),
+    ("sobre", "ms-settings:about"),
+];
+
+pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
+    let object = params.as_object().ok_or("Parâmetros inválidos.")?;
+    let expected: &[&str] = match skill_id {
+        "system.open_url" => &["url"],
+        "system.open_path" | "system.reveal_in_folder" => &["path"],
+        "settings.open" => &["page"],
+        "notification.show" => &["title", "body"],
+        "app.launch" => &["app_id"],
+        "clipboard.write" => &["text"],
+        "clipboard.read" => &[],
+        "system.info" => &[],
+        _ => return Err("Habilidade do sistema desconhecida.".into()),
+    };
+    if object.len() != expected.len() || object.keys().any(|key| !expected.contains(&key.as_str()))
+    {
+        return Err("Os parâmetros não correspondem à habilidade permitida.".into());
+    }
+    match skill_id {
+        "system.open_url" => {
+            let raw = bounded_string(object, "url", 2048)?;
+            let normalized =
+                crate::external_links::validate_external_url(raw).map_err(str::to_string)?;
+            let url = Url::parse(&normalized).map_err(|_| "URL inválida.")?;
+            if !matches!(url.scheme(), "http" | "https") {
+                return Err("Somente URLs HTTP e HTTPS podem ser abertas.".into());
+            }
+        }
+        "system.open_path" | "system.reveal_in_folder" => {
+            let raw = bounded_string(object, "path", 32767)?;
+            if Path::new(raw).is_absolute() {
+                crate::security::skills::validate_raw_folder_path(raw)?;
+            } else {
+                crate::security::workspace::relative_path(raw)?;
+            }
+            if blocked_extension(Path::new(raw)) {
+                return Err("Arquivos executáveis e scripts não podem ser abertos.".into());
+            }
+        }
+        "settings.open" => {
+            let page = bounded_string(object, "page", 40)?;
+            if !SETTINGS_PAGES.iter().any(|(key, _)| *key == page) {
+                return Err("Esta página de Configurações não está permitida.".into());
+            }
+        }
+        "notification.show" => {
+            if bounded_string(object, "title", 120)?.trim().is_empty()
+                || bounded_string(object, "body", 2000)?.trim().is_empty()
+            {
+                return Err("Informe o título e o texto da notificação.".into());
+            }
+        }
+        "app.launch" => {
+            let id = bounded_string(object, "app_id", 24)?;
+            if !crate::security::skills::valid_app_id(id) {
+                return Err("Identificador de aplicativo inválido.".into());
+            }
+        }
+        "clipboard.write" => {
+            let text = object
+                .get("text")
+                .and_then(Value::as_str)
+                .ok_or("Informe o texto a copiar.")?;
+            if text.len() > 65536 || text.contains('\0') {
+                return Err("O texto da área de transferência excede 64 KiB ou contém caracteres inválidos.".into());
+            }
+        }
+        "clipboard.read" => {}
+        "system.info" => {}
+        _ => unreachable!(),
+    }
+    Ok(())
+}
+
+pub(crate) fn preview(skill_id: &str, params: &Value, root: &Path) -> Result<String, String> {
+    validate(skill_id, params)?;
+    Ok(match skill_id {
+        "system.open_url" => format!(
+            "Abrir no navegador padrão: {}",
+            params["url"].as_str().unwrap()
+        ),
+        "system.open_path" => format!(
+            "Abrir arquivo ou pasta permitida: {}",
+            checked_path(params, root)?.display()
+        ),
+        "system.reveal_in_folder" => format!(
+            "Mostrar no Explorador de Arquivos: {}",
+            checked_path(params, root)?.display()
+        ),
+        "settings.open" => format!(
+            "Abrir Configurações do Windows: {}",
+            page_uri(params["page"].as_str().unwrap()).unwrap()
+        ),
+        "notification.show" => format!(
+            "Exibir notificação local: {}",
+            params["title"].as_str().unwrap()
+        ),
+        "app.launch" => format!(
+            "Iniciar aplicativo cadastrado {} sem argumentos.",
+            params["app_id"].as_str().unwrap()
+        ),
+        "clipboard.write" => format!(
+            "Substituir a área de transferência por texto ({} bytes):\n{}",
+            params["text"].as_str().unwrap().len(),
+            params["text"].as_str().unwrap()
+        ),
+        "clipboard.read" => "Ler o texto atual da área de transferência; o conteúdo será tratado como dado não confiável.".into(),
+        "system.info" => "Consultar informações locais resumidas do Windows, memória, discos das pastas permitidas, bateria e tempo ligado.".into(),
+        _ => return Err("Habilidade do sistema desconhecida.".into()),
+    })
+}
+
+pub(crate) fn preview_allowed_app(
+    app: &tauri::AppHandle,
+    params: &Value,
+) -> Result<String, String> {
+    validate("app.launch", params)?;
+    let (name, path) = lookup_allowed_app(
+        &crate::security::database(app)?,
+        params["app_id"].as_str().unwrap(),
+    )?
+    .ok_or("O aplicativo não está cadastrado como permitido.")?;
+    Ok(format!(
+        "Iniciar aplicativo cadastrado: {name}\nExecutável: {path}\nSem argumentos."
+    ))
+}
+
+pub(crate) fn execute(
+    skill_id: &str,
+    params: &Value,
+    root: &Path,
+    app: &tauri::AppHandle,
+) -> Result<String, String> {
+    validate(skill_id, params)?;
+    match skill_id {
+        "system.open_url" => {
+            let normalized =
+                crate::external_links::validate_external_url(params["url"].as_str().unwrap())
+                    .map_err(str::to_string)?;
+            app.opener()
+                .open_url(normalized, None::<&str>)
+                .map_err(|_| "Não foi possível abrir o navegador padrão.".to_string())?;
+            Ok("URL aberta no navegador padrão.".into())
+        }
+        "system.open_path" => {
+            let path = checked_path(params, root)?;
+            app.opener()
+                .open_path(path.to_string_lossy(), None::<&str>)
+                .map_err(|_| "Não foi possível abrir o arquivo ou a pasta.".to_string())?;
+            Ok("Arquivo ou pasta aberta.".into())
+        }
+        "system.reveal_in_folder" => {
+            let path = checked_path(params, root)?;
+            app.opener().reveal_item_in_dir(path).map_err(|_| {
+                "Não foi possível mostrar o item no Explorador de Arquivos.".to_string()
+            })?;
+            Ok("Item mostrado no Explorador de Arquivos.".into())
+        }
+        "settings.open" => {
+            let uri = page_uri(params["page"].as_str().unwrap()).unwrap();
+            app.opener()
+                .open_url(uri, None::<&str>)
+                .map_err(|_| "Não foi possível abrir Configurações do Windows.".to_string())?;
+            Ok("Página de Configurações aberta.".into())
+        }
+        "notification.show" => {
+            use tauri_plugin_notification::NotificationExt;
+            app.notification()
+                .builder()
+                .title(params["title"].as_str().unwrap())
+                .body(params["body"].as_str().unwrap())
+                .show()
+                .map_err(|_| "Não foi possível exibir a notificação.".to_string())?;
+            Ok("Notificação exibida.".into())
+        }
+        "app.launch" => {
+            let app_id = params["app_id"].as_str().unwrap();
+            let (_, path) = lookup_allowed_app(&crate::security::database(app)?, app_id)?
+                .ok_or("O aplicativo não está cadastrado como permitido.")?;
+            let executable = PathBuf::from(path);
+            if crate::security::workspace::has_reparse(&executable)
+                || !executable.is_file()
+                || !executable
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
+            {
+                return Err(
+                    "O executável cadastrado não passou pela validação de segurança.".into(),
+                );
+            }
+            std::process::Command::new(executable)
+                .spawn()
+                .map_err(|_| "Não foi possível iniciar o aplicativo cadastrado.".to_string())?;
+            Ok("Aplicativo cadastrado iniciado sem argumentos.".into())
+        }
+        "clipboard.write" => {
+            use tauri_plugin_clipboard_manager::ClipboardExt;
+            app.clipboard()
+                .write_text(params["text"].as_str().unwrap().to_string())
+                .map_err(|_| "Não foi possível atualizar a área de transferência.".to_string())?;
+            Ok("Texto copiado para a área de transferência.".into())
+        }
+        "clipboard.read" => {
+            use tauri_plugin_clipboard_manager::ClipboardExt;
+            let text = app
+                .clipboard()
+                .read_text()
+                .map_err(|_| "Não foi possível ler texto da área de transferência.".to_string())?;
+            if text.len() > 65536 {
+                return Err("O texto da área de transferência excede o limite de 64 KiB.".into());
+            }
+            Ok(text)
+        }
+        "system.info" => system_information(app),
+        _ => Err("Habilidade do sistema desconhecida.".into()),
+    }
+}
+
+fn lookup_allowed_app(
+    db: &rusqlite::Connection,
+    app_id: &str,
+) -> Result<Option<(String, String)>, String> {
+    db.query_row(
+        "SELECT name,path FROM allowed_apps WHERE app_id=?1",
+        [app_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )
+    .optional()
+    .map_err(|_| "Não foi possível verificar o aplicativo permitido.".into())
+}
+
+#[cfg(windows)]
+fn system_information(app: &tauri::AppHandle) -> Result<String, String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::{
+        Storage::FileSystem::GetDiskFreeSpaceExW,
+        System::{
+            Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS},
+            SystemInformation::{GetTickCount64, GlobalMemoryStatusEx, MEMORYSTATUSEX},
+        },
+    };
+
+    let mut memory: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
+    memory.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
+    if unsafe { GlobalMemoryStatusEx(&mut memory) } == 0 {
+        return Err("Não foi possível consultar a memória do sistema.".into());
+    }
+    let mut output = format!(
+        "Sistema: Windows\nMemória física: {} total; {} disponível\nTempo ligado: {}\n",
+        format_bytes(memory.ullTotalPhys),
+        format_bytes(memory.ullAvailPhys),
+        format_duration(unsafe { GetTickCount64() } / 1000),
+    );
+
+    let mut folders = Vec::<PathBuf>::new();
+    if let Ok(workspace) = crate::agent_home::workspace_path(app) {
+        folders.push(workspace);
+    }
+    if let Ok(db) = crate::security::database(app) {
+        if let Ok(mut statement) = db.prepare("SELECT path FROM allowed_folders ORDER BY path") {
+            if let Ok(rows) = statement.query_map([], |row| row.get::<_, String>(0)) {
+                folders.extend(rows.filter_map(Result::ok).map(PathBuf::from));
+            }
+        }
+    }
+    folders.sort();
+    folders.dedup();
+    output.push_str("Discos das pastas permitidas:\n");
+    for (index, folder) in folders.iter().enumerate() {
+        if crate::security::workspace::has_reparse(folder) || !folder.is_dir() {
+            continue;
+        }
+        let mut wide: Vec<u16> = folder.as_os_str().encode_wide().collect();
+        wide.push(0);
+        let mut available = 0_u64;
+        let mut total = 0_u64;
+        let mut free = 0_u64;
+        if unsafe { GetDiskFreeSpaceExW(wide.as_ptr(), &mut available, &mut total, &mut free) } != 0
+        {
+            output.push_str(&format!(
+                "Pasta permitida {}: {} total; {} livre; {} disponível\n",
+                index + 1,
+                format_bytes(total),
+                format_bytes(free),
+                format_bytes(available),
+            ));
+        }
+    }
+
+    let mut power: SYSTEM_POWER_STATUS = unsafe { std::mem::zeroed() };
+    if unsafe { GetSystemPowerStatus(&mut power) } != 0 {
+        if power.BatteryFlag & 128 != 0 || power.BatteryLifePercent == 255 {
+            output.push_str("Bateria: não detectada ou sem medição disponível\n");
+        } else {
+            let power_source = match power.ACLineStatus {
+                0 => "na bateria",
+                1 => "na tomada",
+                _ => "alimentação desconhecida",
+            };
+            let charging = if power.BatteryFlag & 8 != 0 {
+                "carregando"
+            } else {
+                "sem indicação de carregamento"
+            };
+            output.push_str(&format!(
+                "Bateria: {}%; {power_source}; {charging}\n",
+                power.BatteryLifePercent
+            ));
+        }
+    } else {
+        output.push_str("Bateria: informação indisponível\n");
+    }
+    Ok(output)
+}
+
+#[cfg(not(windows))]
+fn system_information(_: &tauri::AppHandle) -> Result<String, String> {
+    Err("As informações do sistema estão disponíveis somente no Windows.".into())
+}
+
+fn format_bytes(bytes: u64) -> String {
+    format!("{:.1} GiB", bytes as f64 / 1024_f64.powi(3))
+}
+
+fn format_duration(seconds: u64) -> String {
+    let days = seconds / 86_400;
+    let hours = (seconds % 86_400) / 3_600;
+    let minutes = (seconds % 3_600) / 60;
+    format!("{days} d {hours} h {minutes} min")
+}
+
+pub(crate) fn domain_for_open_url(params: &Value) -> Result<Option<String>, String> {
+    if params.get("url").is_none() {
+        return Ok(None);
+    }
+    let normalized = crate::external_links::validate_external_url(params["url"].as_str().unwrap())
+        .map_err(str::to_string)?;
+    let url = Url::parse(&normalized).map_err(|_| "URL inválida.")?;
+    Ok(url.host_str().map(str::to_ascii_lowercase))
+}
+
+pub(crate) fn page_uri(page: &str) -> Option<&'static str> {
+    SETTINGS_PAGES
+        .iter()
+        .find(|(key, _)| *key == page)
+        .map(|(_, uri)| *uri)
+}
+
+fn checked_path(params: &Value, root: &Path) -> Result<PathBuf, String> {
+    let raw = Path::new(params["path"].as_str().ok_or("Informe um caminho.")?);
+    let candidate = if raw.is_absolute() {
+        raw.to_path_buf()
+    } else {
+        root.join(raw)
+    };
+    if crate::security::workspace::has_reparse(&candidate) {
+        return Err("Links e junctions não podem ser abertos.".into());
+    }
+    let canonical = candidate
+        .canonicalize()
+        .map_err(|_| "O caminho não existe ou não pôde ser validado.")?;
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|_| "A pasta permitida não pôde ser validada.")?;
+    let permitted = if raw.is_absolute() {
+        crate::security::skills::validate_raw_folder_path(&canonical.to_string_lossy())?;
+        // The dispatcher resolved the selected allowed folder as `root`.
+        canonical.starts_with(&canonical_root)
+    } else {
+        canonical.starts_with(&canonical_root)
+    };
+    if !permitted || !canonical.is_file() && !canonical.is_dir() || blocked_extension(&canonical) {
+        return Err(
+            "O caminho não pertence a uma pasta permitida ou não é seguro para abrir.".into(),
+        );
+    }
+    Ok(canonical)
+}
+
+fn blocked_extension(path: &Path) -> bool {
+    const BLOCKED: &[&str] = &[
+        "exe",
+        "bat",
+        "cmd",
+        "com",
+        "ps1",
+        "psm1",
+        "psd1",
+        "vbs",
+        "vbe",
+        "js",
+        "jse",
+        "wsf",
+        "wsh",
+        "jar",
+        "msi",
+        "msp",
+        "scr",
+        "lnk",
+        "reg",
+        "hta",
+        "cpl",
+        "msc",
+        "dll",
+        "sys",
+        "sh",
+        "bash",
+        "py",
+        "pyw",
+        "rb",
+        "pl",
+        "php",
+        "class",
+        "appx",
+        "msix",
+        "pif",
+        "gadget",
+        "workflow",
+        "url",
+        "website",
+        "scf",
+        "application",
+        "appref-ms",
+        "msu",
+        "docm",
+        "dotm",
+        "xlsm",
+        "xltm",
+        "xlam",
+        "pptm",
+        "potm",
+        "ppam",
+        "html",
+        "htm",
+        "xhtml",
+        "svg",
+        "mht",
+        "mhtml",
+    ];
+    path.extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|extension| {
+            BLOCKED
+                .iter()
+                .any(|blocked| extension.eq_ignore_ascii_case(blocked))
+        })
+}
+
+fn bounded_string<'a>(
+    object: &'a serde_json::Map<String, Value>,
+    key: &str,
+    max: usize,
+) -> Result<&'a str, String> {
+    let value = object
+        .get(key)
+        .and_then(Value::as_str)
+        .ok_or("Campo textual inválido.")?;
+    if value.is_empty() || value.len() > max || value.chars().any(char::is_control) {
+        return Err("Um campo textual excede os limites permitidos.".into());
+    }
+    Ok(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn rejects_non_http_schemes_and_private_addresses() {
+        for url in [
+            "file:///C:/secret",
+            "javascript:alert(1)",
+            "data:text/plain,x",
+            "custom:thing",
+            "http://127.0.0.1",
+            "http://192.168.1.2",
+        ] {
+            assert!(
+                validate("system.open_url", &json!({"url":url})).is_err(),
+                "{url}"
+            );
+        }
+        assert!(validate("system.open_url", &json!({"url":"https://example.com"})).is_ok());
+    }
+
+    #[test]
+    fn settings_page_is_a_closed_uri_mapping() {
+        assert_eq!(page_uri("tela"), Some("ms-settings:display"));
+        assert!(page_uri("file:///C:/").is_none());
+        assert!(validate("settings.open", &json!({"page":"ms-settings:display"})).is_err());
+    }
+
+    #[test]
+    fn blocks_executable_and_script_extensions_case_insensitively() {
+        for path in [
+            "setup.EXE",
+            "run.ps1",
+            "open.JS",
+            "shortcut.lnk",
+            "setup.msi",
+            "internet.url",
+            "macro.xlsm",
+            "document.html",
+        ] {
+            assert!(blocked_extension(Path::new(path)), "{path}");
+        }
+        assert!(!blocked_extension(Path::new("notes.txt")));
+    }
+
+    #[test]
+    fn system_paths_reject_traversal_and_domain_lookup_uses_the_link_policy() {
+        assert!(validate("system.open_path", &json!({"path":"../secret.txt"})).is_err());
+        assert_eq!(
+            domain_for_open_url(&json!({"url":"https://Example.com/page"})).unwrap(),
+            Some("example.com".into())
+        );
+        assert!(domain_for_open_url(&json!({"url":"http://127.0.0.1"})).is_err());
+    }
+
+    #[test]
+    fn app_launch_rejects_identifiers_that_are_not_registered() {
+        let db = rusqlite::Connection::open_in_memory().unwrap();
+        db.execute(
+            "CREATE TABLE allowed_apps(app_id TEXT PRIMARY KEY,name TEXT,path TEXT)",
+            [],
+        )
+        .unwrap();
+        assert!(lookup_allowed_app(&db, "app-0123456789abcdef0123")
+            .unwrap()
+            .is_none());
+        assert!(validate("app.launch", &json!({"app_id":"app-0123456789abcdef0123"})).is_ok());
+        assert!(validate("app.launch", &json!({"app_id":"app-invented"})).is_err());
+    }
+
+    #[test]
+    fn clipboard_read_is_empty_schema_and_returns_an_untrusted_skill_result() {
+        assert!(validate("clipboard.read", &json!({})).is_ok());
+        assert!(validate("clipboard.read", &json!({"text":"forjado"})).is_err());
+        assert!(validate("clipboard.write", &json!({"text":"texto"})).is_ok());
+        assert!(validate("clipboard.write", &json!({"text":"x\u{0000}y"})).is_err());
+        let read = crate::security::skills::registry()
+            .into_iter()
+            .find(|skill| skill.id == "clipboard.read")
+            .unwrap();
+        assert_eq!(
+            read.result_trust,
+            crate::security::skills::ResultTrust::Untrusted
+        );
+    }
+
+    #[test]
+    fn system_info_has_no_arguments_and_formatted_values_omit_path_data() {
+        assert!(validate("system.info", &json!({})).is_ok());
+        assert!(validate("system.info", &json!({"path":"C:/Users/name"})).is_err());
+        assert_eq!(format_duration(90_061), "1 d 1 h 1 min");
+        assert!(format_bytes(8 * 1024 * 1024 * 1024).contains("8.0 GiB"));
+    }
+}

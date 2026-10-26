@@ -97,6 +97,7 @@ mod productivity;
 mod profile;
 mod providers;
 mod security;
+mod system_actions;
 mod tray;
 mod web_fetch;
 mod window_sizing;
@@ -800,6 +801,8 @@ pub fn run() -> Result<(), tauri::Error> {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
@@ -905,6 +908,9 @@ pub fn run() -> Result<(), tauri::Error> {
             security::skills::get_allowed_folders,
             security::skills::add_allowed_folder,
             security::skills::remove_allowed_folder,
+            security::skills::get_allowed_apps,
+            security::skills::register_allowed_app,
+            security::skills::remove_allowed_app,
             security::set_kill_shortcut,
             security::set_approval_ttl,
             security::halt_all,

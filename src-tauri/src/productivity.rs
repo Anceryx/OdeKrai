@@ -14,6 +14,14 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
     if skill_id == "web.fetch" {
         return crate::web_fetch::validate_skill_params(params);
     }
+    if skill_id.starts_with("system.")
+        || skill_id == "settings.open"
+        || skill_id == "notification.show"
+        || skill_id == "app.launch"
+        || skill_id.starts_with("clipboard.")
+    {
+        return crate::system_actions::validate(skill_id, params);
+    }
     let object = params.as_object().ok_or("Parâmetros inválidos.")?;
     let expected: &[&str] = match skill_id {
         "calendar.create_event" => &[
@@ -147,6 +155,14 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
 }
 
 pub(crate) fn preview(skill_id: &str, params: &Value, root: &Path) -> Result<String, String> {
+    if skill_id.starts_with("system.")
+        || skill_id == "settings.open"
+        || skill_id == "notification.show"
+        || skill_id == "app.launch"
+        || skill_id.starts_with("clipboard.")
+    {
+        return crate::system_actions::preview(skill_id, params, root);
+    }
     if skill_id == "mail.draft" {
         validate(skill_id, params)?;
         return Ok(format!(
@@ -202,6 +218,19 @@ pub(crate) fn execute(
     app: Option<&tauri::AppHandle>,
 ) -> Result<String, String> {
     validate(skill_id, params)?;
+    if skill_id.starts_with("system.")
+        || skill_id == "settings.open"
+        || skill_id == "notification.show"
+        || skill_id == "app.launch"
+        || skill_id.starts_with("clipboard.")
+    {
+        return crate::system_actions::execute(
+            skill_id,
+            params,
+            root,
+            app.ok_or("A habilidade exige aprovação antes de executar.")?,
+        );
+    }
     if skill_id == "mail.draft" {
         let to = params["to"].as_str().unwrap_or("");
         let subject = params["subject"].as_str().unwrap_or("");

@@ -563,6 +563,23 @@ impl Tool for Productivity {
             SimulatedAction::Productivity { skill_id, .. } if skill_id == "web.fetch" => {
                 Risk::ComunicacaoExterna
             }
+            SimulatedAction::Productivity { skill_id, .. }
+                if skill_id == "clipboard.read" || skill_id == "system.info" =>
+            {
+                Risk::Leitura
+            }
+            SimulatedAction::Productivity { skill_id, .. }
+                if matches!(
+                    skill_id.as_str(),
+                    "system.open_url"
+                        | "system.open_path"
+                        | "system.reveal_in_folder"
+                        | "settings.open"
+                        | "app.launch"
+                ) =>
+            {
+                Risk::ComunicacaoExterna
+            }
             SimulatedAction::Productivity { skill_id, .. } if skill_id == "mail.draft" => {
                 Risk::ComunicacaoExterna
             }

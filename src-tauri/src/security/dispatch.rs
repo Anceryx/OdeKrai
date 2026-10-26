@@ -11,7 +11,7 @@ pub(super) fn action_metadata(
         SimulatedAction::FilesList { .. }
         | SimulatedAction::FilesSearch { .. }
         | SimulatedAction::FilesRead { .. } => true,
-        SimulatedAction::Productivity { skill_id, .. } => skill_id != "web.fetch",
+        SimulatedAction::Productivity { skill_id, .. } => is_workspace_skill(skill_id),
         _ => false,
     };
     let fixed = match action {
@@ -61,6 +61,15 @@ pub(super) fn action_metadata(
             "sheet.create_csv" => "sheet.create_csv",
             "mail.draft" => "mail.draft",
             "web.fetch" => "web.fetch",
+            "system.open_url"
+            | "system.open_path"
+            | "system.reveal_in_folder"
+            | "settings.open"
+            | "notification.show"
+            | "app.launch"
+            | "clipboard.write"
+            | "clipboard.read"
+            | "system.info" => skill_id,
             _ => "productivity",
         },
         _ => tool.name(),
@@ -68,13 +77,51 @@ pub(super) fn action_metadata(
     (tool_name, tool.risk(action), workspace_action, fixed)
 }
 
+fn is_workspace_skill(skill_id: &str) -> bool {
+    skill_id.starts_with("files.")
+        || matches!(
+            skill_id,
+            "calendar.create_event"
+                | "doc.create_markdown"
+                | "doc.create_text"
+                | "sheet.create_csv"
+                | "mail.draft"
+                | "system.open_path"
+                | "system.reveal_in_folder"
+        )
+}
+
 fn require_batch_approval(action: &SimulatedAction, decision: Decision) -> Decision {
-    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "files.apply_plan")
+    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "files.apply_plan" | "app.launch" | "clipboard.read" | "clipboard.write"))
         && matches!(decision, Decision::Allow(_))
     {
         Decision::AskUser("batch_requires_approval")
     } else {
         decision
+    }
+}
+
+#[cfg(test)]
+mod explicit_approval_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn clipboard_and_registered_app_actions_cannot_skip_approval_in_permissive_modes() {
+        for skill_id in ["clipboard.read", "clipboard.write", "app.launch"] {
+            let action = SimulatedAction::Productivity {
+                skill_id: skill_id.into(),
+                params: match skill_id {
+                    "clipboard.read" => json!({}),
+                    "clipboard.write" => json!({"text":"x"}),
+                    _ => json!({"app_id":"app-0123456789abcdef0123"}),
+                },
+            };
+            assert!(matches!(
+                require_batch_approval(&action, Decision::Allow("mode_total")),
+                Decision::AskUser(_)
+            ));
+        }
     }
 }
 
@@ -165,6 +212,11 @@ pub(super) fn preview_for(
     app: &tauri::AppHandle,
     action: &SimulatedAction,
 ) -> Result<String, String> {
+    if let SimulatedAction::Productivity { skill_id, params } = action {
+        if skill_id == "app.launch" {
+            return crate::system_actions::preview_allowed_app(app, params);
+        }
+    }
     let workspace_action = match action {
         SimulatedAction::ReadFile { .. }
         | SimulatedAction::WriteFile { .. }
@@ -172,16 +224,18 @@ pub(super) fn preview_for(
         | SimulatedAction::FilesList { .. }
         | SimulatedAction::FilesSearch { .. }
         | SimulatedAction::FilesRead { .. } => true,
-        SimulatedAction::Productivity { skill_id, .. } => skill_id != "web.fetch",
+        SimulatedAction::Productivity { skill_id, .. } => is_workspace_skill(skill_id),
         _ => false,
     };
     let (workspace, action) = if workspace_action {
-        let write = matches!(
-            action,
-            SimulatedAction::WriteFile { .. }
-                | SimulatedAction::DeleteFile { .. }
-                | SimulatedAction::Productivity { .. }
-        );
+        let write = match action {
+            SimulatedAction::WriteFile { .. } | SimulatedAction::DeleteFile { .. } => true,
+            SimulatedAction::Productivity { skill_id, .. } => !matches!(
+                skill_id.as_str(),
+                "system.open_path" | "system.reveal_in_folder"
+            ),
+            _ => false,
+        };
         super::skills::resolve_action_target(app, action, write)?
     } else {
         (PathBuf::new(), action.clone())
@@ -324,16 +378,18 @@ async fn execute_action_with_timeout(
         | SimulatedAction::FilesList { .. }
         | SimulatedAction::FilesSearch { .. }
         | SimulatedAction::FilesRead { .. } => true,
-        SimulatedAction::Productivity { skill_id, .. } => skill_id != "web.fetch",
+        SimulatedAction::Productivity { skill_id, .. } => is_workspace_skill(skill_id),
         _ => false,
     };
     let (workspace, action) = if workspace_action {
-        let write = matches!(
-            action,
-            SimulatedAction::WriteFile { .. }
-                | SimulatedAction::DeleteFile { .. }
-                | SimulatedAction::Productivity { .. }
-        );
+        let write = match action {
+            SimulatedAction::WriteFile { .. } | SimulatedAction::DeleteFile { .. } => true,
+            SimulatedAction::Productivity { skill_id, .. } => !matches!(
+                skill_id.as_str(),
+                "system.open_path" | "system.reveal_in_folder"
+            ),
+            _ => false,
+        };
         super::skills::resolve_action_target(app, action, write)?
     } else {
         (PathBuf::new(), action.clone())
@@ -378,16 +434,23 @@ pub(super) async fn submit_agent_action(
     on_approval: &mut (dyn FnMut(String) + Send),
 ) -> Result<ActionResult, String> {
     let domain_requires_approval = match &action {
-        SimulatedAction::Productivity { skill_id, params } if skill_id == "web.fetch" => {
-            let raw_url = params
-                .get("url")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("");
-            match crate::web_fetch::validate_url(raw_url)
-                .and_then(|url| crate::web_fetch::normalized_domain(&url))
-            {
-                Ok(domain) => !crate::security::external_domain_is_trusted(app, &domain)?,
-                Err(_) => false,
+        SimulatedAction::Productivity { skill_id, params }
+            if skill_id == "web.fetch" || skill_id == "system.open_url" =>
+        {
+            let domain = if skill_id == "system.open_url" {
+                crate::system_actions::domain_for_open_url(params)
+                    .ok()
+                    .flatten()
+            } else {
+                params
+                    .get("url")
+                    .and_then(serde_json::Value::as_str)
+                    .and_then(|url| crate::web_fetch::validate_url(url).ok())
+                    .and_then(|url| crate::web_fetch::normalized_domain(&url).ok())
+            };
+            match domain {
+                Some(domain) => !crate::security::external_domain_is_trusted(app, &domain)?,
+                None => false,
             }
         }
         _ => false,
@@ -655,14 +718,19 @@ pub(super) async fn submit_agent_action(
     match result {
         ApprovalDecision::Aprovada if !state.is_halted() && !cancel.is_cancelled() => {
             if let SimulatedAction::Productivity { skill_id, params } = &action {
-                if skill_id == "web.fetch" {
-                    let raw_url = params
-                        .get("url")
-                        .and_then(serde_json::Value::as_str)
-                        .ok_or("Informe uma URL HTTPS.")?;
-                    let domain = crate::web_fetch::normalized_domain(
-                        &crate::web_fetch::validate_url(raw_url)?,
-                    )?;
+                if skill_id == "web.fetch" || skill_id == "system.open_url" {
+                    let domain = if skill_id == "system.open_url" {
+                        crate::system_actions::domain_for_open_url(params)?
+                            .ok_or("Informe uma URL HTTP ou HTTPS.")?
+                    } else {
+                        let raw_url = params
+                            .get("url")
+                            .and_then(serde_json::Value::as_str)
+                            .ok_or("Informe uma URL HTTPS.")?;
+                        crate::web_fetch::normalized_domain(&crate::web_fetch::validate_url(
+                            raw_url,
+                        )?)?
+                    };
                     crate::security::remember_fetch_domain(app, &domain)?;
                 }
             }

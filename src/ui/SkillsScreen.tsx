@@ -17,6 +17,7 @@ type Skill = {
   fixedBlocked: boolean;
 };
 type Folder = { path: string; access: 'read_only' | 'read_write'; workspace: boolean };
+type AllowedApp = { id: string; name: string; path: string };
 
 const riskLabels: Record<Risk, string> = {
   leitura: 'Leitura',
@@ -28,6 +29,7 @@ const riskLabels: Record<Risk, string> = {
 export function SkillsScreen() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
+  const [apps, setApps] = useState<AllowedApp[]>([]);
   const [access, setAccess] = useState<'read_only' | 'read_write'>('read_only');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -35,12 +37,14 @@ export function SkillsScreen() {
   const refresh = useCallback(async () => {
     if (!isTauri()) return;
     try {
-      const [nextSkills, nextFolders] = await Promise.all([
+      const [nextSkills, nextFolders, nextApps] = await Promise.all([
         invoke<Skill[]>('get_skills'),
         invoke<Folder[]>('get_allowed_folders'),
+        invoke<AllowedApp[]>('get_allowed_apps'),
       ]);
       setSkills(nextSkills);
       setFolders(nextFolders);
+      setApps(nextApps);
       setError('');
     } catch (cause) {
       setError(String(cause));
@@ -121,12 +125,60 @@ export function SkillsScreen() {
     }
   }
 
+  async function addApp() {
+    if (!isTauri()) return;
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        title: 'Escolha um aplicativo permitido',
+        filters: [{ name: 'Aplicativos Windows', extensions: ['exe'] }],
+      });
+      if (typeof selected !== 'string') return;
+      const suggestedName =
+        selected
+          .split(/[\\/]/)
+          .at(-1)
+          ?.replace(/\.exe$/i, '') ?? '';
+      const name = window.prompt('Nome do aplicativo permitido', suggestedName)?.trim();
+      if (!name) return;
+      setBusy(true);
+      await invoke('register_allowed_app', { name, path: selected });
+      await refresh();
+    } catch (cause) {
+      setError(String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeApp(app: AllowedApp) {
+    setBusy(true);
+    try {
+      await invoke('remove_allowed_app', { appId: app.id });
+      await refresh();
+    } catch (cause) {
+      setError(String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const workspaceSkills = skills.filter(
     ({ id }) => id.startsWith('workspace.') || id.startsWith('files.'),
   );
   const simulatedSkills = skills.filter(({ id }) => id.startsWith('simulated.'));
   const productivitySkills = skills.filter(({ id }) =>
-    ['calendar.', 'doc.', 'sheet.'].some((prefix) => id.startsWith(prefix)),
+    [
+      'calendar.',
+      'doc.',
+      'sheet.',
+      'system.',
+      'settings.',
+      'notification.',
+      'app.',
+      'clipboard.',
+    ].some((prefix) => id.startsWith(prefix)),
   );
 
   return (
@@ -174,7 +226,7 @@ export function SkillsScreen() {
         ))}
       </section>
       <section className="settings-section">
-        <h2>Calendário, documentos e planilhas</h2>
+        <h2>Aplicativos e sistema</h2>
         {productivitySkills.map((skill) => (
           <article className="skill-card" key={skill.id}>
             <div>
@@ -204,6 +256,37 @@ export function SkillsScreen() {
             )}
           </article>
         ))}
+      </section>
+      <section className="settings-section allowed-folders-section">
+        <div className="section-heading-row">
+          <div>
+            <h2>Aplicativos permitidos</h2>
+            <p>O assistente só pode iniciar os executáveis escolhidos aqui, sem argumentos.</p>
+          </div>
+          <Button variant="secondary" disabled={busy || !isTauri()} onClick={() => void addApp()}>
+            <Icon name="folder" /> Escolher aplicativo
+          </Button>
+        </div>
+        <ul className="allowed-folder-list">
+          {apps.map((allowedApp) => (
+            <li key={allowedApp.id}>
+              <div>
+                <strong>{allowedApp.name}</strong>
+                <small>
+                  {allowedApp.path} · {allowedApp.id}
+                </small>
+              </div>
+              <Button
+                variant="ghost"
+                disabled={busy}
+                onClick={() => void removeApp(allowedApp)}
+                aria-label={`Remover ${allowedApp.name}`}
+              >
+                <Icon name="delete" />
+              </Button>
+            </li>
+          ))}
+        </ul>
       </section>
       <section className="settings-section">
         <h2>Simulações</h2>
