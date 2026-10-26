@@ -8,10 +8,16 @@ edition = "2021"
 
 [features]
 diagnostics = ["tauri/devtools"]
+mock-window-tests = []
 
 [lib]
 name = "odekrai_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[test]]
+name = "mock_window"
+path = "tests/mock_window.rs"
+required-features = ["mock-window-tests"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

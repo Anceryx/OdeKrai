@@ -66,6 +66,10 @@ jobs:
         run: cargo test --lib
         working-directory: src-tauri
 
+      - name: Testar janelas com runtime simulado Tauri
+        run: cargo test --test mock_window --features mock-window-tests
+        working-directory: src-tauri
+
       - name: Executar Clippy
         run: cargo clippy -- -D warnings
         working-directory: src-tauri

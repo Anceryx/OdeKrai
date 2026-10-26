@@ -23,7 +23,8 @@ island/mascote.
 - O workflow `CI` valida testes, formatação e build frontend no push/PR, mas não gera nem armazena instaladores Windows como artefatos do GitHub Actions.
 - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`: formatação Rust.
 - `cargo check --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc`: compilação Rust para Windows.
-- `cargo test --manifest-path src-tauri/Cargo.toml --lib`: testes Rust, incluindo cabeçalhos de autenticação com servidor local simulado.
+- `cargo test --manifest-path src-tauri/Cargo.toml --lib`: testes Rust de lógica e cabeçalhos de autenticação com servidor local simulado.
+- `cargo test --manifest-path src-tauri/Cargo.toml --test mock_window --features mock-window-tests`: teste de integração Tauri com `MockRuntime`; no Windows MSVC, o harness recebe um manifesto Common Controls v6 próprio.
 - `window_config_tests::main_window_uses_requested_default_and_minimum_size`: dimensões, mínimos e centralização da janela principal em `tauri.conf.json`.
 - Testes Rust da validação do endpoint, mapeamento de status, recusa de formatos de imagem e normalização de avatar; sem chamadas às APIs reais.
 - Testes Vitest da migração v1 e isolamento de endpoint/modelo entre provedores.
