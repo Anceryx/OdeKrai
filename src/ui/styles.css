@@ -4258,6 +4258,51 @@ html.island-window-html {
   font-size: 0.8rem;
 }
 
+.about-table {
+  margin: 0;
+}
+
+.about-table > div {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.7fr) minmax(0, 1.3fr);
+  gap: 16px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+}
+
+.about-table dt,
+.about-table dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.about-table dt {
+  color: var(--text-secondary, #b8b2a6);
+}
+
+.about-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.text-link-button {
+  padding: 0;
+  border: 0;
+  color: var(--accent, #c1a5ff);
+  background: transparent;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+@media (max-width: 560px) {
+  .about-table > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
 .screen-loading,
 .screen-error {
   display: grid;

@@ -25,5 +25,11 @@ describe('SettingsScreen', () => {
     expect(markup).toContain('Links externos');
     expect(markup).toContain('Sobre');
     expect(markup).toContain('WebView2');
+    expect(markup).toContain('Data do build (local)');
+    expect(markup).toContain('Data do build (UTC)');
+    expect(markup).toContain('Windows');
+    expect(markup).toContain('Licença');
+    expect(markup).toContain('Copiar informações');
+    expect(markup).toContain('Abrir pasta de logs');
   });
 });
