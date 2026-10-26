@@ -108,6 +108,23 @@ pub struct ProviderTarget {
 #[derive(Default)]
 pub struct ProviderRequests(Mutex<HashMap<String, CancellationToken>>);
 
+#[derive(Clone)]
+enum EventSink {
+    Channel(Channel<ProviderEvent>),
+    Callback(Arc<dyn Fn(ProviderEvent) + Send + Sync>),
+}
+
+impl EventSink {
+    fn send(&self, event: ProviderEvent) {
+        match self {
+            Self::Channel(channel) => {
+                let _ = channel.send(event);
+            }
+            Self::Callback(callback) => callback(event),
+        }
+    }
+}
+
 #[tauri::command]
 pub fn get_provider_capabilities(
     caller: tauri::WebviewWindow,
@@ -117,6 +134,27 @@ pub fn get_provider_capabilities(
 ) -> Result<ProviderCapabilities, String> {
     super::require_main(&caller)?;
     effective_capabilities(&app, &provider_id, &model)
+}
+
+#[tauri::command]
+pub async fn set_provider_tools_opt_in(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    provider_id: String,
+    model: String,
+    enabled: bool,
+) -> Result<(), String> {
+    super::require_main(&caller)?;
+    let entry = catalog_entry(&provider_id).ok_or("O provedor não está no catálogo do OdeKrai.")?;
+    if !entry.capabilities.tools {
+        return Err("Este adaptador não oferece tool calling.".into());
+    }
+    if enabled && !entry.capabilities.verified
+        && !crate::security::confirm_native(format!("Permitir tool calling não verificado para {provider_id} / {model}? As chamadas continuarão sujeitas às permissões locais.")).await
+    {
+        return Err("A confirmação nativa foi recusada.".into());
+    }
+    crate::history::cache_tool_opt_in(&app, &provider_id, &model, enabled)
 }
 
 #[tauri::command]
@@ -595,7 +633,7 @@ pub async fn stream_provider_message(
         fallbacks,
         daily_token_limit,
         request_id,
-        Some(on_chunk),
+        Some(EventSink::Channel(on_chunk)),
         security,
     )
     .await
@@ -613,7 +651,7 @@ async fn send_message_inner(
     fallbacks: Vec<ProviderTarget>,
     daily_token_limit: u64,
     request_id: String,
-    on_chunk: Option<Channel<ProviderEvent>>,
+    on_chunk: Option<EventSink>,
     security: State<'_, crate::security::SecurityState>,
 ) -> Result<ProviderReply, String> {
     if security.is_halted() {
@@ -700,7 +738,7 @@ async fn send_message_inner(
                     let app = &app;
                     async move {
                         if let Some(channel) = channel.as_ref() {
-                            let _ = channel.send(ProviderEvent::ProviderSelected { provider_id: provider_id.clone() });
+                            channel.send(ProviderEvent::ProviderSelected { provider_id: provider_id.clone() });
                         }
                         request_provider(app, &provider_id, &base_url, attempt, channel, Some(seen_output)).await
                     }
@@ -717,7 +755,7 @@ async fn send_message_inner(
                         } else {
                             "provider"
                         };
-                        let _ = channel.send(ProviderEvent::Error { kind: kind.into(), status: None, message: error.clone() });
+                        channel.send(ProviderEvent::Error { kind: kind.into(), status: None, message: error.clone() });
                     }
                     return Err(error);
                 }
@@ -728,7 +766,7 @@ async fn send_message_inner(
                 if crate::history::daily_token_limit_exceeded(total, daily_token_limit) {
                     crate::security::audit_provider_usage_limit(&app, &security, &target.provider_id, total, daily_token_limit)?;
                     if let Some(channel) = on_chunk.as_ref() {
-                        let _ = channel.send(ProviderEvent::Error {
+                        channel.send(ProviderEvent::Error {
                             kind: "daily_token_limit".into(), status: None,
                             message: "O limite diário de tokens foi atingido. A resposta foi interrompida.".into(),
                         });
@@ -777,11 +815,7 @@ fn eligible_provider_targets(
         }
         if tools_required {
             let capabilities = effective_capabilities(app, &target.provider_id, &target.model)?;
-            if !entry.capabilities.tools
-                || !entry.capabilities.verified
-                || !capabilities.tools
-                || !capabilities.verified
-            {
+            if !entry.capabilities.tools || !capabilities.tools || !capabilities.verified {
                 return Ok(false);
             }
         }
@@ -840,7 +874,7 @@ async fn request_provider(
     provider_id: &str,
     base_url: &str,
     request_data: ChatRequest,
-    on_chunk: Option<Channel<ProviderEvent>>,
+    on_chunk: Option<EventSink>,
     observed_output: Option<Arc<AtomicBool>>,
 ) -> Result<ProviderReply, String> {
     let endpoint = provider_endpoint(provider_id, base_url)?;
@@ -919,7 +953,7 @@ async fn request_provider(
                     "Este modelo recusou o uso de ferramentas. O OdeKrai guardou essa informação para este modelo."
                         .to_string();
                 if let Some(channel) = on_chunk.as_ref() {
-                    let _ = channel.send(ProviderEvent::Error {
+                    channel.send(ProviderEvent::Error {
                         kind: "unsupported_tools".into(),
                         status: Some(400),
                         message: message.clone(),
@@ -930,7 +964,7 @@ async fn request_provider(
         }
         if let Some(channel) = on_chunk.as_ref() {
             let status_code = status.as_u16();
-            let _ = channel.send(ProviderEvent::Error {
+            channel.send(ProviderEvent::Error {
                 kind: "http".into(),
                 status: Some(status_code),
                 message: provider_http_error(status_code),
@@ -949,7 +983,7 @@ async fn request_provider(
                         observed_output.store(true, Ordering::SeqCst);
                     }
                 }
-                let _ = channel.send(event);
+                channel.send(event);
             })
             .await;
         }
@@ -959,6 +993,92 @@ async fn request_provider(
         .await
         .map_err(|_| "O provedor retornou uma resposta inválida.".to_string())?;
     parse_provider_reply(provider_id, &payload)
+}
+
+pub(crate) async fn agent_model_turn(
+    app: &tauri::AppHandle,
+    security: &crate::security::SecurityState,
+    configured_targets: Vec<crate::history::ConversationProviderTarget>,
+    messages: &[Message],
+    tools: &[ToolDef],
+) -> Result<ProviderReply, String> {
+    let targets = configured_targets
+        .into_iter()
+        .map(|target| ProviderTarget {
+            base_url: if target.base_url.trim().is_empty() {
+                catalog_entry(&target.provider_id)
+                    .map_or(target.base_url.clone(), |entry| entry.base_url)
+            } else {
+                target.base_url
+            },
+            provider_id: target.provider_id,
+            model: target.model,
+        })
+        .collect();
+    let targets = eligible_provider_targets(app, targets, true)?;
+    if targets.is_empty() {
+        return Err("Modo agente indisponível: nenhum provedor configurado tem ferramentas verificadas e credencial válida.".into());
+    }
+    let app_handle = app.clone();
+    let observed = Arc::new(AtomicBool::new(false));
+    let sink = EventSink::Callback(Arc::new(|_| {}));
+    let result = failover::try_candidates(
+        &targets,
+        |candidate| {
+            let app = app_handle.clone();
+            let provider_id = candidate.provider_id.clone();
+            let base_url = candidate.base_url.clone();
+            let sink = sink.clone();
+            let observed = observed.clone();
+            let request = ChatRequest {
+                model: candidate.model.clone(),
+                messages: messages.to_vec(),
+                tools: tools.to_vec(),
+                streaming: true,
+            };
+            async move {
+                request_provider(
+                    &app,
+                    &provider_id,
+                    &base_url,
+                    request,
+                    Some(sink),
+                    Some(observed),
+                )
+                .await
+            }
+        },
+        |from, to, reason| {
+            crate::security::audit_provider_fallback(
+                app,
+                security,
+                &from.provider_id,
+                &to.provider_id,
+                reason,
+            )
+        },
+        || observed.load(Ordering::SeqCst),
+    )
+    .await?;
+    let (index, reply) = result;
+    if let Some(usage) = reply.usage.as_ref() {
+        crate::history::record_provider_usage(
+            app,
+            &targets[index].provider_id,
+            usage.input,
+            usage.output,
+        )?;
+    }
+    Ok(reply)
+}
+
+pub(crate) fn verified_tool_support(
+    app: &tauri::AppHandle,
+    provider_id: &str,
+    model: &str,
+) -> bool {
+    effective_capabilities(app, provider_id, model)
+        .is_ok_and(|capabilities| capabilities.tools && capabilities.verified)
 }
 
 fn looks_like_unsupported_tools(response_body: &str) -> bool {
@@ -1341,6 +1461,12 @@ mod tests {
         };
         assert!(!capabilities_with_model_cache(declared, Some(false)).tools);
         assert!(capabilities_with_model_cache(declared, None).tools);
+        let unverified = ProviderCapabilities {
+            verified: false,
+            ..declared
+        };
+        let opted_in = capabilities_with_model_cache(unverified, Some(true));
+        assert!(opted_in.tools && opted_in.verified);
     }
 
     #[test]

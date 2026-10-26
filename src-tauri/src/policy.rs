@@ -90,6 +90,28 @@ pub fn decide(
     }
 }
 
+pub fn decide_with_taint(
+    mode: Mode,
+    risk: Risk,
+    origin: &Origin,
+    inside_workspace: bool,
+    fixed_block: Option<&'static str>,
+    permissive_override: bool,
+    tainted: bool,
+) -> Decision {
+    if tainted && risk != Risk::Leitura && fixed_block.is_none() {
+        return Decision::AskUser("origin_tainted");
+    }
+    decide(
+        mode,
+        risk,
+        origin,
+        inside_workspace,
+        fixed_block,
+        permissive_override,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -274,6 +296,22 @@ mod tests {
                 true
             ),
             Decision::AskUser("mode_always_ask")
+        );
+    }
+
+    #[test]
+    fn tainted_tool_result_requires_approval_even_in_total_mode_and_with_override() {
+        assert_eq!(
+            decide_with_taint(
+                Mode::ControleTotal,
+                Risk::EscritaReversivel,
+                &Origin::Model,
+                true,
+                None,
+                true,
+                true,
+            ),
+            Decision::AskUser("origin_tainted")
         );
     }
 }

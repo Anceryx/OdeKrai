@@ -42,12 +42,27 @@ impl Skill {
         state: &SecurityState,
         params: Value,
         origin: Origin,
+        tainted: bool,
+        cancel: &tokio_util::sync::CancellationToken,
+        on_approval: &mut (dyn FnMut(String) + Send),
     ) -> Result<ActionResult, String> {
-        if !skill_enabled(&app, self.id)? {
+        if !is_skill_enabled(&app, self.id)? {
             return Err("Esta habilidade está desativada.".into());
         }
+        self.preview(&app, &params)?;
         let action = parse_action(self.id, &params)?;
-        dispatch::submit_action(&app, state, action, origin)
+        dispatch::submit_agent_action(
+            &app,
+            state,
+            action,
+            origin,
+            tainted,
+            self.timeout,
+            self.rate_limit_per_minute,
+            cancel,
+            on_approval,
+        )
+        .await
     }
 }
 
@@ -292,7 +307,7 @@ pub fn model_tools(app: &tauri::AppHandle) -> Result<Vec<crate::providers::ToolD
     let skills = registry();
     let mut enabled = std::collections::HashSet::new();
     for skill in &skills {
-        if skill_enabled(app, skill.id)? {
+        if is_skill_enabled(app, skill.id)? {
             enabled.insert(skill.id);
         }
     }
@@ -314,7 +329,7 @@ fn model_tools_for(
         .collect()
 }
 
-fn skill_enabled(app: &tauri::AppHandle, id: &str) -> Result<bool, String> {
+pub(crate) fn is_skill_enabled(app: &tauri::AppHandle, id: &str) -> Result<bool, String> {
     database(app)?
         .query_row(
             "SELECT enabled FROM skill_settings WHERE skill_id=?1",
@@ -349,13 +364,18 @@ pub fn get_skills(
         .into_iter()
         .map(|skill| {
             let example = action_example(skill.id);
+            let mut params = serde_json::to_value(&example)
+                .map_err(|_| "Não foi possível preparar o catálogo de habilidades.".to_string())?;
+            if let Some(object) = params.as_object_mut() {
+                object.remove("tool");
+            }
             Ok(SkillView {
                 id: skill.id.into(),
                 name: skill.name.into(),
                 description: skill.description.into(),
-                risk: action_metadata(&example).1,
+                risk: skill.risk(&params)?,
                 result_trust: skill.result_trust,
-                enabled: skill_enabled(&app, skill.id)?,
+                enabled: is_skill_enabled(&app, skill.id)?,
                 more_permissive: super::override_enabled(&app, skill.id)?,
                 fixed_blocked: skill.id == "simulated.payment",
             })

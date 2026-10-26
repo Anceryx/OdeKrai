@@ -28,6 +28,9 @@ pub(super) fn capabilities_with_model_cache(
     if cached_tools_supported == Some(false) {
         capabilities.tools = false;
     }
+    if cached_tools_supported == Some(true) && capabilities.tools {
+        capabilities.verified = true;
+    }
     capabilities
 }
 
@@ -42,7 +45,6 @@ pub(super) fn effective_capabilities(
     if !capabilities.tools {
         return Ok(capabilities);
     }
-    let cached =
-        crate::history::cached_tool_support(app, provider_id, model).unwrap_or(Some(false));
+    let cached = crate::history::cached_tool_support(app, provider_id, model)?;
     Ok(capabilities_with_model_cache(capabilities, cached))
 }

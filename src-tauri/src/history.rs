@@ -2,6 +2,14 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use tauri::Manager;
 
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ConversationProviderTarget {
+    pub provider_id: String,
+    pub base_url: String,
+    pub model: String,
+}
+
 const PET_CATALOG: &str = include_str!("../../assets/pets/kenney-mini-characters/pets.json");
 const DEFAULT_PET_ID: &str = "character-female-a";
 
@@ -37,8 +45,9 @@ fn database(app: &tauri::AppHandle) -> Result<Connection, String> {
 
 fn init_schema(db: &Connection) -> Result<(), String> {
     db.execute_batch("PRAGMA foreign_keys = ON; PRAGMA secure_delete = ON;
-        CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()), provider_id TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '');
+        CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()), provider_id TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '', agent_enabled INTEGER NOT NULL DEFAULT 0 CHECK(agent_enabled IN (0,1)), provider_targets TEXT NOT NULL DEFAULT '[]');
         CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('user','assistant')), content TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
+        CREATE TABLE IF NOT EXISTS agent_messages (id INTEGER PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('tool_call','tool_result')), skill_id TEXT NOT NULL, audit_id TEXT, content TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
         CREATE INDEX IF NOT EXISTS messages_conversation ON messages(conversation_id, id);
         CREATE TABLE IF NOT EXISTS pet_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS provider_tool_support (
@@ -58,6 +67,11 @@ fn init_schema(db: &Connection) -> Result<(), String> {
     for (column, definition) in [
         ("provider_id", "TEXT NOT NULL DEFAULT ''"),
         ("model", "TEXT NOT NULL DEFAULT ''"),
+        (
+            "agent_enabled",
+            "INTEGER NOT NULL DEFAULT 0 CHECK(agent_enabled IN (0,1))",
+        ),
+        ("provider_targets", "TEXT NOT NULL DEFAULT '[]'"),
     ] {
         let exists: bool = db
             .query_row(
@@ -74,6 +88,215 @@ fn init_schema(db: &Connection) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+pub(crate) fn load_agent_context(
+    app: &tauri::AppHandle,
+    conversation_id: &str,
+) -> Result<
+    (
+        String,
+        String,
+        bool,
+        Vec<ConversationProviderTarget>,
+        Vec<crate::providers::Message>,
+    ),
+    String,
+> {
+    if !valid_id(conversation_id) {
+        return Err("Identificador de conversa inválido.".into());
+    }
+    let db = database(app)?;
+    let (provider_id, model, enabled, targets_json): (String, String, bool, String) = db.query_row(
+        "SELECT provider_id, model, agent_enabled, provider_targets FROM conversations WHERE id=?1",
+        [conversation_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    ).map_err(|_| "A conversa não existe no histórico local.".to_string())?;
+    if provider_id.is_empty() || model.is_empty() {
+        return Err(
+            "Modo agente indisponível: selecione um provedor e modelo em Conectores de IA.".into(),
+        );
+    }
+    let mut targets = serde_json::from_str::<Vec<ConversationProviderTarget>>(&targets_json)
+        .map_err(|_| "As configurações de provedores da conversa estão inválidas.".to_string())?;
+    if targets.is_empty() {
+        targets.push(ConversationProviderTarget {
+            provider_id: provider_id.clone(),
+            base_url: String::new(),
+            model: model.clone(),
+        });
+    }
+    if targets.len() > 16 {
+        return Err("A lista de provedores da conversa excede o limite permitido.".into());
+    }
+    let mut stmt = db
+        .prepare("SELECT role,content FROM messages WHERE conversation_id=?1 ORDER BY id LIMIT 100")
+        .map_err(|_| "Não foi possível carregar a conversa para o agente.".to_string())?;
+    let rows = stmt
+        .query_map([conversation_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(|_| "Não foi possível carregar a conversa para o agente.".to_string())?;
+    let mut messages = Vec::new();
+    for row in rows {
+        let (role, content) =
+            row.map_err(|_| "Não foi possível carregar a conversa para o agente.".to_string())?;
+        messages.push(crate::providers::Message {
+            role,
+            blocks: vec![crate::providers::Block::Text { text: content }],
+        });
+    }
+    if messages.is_empty() {
+        return Err("Modo agente indisponível: a conversa ainda não contém uma mensagem.".into());
+    }
+    Ok((provider_id, model, enabled, targets, messages))
+}
+
+pub(crate) fn save_agent_user_message(
+    app: &tauri::AppHandle,
+    conversation_id: &str,
+    message: &str,
+) -> Result<(), String> {
+    if !valid_id(conversation_id) || message.trim().is_empty() || message.len() > 1_000_000 {
+        return Err("Mensagem inválida para o agente.".into());
+    }
+    let db = database(app)?;
+    let conversation_exists: bool = db
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM conversations WHERE id=?1)",
+            [conversation_id],
+            |row| row.get(0),
+        )
+        .map_err(|_| "Não foi possível validar a conversa.".to_string())?;
+    if !conversation_exists {
+        return Err("A conversa não existe no histórico local.".into());
+    }
+    let latest: Option<(String, String)> = db
+        .query_row(
+            "SELECT role,content FROM messages WHERE conversation_id=?1 ORDER BY id DESC LIMIT 1",
+            [conversation_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(|_| "Não foi possível verificar a conversa.".to_string())?;
+    if latest
+        .as_ref()
+        .is_some_and(|(role, content)| role == "user" && content == message)
+    {
+        return Ok(());
+    }
+    db.execute(
+        "INSERT INTO messages(conversation_id,role,content) VALUES (?1,'user',?2)",
+        params![conversation_id, message],
+    )
+    .map_err(|_| "Não foi possível salvar a mensagem do agente.".to_string())?;
+    Ok(())
+}
+
+pub(crate) fn save_agent_final(
+    app: &tauri::AppHandle,
+    conversation_id: &str,
+    content: &str,
+) -> Result<(), String> {
+    if content.trim().is_empty() || content.len() > 1_000_000 {
+        return Err("A resposta final excede o limite permitido.".into());
+    }
+    database(app)?.execute(
+        "INSERT INTO messages(conversation_id,role,content) SELECT ?1,'assistant',?2 WHERE EXISTS(SELECT 1 FROM conversations WHERE id=?1)",
+        params![conversation_id,content],
+    ).map_err(|_| "Não foi possível salvar a resposta do agente.".to_string()).and_then(|changed| {
+        if changed == 1 { Ok(()) } else { Err("A conversa não existe no histórico local.".into()) }
+    })
+}
+
+pub(crate) fn agent_mode(app: &tauri::AppHandle, conversation_id: &str) -> Result<bool, String> {
+    database(app)?
+        .query_row(
+            "SELECT agent_enabled FROM conversations WHERE id=?1",
+            [conversation_id],
+            |row| row.get(0),
+        )
+        .map_err(|_| "A conversa não existe no histórico local.".to_string())
+}
+
+pub(crate) fn set_agent_mode(
+    app: &tauri::AppHandle,
+    conversation_id: &str,
+    enabled: bool,
+) -> Result<(), String> {
+    let changed = database(app)?
+        .execute(
+            "UPDATE conversations SET agent_enabled=?2 WHERE id=?1",
+            params![conversation_id, enabled],
+        )
+        .map_err(|_| "Não foi possível salvar o modo agente.".to_string())?;
+    if changed == 1 {
+        Ok(())
+    } else {
+        Err("A conversa não existe no histórico local.".into())
+    }
+}
+
+#[tauri::command]
+pub fn get_conversation_agent_mode(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    conversation_id: String,
+) -> Result<bool, String> {
+    crate::require_main(&caller)?;
+    agent_mode(&app, &conversation_id)
+}
+
+#[tauri::command]
+pub fn set_conversation_agent_mode(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    conversation_id: String,
+    enabled: bool,
+) -> Result<(), String> {
+    crate::require_main(&caller)?;
+    if enabled {
+        let (provider_id, model, _, _, _) = load_agent_context(&app, &conversation_id)?;
+        if crate::agent_home::system_prompt(&app)?.is_none() {
+            return Err(
+                "Modo agente indisponível: configure a pasta e a identidade aprovada do agente."
+                    .into(),
+            );
+        }
+        if !crate::providers::verified_tool_support(&app, &provider_id, &model) {
+            return Err(
+                "Modo agente indisponível: o provedor e modelo não têm tool calling verificado."
+                    .into(),
+            );
+        }
+    }
+    set_agent_mode(&app, &conversation_id, enabled)
+}
+
+pub(crate) fn persist_agent_record(
+    app: &tauri::AppHandle,
+    conversation_id: &str,
+    role: &str,
+    skill_id: &str,
+    audit_id: Option<&str>,
+    safe_record: &str,
+) -> Result<(), String> {
+    if !valid_id(conversation_id)
+        || !matches!(role, "tool_call" | "tool_result")
+        || skill_id.is_empty()
+        || skill_id.len() > 64
+        || safe_record.is_empty()
+        || safe_record.len() > 2_048
+        || safe_record.chars().any(char::is_control)
+    {
+        return Err("Registro de execução inválido.".into());
+    }
+    database(app)?.execute(
+        "INSERT INTO agent_messages(conversation_id,role,skill_id,audit_id,content) SELECT ?1,?2,?3,?4,?5 WHERE EXISTS(SELECT 1 FROM conversations WHERE id=?1)",
+        params![conversation_id, role, skill_id, audit_id, safe_record],
+    ).map_err(|_| "Não foi possível registrar a etapa do agente.".to_string()).and_then(|changed| {
+        if changed == 1 { Ok(()) } else { Err("A conversa não existe no histórico local.".into()) }
+    })
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
@@ -204,6 +427,16 @@ pub(crate) fn cache_tools_unsupported(
 ) -> Result<(), String> {
     validate_provider_model(provider_id, model)?;
     cache_tool_support_db(&database(app)?, provider_id, model, false)
+}
+
+pub(crate) fn cache_tool_opt_in(
+    app: &tauri::AppHandle,
+    provider_id: &str,
+    model: &str,
+    enabled: bool,
+) -> Result<(), String> {
+    validate_provider_model(provider_id, model)?;
+    cache_tool_support_db(&database(app)?, provider_id, model, enabled)
 }
 
 fn validate_provider_model(provider_id: &str, model: &str) -> Result<(), String> {
@@ -437,6 +670,7 @@ pub fn append_conversation_message(
     content: String,
     provider_id: Option<String>,
     model: Option<String>,
+    provider_targets: Option<Vec<ConversationProviderTarget>>,
 ) -> Result<(), String> {
     super::require_main(&caller)?;
     if conversation_id.is_empty()
@@ -456,6 +690,19 @@ pub fn append_conversation_message(
         || model
             .as_ref()
             .is_some_and(|name| name.len() > 200 || name.chars().any(char::is_control))
+        || provider_targets.as_ref().is_some_and(|targets| {
+            targets.len() > 16
+                || targets.iter().any(|target| {
+                    target.provider_id.is_empty()
+                        || target.provider_id.len() > 80
+                        || target.base_url.len() > 2_000
+                        || target.model.is_empty()
+                        || target.model.len() > 200
+                        || target.provider_id.chars().any(char::is_control)
+                        || target.base_url.chars().any(char::is_control)
+                        || target.model.chars().any(char::is_control)
+                })
+        })
     {
         return Err("O provedor ou modelo da conversa é inválido.".into());
     }
@@ -465,11 +712,28 @@ pub fn append_conversation_message(
         .map_err(|_| "Não foi possível salvar a conversa.".to_string())?;
     if role == "user" {
         let title: String = content.chars().take(80).collect();
-        tx.execute(
-            "INSERT OR IGNORE INTO conversations (id, title) VALUES (?1, ?2)",
-            params![conversation_id, title],
-        )
-        .map_err(|_| "Não foi possível salvar a conversa.".to_string())?;
+        let created = tx
+            .execute(
+                "INSERT OR IGNORE INTO conversations (id, title) VALUES (?1, ?2)",
+                params![conversation_id, title],
+            )
+            .map_err(|_| "Não foi possível salvar a conversa.".to_string())?;
+        if created == 1
+            && provider_id
+                .as_deref()
+                .zip(model.as_deref())
+                .is_some_and(|(provider, model)| {
+                    crate::providers::verified_tool_support(&app, provider, model)
+                        && crate::agent_home::system_prompt(&app)
+                            .is_ok_and(|prompt| prompt.is_some())
+                })
+        {
+            tx.execute(
+                "UPDATE conversations SET agent_enabled=1 WHERE id=?1",
+                [&conversation_id],
+            )
+            .map_err(|_| "Não foi possível ativar o modo agente disponível.".to_string())?;
+        }
     }
     if provider_id.is_some() || model.is_some() {
         tx.execute(
@@ -477,6 +741,15 @@ pub fn append_conversation_message(
             params![conversation_id, provider_id, model],
         )
         .map_err(|_| "Não foi possível salvar o modelo da conversa.".to_string())?;
+    }
+    if let Some(targets) = provider_targets {
+        let serialized = serde_json::to_string(&targets)
+            .map_err(|_| "Não foi possível salvar os provedores da conversa.".to_string())?;
+        tx.execute(
+            "UPDATE conversations SET provider_targets=?2 WHERE id=?1",
+            params![conversation_id, serialized],
+        )
+        .map_err(|_| "Não foi possível salvar os provedores da conversa.".to_string())?;
     }
     let changed = tx.execute("INSERT INTO messages (conversation_id, role, content) SELECT id, ?2, ?3 FROM conversations WHERE id = ?1", params![conversation_id, role, content])
         .map_err(|_| "Não foi possível salvar a conversa.".to_string())?;
@@ -552,6 +825,38 @@ fn valid_title(title: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agent_message_schema_migrates_legacy_conversations_safely() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "CREATE TABLE conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
+             CREATE TABLE messages (id INTEGER PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('user','assistant')), content TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
+             INSERT INTO conversations(id,title) VALUES ('existing','Conversa existente');
+             INSERT INTO messages(conversation_id,role,content) VALUES ('existing','user','Olá');",
+        ).unwrap();
+        init_schema(&db).unwrap();
+        let columns = ["provider_id", "model", "agent_enabled", "provider_targets"];
+        for column in columns {
+            let exists: bool = db
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM pragma_table_info('conversations') WHERE name=?1)",
+                    [column],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert!(exists, "coluna ausente após migração: {column}");
+        }
+        let legacy_message: String = db
+            .query_row(
+                "SELECT content FROM messages WHERE conversation_id='existing'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(legacy_message, "Olá");
+        db.execute("INSERT INTO agent_messages(conversation_id,role,skill_id,content) VALUES ('existing','tool_call','workspace.read_file','requested')", []).unwrap();
+    }
 
     #[test]
     fn schema_and_foreign_keys_are_valid() {

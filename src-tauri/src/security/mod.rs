@@ -25,7 +25,13 @@ mod dispatch;
 mod kill_switch;
 pub mod skills;
 mod workspace;
-use approvals::*;
+#[cfg(test)]
+pub(crate) use approvals::ApprovalBroker;
+pub(crate) use approvals::ApprovalDecision;
+use approvals::{
+    display_hash_matches, is_expired, lock_pending, queue_has_capacity, take_pending_approval,
+    PendingAction,
+};
 use audit::verify_audit_path;
 use dispatch::*;
 pub use kill_switch::{init_shortcut, load_halted, on_global_shortcut};
@@ -33,24 +39,24 @@ use workspace::*;
 
 #[cfg(debug_assertions)]
 #[tauri::command]
-pub fn submit_simulated_action(
+pub async fn submit_simulated_action(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
     state: State<'_, SecurityState>,
     request: ActionRequest,
 ) -> Result<ActionResult, String> {
     crate::require_main(&caller)?;
-    dispatch::submit_simulated_action_inner(app, state, request)
+    dispatch::submit_simulated_action_inner(app, state, request).await
 }
 
 #[tauri::command]
-pub fn get_pending_approval(
+pub async fn get_pending_approval(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
     state: State<'_, SecurityState>,
 ) -> Result<Option<PendingView>, String> {
     crate::require_caller(&caller, &["approval"])?;
-    dispatch::get_pending_approval_inner(app, state)
+    dispatch::get_pending_approval_inner(app, state).await
 }
 
 #[tauri::command]
@@ -66,7 +72,7 @@ pub fn get_full_approval_preview(
 }
 
 #[tauri::command]
-pub fn approval_respond(
+pub async fn approval_respond(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
     state: State<'_, SecurityState>,
@@ -75,7 +81,7 @@ pub fn approval_respond(
     approve: bool,
 ) -> Result<ActionResult, String> {
     crate::require_caller(&caller, &["approval"])?;
-    dispatch::approval_respond_inner(app, state, id, display_hash, approve)
+    dispatch::approval_respond_inner(app, state, id, display_hash, approve).await
 }
 
 #[tauri::command]
@@ -109,6 +115,8 @@ pub struct SecurityState {
     rate: Mutex<HashMap<String, VecDeque<Instant>>>,
     audit_lock: Mutex<()>,
     shortcut_error: Mutex<Option<String>>,
+    pub(crate) approval_broker: approvals::ApprovalBroker,
+    pub(crate) agent_runs: tokio::sync::Mutex<HashMap<String, tokio_util::sync::CancellationToken>>,
 }
 
 impl SecurityState {
@@ -119,6 +127,11 @@ impl SecurityState {
             rate: Mutex::new(HashMap::new()),
             audit_lock: Mutex::new(()),
             shortcut_error: Mutex::new(None),
+            approval_broker: approvals::ApprovalBroker::new(
+                MAX_PENDING,
+                Duration::from_secs(DEFAULT_APPROVAL_TTL),
+            ),
+            agent_runs: tokio::sync::Mutex::new(HashMap::new()),
         }
     }
 
@@ -726,13 +739,11 @@ mod tests {
                 action: action.clone(),
                 origin: Origin::User,
                 risk: Risk::EscritaReversivel,
-                rule: "test",
                 summary: String::new(),
                 preview: String::new(),
                 digest: expected.clone(),
                 expires: Instant::now() + Duration::from_secs(30),
                 expires_at: 0,
-                created_at: Instant::now(),
             });
         }
         assert!(!queue_has_capacity(&queue));

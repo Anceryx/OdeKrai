@@ -361,6 +361,15 @@ function MainApp() {
     try {
       const provider = AI_PROVIDERS.find((item) => item.id === settings.activeProviderId);
       if (!provider) throw new Error('O provedor selecionado não possui adaptador conhecido.');
+      const agentProviderTargets = [
+        { providerId: provider.id, baseUrl: activeProvider.baseUrl, model: activeProvider.model },
+        ...settings.fallbackProviderIds.flatMap((fallbackId) => {
+          const config = settings.providers[fallbackId];
+          return config?.model
+            ? [{ providerId: fallbackId, baseUrl: config.baseUrl, model: config.model }]
+            : [];
+        }),
+      ];
       setUsedProviderId(provider.id);
       if (!reuseLastUserMessage) {
         await invoke('append_conversation_message', {
@@ -369,6 +378,7 @@ function MainApp() {
           content: text,
           providerId: provider.id,
           model: activeProvider.model,
+          providerTargets: agentProviderTargets,
         });
         setConversations((items) =>
           items.map((item) => (item.id === activeId ? { ...item, preview: text } : item)),
@@ -440,6 +450,7 @@ function MainApp() {
         model:
           settings.providers[responseProviderId]?.model ??
           (responseProviderId === provider.id ? activeProvider.model : ''),
+        providerTargets: agentProviderTargets,
       });
       const responseModel =
         settings.providers[responseProviderId]?.model ??

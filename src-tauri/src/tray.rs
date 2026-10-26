@@ -57,8 +57,16 @@ pub fn install_main_close_handler(app: &AppHandle, window: &WebviewWindow) {
     });
 }
 
-fn close_auxiliary_windows(app: &AppHandle) {
+async fn close_auxiliary_windows(app: &AppHandle) {
     crate::providers::cancel_all(app);
+    if let Some(state) = app.try_state::<crate::security::SecurityState>() {
+        state.approval_broker.deny_all().await;
+        let mut runs = state.agent_runs.lock().await;
+        for token in runs.values() {
+            token.cancel();
+        }
+        runs.clear();
+    }
     for label in ["pet", "approval"] {
         if let Some(window) = app.get_webview_window(label) {
             let _ = window.destroy();
@@ -80,9 +88,7 @@ fn shutdown(app: &AppHandle) {
             tokio::time::sleep(SHUTDOWN_TIMEOUT).await;
             std::process::exit(0);
         });
-        let cleanup =
-            tauri::async_runtime::spawn_blocking(move || close_auxiliary_windows(&handle));
-        if wait_for_cleanup(cleanup, SHUTDOWN_TIMEOUT).await {
+        if wait_for_cleanup(close_auxiliary_windows(&handle), SHUTDOWN_TIMEOUT).await {
             timeout_handle.exit(0);
         }
     });

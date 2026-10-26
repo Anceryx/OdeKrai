@@ -192,29 +192,39 @@ pub(super) fn record(
     )
 }
 
+#[cfg(test)]
 pub(super) fn allowed_rate(state: &SecurityState, tool: &dyn Tool) -> Result<bool, String> {
+    allowed_rate_with_limit(state, tool.name(), tool.rate_limit_per_minute())
+}
+
+pub(super) fn allowed_rate_with_limit(
+    state: &SecurityState,
+    tool_name: &str,
+    limit: usize,
+) -> Result<bool, String> {
     let mut rate = state
         .rate
         .lock()
         .map_err(|_| "Limite de frequência indisponível.".to_string())?;
     let now = Instant::now();
-    let entries = rate.entry(tool.name().into()).or_default();
+    let entries = rate.entry(tool_name.into()).or_default();
     while entries
         .front()
         .is_some_and(|at| now.duration_since(*at) > Duration::from_secs(60))
     {
         entries.pop_front();
     }
-    if entries.len() >= tool.rate_limit_per_minute() {
+    if entries.len() >= limit {
         return Ok(false);
     }
     entries.push_back(now);
     Ok(true)
 }
 
-pub(super) fn execute_action(
+fn execute_action_with_timeout(
     action: &SimulatedAction,
     app: &tauri::AppHandle,
+    timeout: Duration,
 ) -> Result<String, String> {
     let workspace_action = matches!(
         action,
@@ -234,72 +244,65 @@ pub(super) fn execute_action(
     let tool = tool_for(&action);
     let started = Instant::now();
     let result = tool.execute(&action, &workspace);
-    if started.elapsed() > tool.timeout() {
+    if started.elapsed() > timeout {
         return Err("A ferramenta simulada excedeu o tempo limite.".into());
     }
     result
 }
 
-pub(super) fn submit_simulated_action_inner(
+pub(super) async fn submit_simulated_action_inner(
     app: tauri::AppHandle,
     state: State<'_, SecurityState>,
     request: ActionRequest,
 ) -> Result<ActionResult, String> {
-    submit_action(&app, &state, request.action, Origin::User)
+    let mut on_approval = |_| {};
+    let tool = tool_for(&request.action);
+    submit_agent_action(
+        &app,
+        &state,
+        request.action,
+        Origin::User,
+        false,
+        tool.timeout(),
+        tool.rate_limit_per_minute(),
+        &tokio_util::sync::CancellationToken::new(),
+        &mut on_approval,
+    )
+    .await
 }
 
-pub(super) fn submit_action(
+pub(super) async fn submit_agent_action(
     app: &tauri::AppHandle,
     state: &SecurityState,
     action: SimulatedAction,
     origin: Origin,
+    tainted: bool,
+    timeout: Duration,
+    rate_limit_per_minute: usize,
+    cancel: &tokio_util::sync::CancellationToken,
+    on_approval: &mut (dyn FnMut(String) + Send),
 ) -> Result<ActionResult, String> {
-    if state.is_halted() {
-        return Err(
-            "O OdeKrai está parado. Retome na janela principal para permitir novas ações.".into(),
-        );
+    if state.is_halted() || cancel.is_cancelled() {
+        return Err("A execução foi parada antes da ação.".into());
     }
-    let (tool_name, risk, inside, fixed) = action_metadata(&action);
+    let (tool, risk, inside, fixed) = action_metadata(&action);
     let id = id();
-    let summary = summary(&action);
-    if let Err(error) = validate_action(&action) {
-        record(
-            app,
-            state,
-            &id,
-            tool_name,
-            risk,
-            &origin,
-            "deny",
-            "fixed_invalid_parameters",
-            "not_required",
-            0,
-            audit_params(&action),
-            "denied",
-            Some(error.clone()),
-        )?;
-        return Ok(ActionResult {
-            id,
-            status: "denied".into(),
-            message: error,
-            result: None,
-        });
-    }
-    let preview = match preview_for(app, &action) {
+    let params = audit_params(&action);
+    let preview = match validate_action(&action).and_then(|_| preview_for(app, &action)) {
         Ok(preview) => preview,
         Err(error) => {
             record(
                 app,
                 state,
                 &id,
-                tool_name,
+                tool,
                 risk,
                 &origin,
                 "deny",
                 "target_validation_failed",
                 "not_required",
                 0,
-                audit_params(&action),
+                params,
                 "denied",
                 Some(error.clone()),
             )?;
@@ -311,27 +314,33 @@ pub(super) fn submit_action(
             });
         }
     };
-    let mode = effective_mode(app)?;
-    let override_on = override_enabled(app, tool_name)?;
-    let decision = policy::decide(mode, risk, &origin, inside, fixed, override_on);
+    let decision = policy::decide_with_taint(
+        effective_mode(app)?,
+        risk,
+        &origin,
+        inside,
+        fixed,
+        override_enabled(app, tool)?,
+        tainted,
+    );
     let (decision_name, rule) = match decision {
         Decision::Allow(rule) => ("allow", rule),
         Decision::AskUser(rule) => ("ask_user", rule),
         Decision::Deny(rule) => ("deny", rule),
     };
-    if matches!(&decision, Decision::Deny(_)) {
+    if matches!(decision, Decision::Deny(_)) {
         record(
             app,
             state,
             &id,
-            tool_name,
+            tool,
             risk,
             &origin,
             decision_name,
             rule,
             "not_required",
             0,
-            audit_params(&action),
+            params,
             "denied",
             Some(rule.into()),
         )?;
@@ -342,182 +351,275 @@ pub(super) fn submit_action(
             result: None,
         });
     }
-    if !allowed_rate(state, tool_for(&action))? {
+    if !allowed_rate_with_limit(state, tool, rate_limit_per_minute)? {
         record(
             app,
             state,
             &id,
-            tool_name,
+            tool,
             risk,
             &origin,
             "deny",
             "rate_limit",
             "not_required",
             0,
-            audit_params(&action),
+            params,
             "denied",
             Some("Limite de frequência excedido".into()),
         )?;
         return Ok(ActionResult {
             id,
             status: "denied".into(),
-            message: "Limite de frequência da ferramenta atingido.".into(),
+            message: "Limite de frequência da habilidade atingido.".into(),
             result: None,
         });
     }
-    match decision {
-        Decision::Allow(rule) => {
-            record(
-                app,
-                state,
-                &id,
-                tool_name,
-                risk,
-                &origin,
-                "allow",
-                rule,
-                "not_required",
-                0,
-                audit_params(&action),
-                "started",
-                None,
-            )?;
-            let result = execute_action(&action, app);
-            let status = if result.is_ok() {
-                "completed"
-            } else {
+    if let Decision::Allow(rule) = decision {
+        record(
+            app,
+            state,
+            &id,
+            tool,
+            risk,
+            &origin,
+            "allow",
+            rule,
+            "not_required",
+            0,
+            params.clone(),
+            "started",
+            None,
+        )?;
+        let result = execute_action_with_timeout(&action, app, timeout);
+        let error = result.as_ref().err().cloned();
+        record(
+            app,
+            state,
+            &id,
+            tool,
+            risk,
+            &origin,
+            "allow",
+            rule,
+            "not_required",
+            0,
+            params,
+            if error.is_some() {
                 "failed"
-            };
-            let error = result.as_ref().err().cloned();
-            record(
-                app,
-                state,
-                &id,
-                tool_name,
-                risk,
-                &origin,
-                "allow",
-                rule,
-                "not_required",
-                0,
-                audit_params(&action),
-                status,
-                error.clone(),
-            )?;
-            Ok(ActionResult {
-                id,
-                status: status.into(),
-                message: error.unwrap_or_else(|| "Ação concluída.".into()),
-                result: result.ok(),
-            })
-        }
-        Decision::AskUser(rule) => {
-            let mut pending = lock_pending(state)?;
-            if !queue_has_capacity(&pending) {
-                drop(pending);
-                record(
-                    app,
-                    state,
-                    &id,
-                    tool_name,
-                    risk,
-                    &origin,
-                    "deny",
-                    "approval_queue_full",
-                    "denied",
-                    0,
-                    audit_params(&action),
-                    "denied",
-                    Some("Fila de aprovação cheia".into()),
-                )?;
-                return Ok(ActionResult {
-                    id,
-                    status: "denied".into(),
-                    message: "Fila de aprovação cheia; a ação foi negada.".into(),
-                    result: None,
-                });
+            } else {
+                "completed"
+            },
+            error.clone(),
+        )?;
+        return Ok(ActionResult {
+            id,
+            status: if error.is_some() {
+                "failed"
+            } else {
+                "completed"
             }
-            let digest = digest(
-                serde_json::to_string(&action)
-                    .map_err(|_| "Não foi possível validar os parâmetros.")?
-                    .as_bytes(),
-            );
-            let ttl = db_setting(app, "approval_ttl_seconds")?
-                .parse::<u64>()
-                .map_err(|_| "Prazo de aprovação inválido; a ação foi bloqueada.")?;
-            if !(MIN_APPROVAL_TTL..=MAX_APPROVAL_TTL).contains(&ttl) {
-                return Err("Prazo de aprovação inválido; a ação foi bloqueada.".into());
-            }
-            let approval_ttl = Duration::from_secs(ttl);
-            let expires_at = now_secs() + approval_ttl.as_secs();
-            record(
-                app,
-                state,
-                &id,
-                tool_name,
-                risk,
-                &origin,
-                "ask_user",
-                rule,
-                "pending",
-                0,
-                audit_params(&action),
-                "awaiting_approval",
-                None,
-            )?;
+            .into(),
+            message: error.unwrap_or_else(|| "Ação concluída.".into()),
+            result: result.ok(),
+        });
+    }
+    let ttl = db_setting(app, "approval_ttl_seconds")?
+        .parse::<u64>()
+        .map_err(|_| "Prazo de aprovação inválido; a ação foi bloqueada.")?;
+    if !(MIN_APPROVAL_TTL..=MAX_APPROVAL_TTL).contains(&ttl) {
+        return Err("Prazo de aprovação inválido; a ação foi bloqueada.".into());
+    }
+    let approval_ttl = Duration::from_secs(ttl);
+    let ticket = state
+        .approval_broker
+        .request_with_timeout(action.clone(), "model".into(), approval_ttl)
+        .await
+        .map_err(|_| "Fila de aprovação cheia; a ação foi negada.".to_string())?;
+    let ticket_id = ticket.id.clone();
+    let digest = ticket.hash.clone();
+    let created_at = Instant::now();
+    let expires_at = now_secs() + ttl;
+    let capacity = lock_pending(state).map(|mut pending| {
+        if !queue_has_capacity(&pending) {
+            false
+        } else {
             pending.push_back(PendingAction {
-                id: id.clone(),
+                id: ticket_id.clone(),
                 action: action.clone(),
                 origin: origin.clone(),
                 risk,
-                rule,
-                summary,
+                summary: summary(&action),
                 preview,
                 digest: digest.clone(),
-                expires: Instant::now() + approval_ttl,
+                expires: created_at + approval_ttl,
                 expires_at,
-                created_at: Instant::now(),
             });
-            drop(pending);
-            if let Err(error) = open_approval(app) {
-                match lock_pending(state) {
-                    Ok(mut pending) => pending.retain(|item| item.id != id),
-                    Err(_) => log::error!(
-                        "Não foi possível limpar a aprovação após falha ao abrir a janela."
-                    ),
-                }
-                let _ = record(
-                    app,
-                    state,
-                    &id,
-                    tool_name,
-                    risk,
-                    &origin,
-                    "deny",
-                    "approval_window_failed",
-                    "unavailable",
-                    0,
-                    audit_params(&action),
-                    "denied",
-                    Some(error.clone()),
-                );
-                return Err(error);
-            }
-            let _ = app.emit("approval-updated", ());
-            let _ = app.emit("companion-state", serde_json::json!({"type":"activity","state":"awaiting_approval","message":"Aguardando aprovação"}));
+            true
+        }
+    });
+    let has_capacity = match capacity {
+        Ok(value) => value,
+        Err(error) => {
+            state.approval_broker.cancel(&ticket_id).await;
+            return Err(error);
+        }
+    };
+    if !has_capacity {
+        state.approval_broker.cancel(&ticket_id).await;
+        record(
+            app,
+            state,
+            &ticket_id,
+            tool,
+            risk,
+            &origin,
+            "deny",
+            "approval_queue_full",
+            "denied",
+            0,
+            params,
+            "denied",
+            Some("Fila de aprovação cheia".into()),
+        )?;
+        return Ok(ActionResult {
+            id: ticket_id,
+            status: "denied".into(),
+            message: "Fila de aprovação cheia; a ação foi negada.".into(),
+            result: None,
+        });
+    }
+    if let Err(error) = open_approval(app) {
+        if let Ok(mut pending) = lock_pending(state) {
+            pending.retain(|item| item.id != ticket_id);
+        }
+        state.approval_broker.cancel(&ticket_id).await;
+        record(
+            app,
+            state,
+            &ticket_id,
+            tool,
+            risk,
+            &origin,
+            "deny",
+            "approval_window_failed",
+            "unavailable",
+            0,
+            params,
+            "denied",
+            Some(error.clone()),
+        )?;
+        return Err(error);
+    }
+    record(
+        app,
+        state,
+        &ticket_id,
+        tool,
+        risk,
+        &origin,
+        "ask_user",
+        rule,
+        "pending",
+        0,
+        params.clone(),
+        "awaiting_approval",
+        None,
+    )?;
+    let _ = app.emit("approval-updated", ());
+    let _ = app.emit("companion-state", serde_json::json!({"type":"activity","state":"awaiting_approval","message":"Aguardando aprovação"}));
+    on_approval(ticket_id.clone());
+    let result = state.approval_broker.wait(ticket, cancel).await;
+    if let Ok(mut pending) = lock_pending(state) {
+        pending.retain(|item| item.id != ticket_id);
+    }
+    let latency = created_at.elapsed().as_millis() as u64;
+    match result {
+        ApprovalDecision::Aprovada if !state.is_halted() && !cancel.is_cancelled() => {
+            record(
+                app,
+                state,
+                &ticket_id,
+                tool,
+                risk,
+                &origin,
+                "allow",
+                rule,
+                "approved_once",
+                latency,
+                params.clone(),
+                "started",
+                None,
+            )?;
+            let execution = execute_action_with_timeout(&action, app, timeout);
+            let error = execution.as_ref().err().cloned();
+            record(
+                app,
+                state,
+                &ticket_id,
+                tool,
+                risk,
+                &origin,
+                "allow",
+                rule,
+                "approved_once",
+                latency,
+                params,
+                if error.is_some() {
+                    "failed"
+                } else {
+                    "completed"
+                },
+                error.clone(),
+            )?;
             Ok(ActionResult {
-                id,
-                status: "awaiting_approval".into(),
-                message: "Ação aguardando aprovação na janela do OdeKrai.".into(),
+                id: ticket_id,
+                status: if error.is_some() {
+                    "failed"
+                } else {
+                    "completed"
+                }
+                .into(),
+                message: error.unwrap_or_else(|| "Ação aprovada e concluída.".into()),
+                result: execution.ok(),
+            })
+        }
+        decision => {
+            let (reason, detail) = match decision {
+                ApprovalDecision::Negada(reason) => (reason, "Ação negada."),
+                ApprovalDecision::Expirada => ("approval_expired".into(), "A aprovação expirou."),
+                ApprovalDecision::Cancelada => {
+                    ("execution_cancelled".into(), "A execução foi cancelada.")
+                }
+                ApprovalDecision::Parada => (
+                    "kill_switch".into(),
+                    "A execução foi interrompida pelo kill switch.",
+                ),
+                ApprovalDecision::Aprovada => {
+                    ("execution_stopped".into(), "A execução foi interrompida.")
+                }
+            };
+            record(
+                app,
+                state,
+                &ticket_id,
+                tool,
+                risk,
+                &origin,
+                "deny",
+                &reason,
+                "denied",
+                latency,
+                params,
+                "denied",
+                Some(reason.clone()),
+            )?;
+            Ok(ActionResult {
+                id: ticket_id,
+                status: "denied".into(),
+                message: detail.into(),
                 result: None,
             })
         }
-        Decision::Deny(_) => Ok(ActionResult {
-            id,
-            status: "denied".into(),
-            message: "A ação foi bloqueada pelas regras de segurança.".into(),
-            result: None,
-        }),
     }
 }
 
@@ -576,92 +678,57 @@ async fn create_approval_window(app: &tauri::AppHandle) -> Result<(), String> {
                     return;
                 }
             };
-            if has_more {
+            let audit_handle = handle.clone();
+            let close_handle = close_window.clone();
+            tauri::async_runtime::spawn(async move {
                 if let Some(item) = item {
-                    let _ = handle.emit("approval-updated", ());
-                    let _ = close_window.set_focus();
-                    let audit_handle = handle.clone();
-                    tauri::async_runtime::spawn_blocking(move || {
-                        if let Some(state) = audit_handle.try_state::<SecurityState>() {
-                            let _ = record(
-                                &audit_handle,
-                                &state,
-                                &item.id,
-                                tool_for(&item.action).name(),
-                                item.risk,
-                                &item.origin,
-                                "deny",
-                                "approval_window_closed",
-                                "denied",
-                                item.created_at.elapsed().as_millis() as u64,
-                                audit_params(&item.action),
-                                "denied",
-                                None,
-                            );
-                        }
-                    });
-                }
-            } else {
-                let audit_handle = handle.clone();
-                let destroy_window = close_window.clone();
-                tauri::async_runtime::spawn_blocking(move || {
-                    if let Some(item) = item {
-                        if let Some(state) = audit_handle.try_state::<SecurityState>() {
-                            let _ = record(
-                                &audit_handle,
-                                &state,
-                                &item.id,
-                                tool_for(&item.action).name(),
-                                item.risk,
-                                &item.origin,
-                                "deny",
-                                "approval_window_closed",
-                                "denied",
-                                item.created_at.elapsed().as_millis() as u64,
-                                audit_params(&item.action),
-                                "denied",
-                                None,
-                            );
+                    if let Some(state) = audit_handle.try_state::<SecurityState>() {
+                        if state.approval_broker.contains(&item.id).await {
+                            let _ = state
+                                .approval_broker
+                                .resolve(
+                                    &item.id,
+                                    &item.digest,
+                                    ApprovalDecision::Negada("approval_window_closed".into()),
+                                )
+                                .await;
                         }
                     }
-                    let _ = destroy_window.destroy();
-                });
-            }
+                }
+                if has_more {
+                    let _ = audit_handle.emit("approval-updated", ());
+                    let _ = close_handle.set_focus();
+                } else {
+                    let _ = close_handle.destroy();
+                }
+            });
         }
     });
     Ok(())
 }
 
-pub(super) fn get_pending_approval_inner(
+pub(super) async fn get_pending_approval_inner(
     app: tauri::AppHandle,
     state: State<'_, SecurityState>,
 ) -> Result<Option<PendingView>, String> {
-    let mut pending = lock_pending(&state)?;
-    while pending
-        .front()
-        .is_some_and(|item| is_expired(item.expires, Instant::now()))
-    {
-        let Some(expired) = pending.pop_front() else {
-            log::error!("A fila de aprovação mudou durante a expiração; consulta bloqueada.");
-            return Err("Fila de aprovação indisponível.".into());
+    loop {
+        let expired = {
+            let mut pending = lock_pending(&state)?;
+            if pending
+                .front()
+                .is_some_and(|item| is_expired(item.expires, Instant::now()))
+            {
+                pending.pop_front()
+            } else {
+                None
+            }
         };
-        let tool = tool_for(&expired.action).name();
-        record(
-            &app,
-            &state,
-            &expired.id,
-            tool,
-            expired.risk,
-            &expired.origin,
-            "deny",
-            "approval_expired",
-            "expired",
-            expired.created_at.elapsed().as_millis() as u64,
-            audit_params(&expired.action),
-            "denied",
-            Some("Aprovação expirou".into()),
-        )?;
+        let Some(expired) = expired else { break };
+        if state.approval_broker.contains(&expired.id).await {
+            let _ = state.approval_broker.expire(&expired.id).await;
+        }
     }
+    let pending = lock_pending(&state)?;
     let Some(item) = pending.front() else {
         drop(pending);
         close_approval_if_empty(&app, &state);
@@ -709,118 +776,51 @@ pub(super) fn get_full_approval_preview_inner(
     Ok(preview)
 }
 
-pub(super) fn approval_respond_inner(
+pub(super) async fn approval_respond_inner(
     app: tauri::AppHandle,
     state: State<'_, SecurityState>,
     id: String,
     display_hash: String,
     approve: bool,
 ) -> Result<ActionResult, String> {
-    let mut pending = lock_pending(&state)?;
-    let Some(item) = pending.front() else {
-        return Err("A aprovação não está mais disponível.".into());
-    };
-    if item.id != id {
-        return Err("A aprovação está desatualizada.".into());
-    }
-    if !display_hash_matches(&item.action, &item.digest, &display_hash) {
-        return Err("Os parâmetros exibidos mudaram; a ação foi recusada.".into());
-    }
-    let item = take_pending_approval(&mut pending, &id, &display_hash)
-        .map_err(|_| "A aprovação não corresponde à ação pendente.".to_string())?;
-    drop(pending);
-    let tool = tool_for(&item.action).name();
-    if is_expired(item.expires, Instant::now()) || state.is_halted() || !approve {
-        let reason = if is_expired(item.expires, Instant::now()) {
-            "approval_expired"
-        } else if state.is_halted() {
-            "kill_switch"
-        } else {
-            "user_denied"
+    if state.approval_broker.contains(&id).await {
+        let item = {
+            let mut pending = lock_pending(&state)?;
+            let Some(item) = pending.front() else {
+                return Err("A aprovação não está mais disponível.".into());
+            };
+            if item.id != id || !display_hash_matches(&item.action, &item.digest, &display_hash) {
+                return Err("Os parâmetros exibidos mudaram; a ação foi recusada.".into());
+            }
+            take_pending_approval(&mut pending, &id, &display_hash)
+                .map_err(|_| "A aprovação não corresponde à ação pendente.".to_string())?
         };
-        record(
-            &app,
-            &state,
-            &item.id,
-            tool,
-            item.risk,
-            &item.origin,
-            "deny",
-            reason,
-            if approve {
-                "expired_or_halted"
-            } else {
-                "denied"
-            },
-            item.created_at.elapsed().as_millis() as u64,
-            audit_params(&item.action),
-            "denied",
-            None,
-        )?;
+        let decision = if state.is_halted() {
+            ApprovalDecision::Parada
+        } else if is_expired(item.expires, Instant::now()) {
+            ApprovalDecision::Expirada
+        } else if approve {
+            ApprovalDecision::Aprovada
+        } else {
+            ApprovalDecision::Negada("user_denied".into())
+        };
+        state
+            .approval_broker
+            .resolve(&id, &display_hash, decision)
+            .await
+            .map_err(|_| {
+                "A aprovação expirou, foi usada ou não corresponde aos parâmetros.".to_string()
+            })?;
+        let _ = app.emit("approval-updated", ());
         close_approval_if_empty(&app, &state);
         return Ok(ActionResult {
-            id: item.id,
-            status: "denied".into(),
-            message: "Ação negada.".into(),
+            id,
+            status: "decision_sent".into(),
+            message: "Decisão encaminhada à execução segura.".into(),
             result: None,
         });
     }
-    record(
-        &app,
-        &state,
-        &item.id,
-        tool,
-        item.risk,
-        &item.origin,
-        "allow",
-        item.rule,
-        "approved_once",
-        item.created_at.elapsed().as_millis() as u64,
-        audit_params(&item.action),
-        "started",
-        None,
-    )?;
-    let result = execute_action(&item.action, &app);
-    let error = result.as_ref().err().cloned();
-    let status = if error.is_some() {
-        "failed"
-    } else {
-        "completed"
-    };
-    record(
-        &app,
-        &state,
-        &item.id,
-        tool,
-        item.risk,
-        &item.origin,
-        "allow",
-        item.rule,
-        "approved_once",
-        item.created_at.elapsed().as_millis() as u64,
-        audit_params(&item.action),
-        status,
-        error.clone(),
-    )?;
-    close_approval_if_empty(&app, &state);
-    let has_pending = lock_pending(&state).map_or_else(|_| true, |queue| !queue.is_empty());
-    let next_activity = if has_pending {
-        "awaiting_approval"
-    } else if status == "completed" {
-        "completed"
-    } else {
-        "error"
-    };
-    let _ = app.emit(
-        "companion-state",
-        serde_json::json!({"type":"activity","state":next_activity}),
-    );
-    Ok(ActionResult {
-        id: item.id,
-        status: status.into(),
-        message: error.unwrap_or_else(|| "Ação aprovada e concluída.".into()),
-        result: result.ok(),
-    })
+    Err("A aprovação não está mais disponível ou já foi resolvida.".into())
 }
 
 pub(super) fn close_approval_if_empty(app: &tauri::AppHandle, state: &SecurityState) {

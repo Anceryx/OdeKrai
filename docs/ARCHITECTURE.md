@@ -1,39 +1,47 @@
 # Arquitetura
 
-> **Estado da Fase 4:** o loop de agente e a abstração de tools ainda não estão implementados. O
-> diagrama futuro está descrito aqui para delimitar a fronteira de segurança; não representa fluxo
-> executável no HEAD atual.
+O Rust executa o loop de agente por `agent_run`; a interface atual não o dispara. As habilidades
+permanecem as registradas em Rust e ativadas pelo usuário. O modo por conversa é habilitado por
+padrão em conversas novas somente quando a pasta/identidade do agente e um provedor com tools
+verificadas estão disponíveis.
 
 O catálogo de provedores em `src-tauri/resources/provider-catalog.json` alimenta os metadados do frontend e do Rust. O Rust valida host e caminho, acessa credenciais e implementa listagem documentada de modelos. As preferências guardam configurações por `providerId`; perfil e histórico usam SQLite local. Avatar é processado no Rust e servido como data URL apenas para a interface principal.
 
 `src/ui/design-tokens.css` centraliza as cores, a tipografia, o espaçamento, os raios e as sombras da interface. `src/ui/DesignSystem.tsx` oferece componentes compartilhados para botões, cartões, avisos, campos, seletores, alternâncias, opções selecionáveis e cabeçalhos. A interface aplica esses padrões nas telas principais; a conferência visual em tamanhos e escalas de Windows continua manual.
 
-## Fluxo de agente planejado — não implementado
+## Loop de agente Rust
 
 ```mermaid
 sequenceDiagram
-    participant UI as Interface
+    participant UI as Janela principal
     participant Rust as Loop Rust
     participant LLM as Provedor LLM
     participant Policy as Motor da Fase 3
     participant Approval as Janela de aprovação
     participant Tool as Tool local
-    UI->>Rust: pedido + conversa
-    Rust->>LLM: mensagens + schemas de tools
-    LLM-->>Rust: texto ou chamada completa
-    Rust->>Policy: ActionRequest com origem e argumentos validados
-    Policy-->>Approval: aprovação necessária
-    Approval-->>Policy: decisão do usuário
-    Policy->>Tool: executar somente após permitir
-    Tool-->>Rust: resultado rotulado Local/Untrusted
-    Rust->>LLM: resultado como dado; próxima volta
-    LLM-->>UI: resposta final via evento
+    UI->>Rust: agent_run(conversation_id, message, on_event)
+    Rust->>LLM: prompt, histórico e schemas das habilidades ativas
+    LLM-->>Rust: texto e ToolCallComplete
+    Rust->>Policy: ação validada, origem Model e taint Rust-side
+    Policy-->>Approval: pedido registrado no ApprovalBroker
+    Approval-->>Rust: somente decisão, hash e uso único
+    Rust->>Tool: aguardar decisão e executar após aprovação
+    Tool-->>Rust: resultado delimitado como Untrusted
+    Rust->>LLM: ToolResult e próxima volta
+    Rust-->>UI: AgentEvent pelo canal Tauri
 ```
 
-O fluxo acima só poderá ser ativado quando cada chamada passar pelo motor de políticas e auditoria
-Rust. Tool calls parciais não podem executar. Conteúdo Untrusted deve propagar taint até a origem
-da próxima ação. O workspace usa `.history` e `.trash`; arquivos locais baixados ainda podem conter
-injeção de instrução, e a proteção depende do taint e da política para efeitos colaterais.
+O motor valida nome e schema antes de chamar o registro. Risco e permissão são calculados em Rust;
+chamadas parciais não chegam ao executor. Uma negação vira ToolResult e não autoriza tentar o mesmo
+efeito por outra ferramenta. Repetição, duração, turnos, tokens, comunicações e tamanho do contexto
+são limitados pelo motor. O roteador só troca de provedor em falhas transitórias antes de observar
+saída. A tabela `agent_messages` registra tipo, habilidade, id de auditoria e hashes; argumentos e
+resultados brutos não são persistidos.
+
+`AgentEvent` é o contrato serializado do canal: `step`, `toolCall`, `awaitingApproval`, `toolResult`,
+`finalResponse`, `error` e `stopped`. `agent_cancel(conversation_id)` cancela uma execução; o kill
+switch para todas. `approval_respond` apenas resolve a decisão pendente; o loop retoma a ação após
+receber o canal.
 
 ## Aplicativo
 
@@ -68,13 +76,13 @@ A janela `pet` usa transparência sem região Win32 e não ignora eventos do pon
 
 `src-tauri/src/agent_home.rs` valida a pasta escolhida na primeira execução (sugestão: `%USERPROFILE%\OdeKrai`) e cria `ODEKRAI.md`, `memory/`, `workspace/`, `skills/` e `logs/`. O template está embutido no Rust; o repositório não contém o arquivo pessoal gerado. A última versão aprovada e seu SHA-256 ficam nos dados locais do aplicativo. Uma alteração externa suspende o prompt até revisão e aprovação.
 
-O Rust compõe o prompt na ordem: regras fixas, identidade aprovada, até 1.024 caracteres de `memory/estilo.md` e o modo efetivo lido do SQLite local. Anthropic recebe `system`, APIs Chat Completions recebem uma mensagem `system` e a [Perplexity Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart) recebe `instructions`. Sem pasta configurada, o chat funciona sem prompt pessoal.
+O Rust compõe o prompt com regras fixas, preâmbulo local de data/hora/fuso/idioma, identidade aprovada, até 1.024 caracteres de `memory/estilo.md` e o modo efetivo lido do SQLite local. `agent_run` acrescenta apenas descrições de habilidades ativas. Anthropic recebe `system`, APIs Chat Completions recebem mensagem `system` e a Perplexity Agent API recebe `instructions`; provedores sem tool calling elegível são excluídos do loop. O chat textual existente continua disponível sem pasta configurada.
 
 ## Motor de permissões
 
 `src-tauri/src/policy.rs` contém a política pura e tabelada de modo, risco, origem e localização no workspace. `src-tauri/src/security.rs` guarda o estado de segurança em SQLite, valida os parâmetros tipados de `SimulatedAction`, decide e registra auditoria antes da execução. Só as ações de arquivo dentro de `workspace/` têm efeito local; comunicação é apenas simulada e pagamento é sempre bloqueado.
 
-Pedidos `AskUser` entram numa fila Rust limitada e abrem a janela Tauri `approval`. A capability `src-tauri/capabilities/approval.json` dá somente os eventos e o fechamento de janela necessários. A confirmação, expiração, hash dos parâmetros e execução de uso único são verificados no Rust. A janela principal configura modo/atalho e consulta a tela de atividade; não pode responder aprovações.
+Pedidos `AskUser` entram numa fila Rust limitada e abrem a janela Tauri `approval`. A capability `src-tauri/capabilities/approval.json` dá somente os eventos e o fechamento de janela necessários. A confirmação, expiração, hash dos parâmetros e uso único são verificados no Rust; a janela apenas resolve o canal, e o loop executa a ação aprovada. A janela principal configura modo/atalho e consulta a tela de atividade; não pode responder aprovações.
 
 O plugin Tauri `global-shortcut` registra o atalho no processo nativo. O kill switch persiste a parada, cancela tokens dos streams, nega a fila e bloqueia novos envios a provedores. Retomar só funciona depois de gravar a entrada de auditoria. As decisões no WebView servem somente para exibição e entrada do usuário.
 

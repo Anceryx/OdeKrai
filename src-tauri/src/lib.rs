@@ -29,6 +29,7 @@ fn get_build_info(caller: tauri::WebviewWindow) -> Result<BuildInfo, String> {
 
 pub mod agent;
 mod agent_home;
+mod agent_runtime;
 mod diagnostics;
 mod external_links;
 mod hardware;
@@ -757,6 +758,8 @@ pub fn run() -> Result<(), tauri::Error> {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            agent_runtime::agent_run,
+            agent_runtime::agent_cancel,
             get_build_info,
             external_links::open_external_link,
             hardware::get_hardware_profile,
@@ -783,6 +786,7 @@ pub fn run() -> Result<(), tauri::Error> {
             providers::test_provider_connection,
             providers::ping_provider,
             providers::get_provider_capabilities,
+            providers::set_provider_tools_opt_in,
             profile::get_profile,
             profile::save_profile,
             profile::save_profile_avatar,
@@ -790,6 +794,8 @@ pub fn run() -> Result<(), tauri::Error> {
             history::list_conversations,
             history::load_conversation,
             history::append_conversation_message,
+            history::get_conversation_agent_mode,
+            history::set_conversation_agent_mode,
             history::delete_conversation,
             history::rename_conversation,
             history::delete_all_conversations,

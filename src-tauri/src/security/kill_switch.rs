@@ -12,27 +12,22 @@ fn set_halted(
         state.halted.store(true, Ordering::SeqCst);
         let persistence = set_db_setting(app, "halted", "true");
         crate::providers::cancel_all(app);
+        let handle = app.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Some(state) = handle.try_state::<SecurityState>() {
+                state.approval_broker.stop_all().await;
+                let mut runs = state.agent_runs.lock().await;
+                for token in runs.values() {
+                    token.cancel();
+                }
+                runs.clear();
+            }
+        });
         let mut pending = state
             .pending
             .lock()
             .map_err(|_| "Fila de aprovação indisponível.".to_string())?;
-        while let Some(item) = pending.pop_front() {
-            let _ = record(
-                app,
-                state,
-                &item.id,
-                tool_for(&item.action).name(),
-                item.risk,
-                &item.origin,
-                "deny",
-                "kill_switch",
-                "cancelled",
-                item.created_at.elapsed().as_millis() as u64,
-                audit_params(&item.action),
-                "denied",
-                Some("Interrompido pelo kill switch".into()),
-            );
-        }
+        pending.clear();
         drop(pending);
         if let Some(window) = app.get_webview_window("approval") {
             let _ = window.close();

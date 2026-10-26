@@ -10,13 +10,11 @@ pub(super) struct PendingAction {
     pub(super) action: SimulatedAction,
     pub(super) origin: Origin,
     pub(super) risk: Risk,
-    pub(super) rule: &'static str,
     pub(super) summary: String,
     pub(super) preview: String,
     pub(super) digest: String,
     pub(super) expires: Instant,
     pub(super) expires_at: u64,
-    pub(super) created_at: Instant,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -43,11 +41,10 @@ pub struct ApprovalBroker {
     timeout: Duration,
 }
 
-pub struct ApprovalTicket<A> {
+pub struct ApprovalTicket {
     pub id: String,
-    pub action: A,
     pub hash: String,
-    pub origin: String,
+    expires: Instant,
     pub receiver: tokio::sync::oneshot::Receiver<ApprovalDecision>,
 }
 
@@ -60,35 +57,76 @@ impl ApprovalBroker {
         }
     }
 
+    #[cfg(test)]
     pub async fn request<A: serde::Serialize>(
         &self,
         action: A,
         origin: String,
-    ) -> Result<ApprovalTicket<A>, &'static str> {
+    ) -> Result<ApprovalTicket, &'static str> {
+        self.request_with_timeout(action, origin, self.timeout)
+            .await
+    }
+
+    pub async fn request_with_timeout<A: serde::Serialize>(
+        &self,
+        action: A,
+        origin: String,
+        timeout: Duration,
+    ) -> Result<ApprovalTicket, &'static str> {
         let encoded = serde_json::to_vec(&action).map_err(|_| "invalid_action")?;
         let hash = digest(&encoded);
+        let timeout = if timeout.is_zero() {
+            self.timeout
+        } else {
+            timeout
+        };
         let mut entries = self.entries.lock().await;
         if entries.len() >= self.capacity {
             return Err("approval_queue_full");
         }
         let id = super::id();
         let (sender, receiver) = tokio::sync::oneshot::channel();
+        let expires = Instant::now() + timeout;
         entries.insert(
             id.clone(),
             BrokerEntry {
                 hash: hash.clone(),
                 origin: origin.clone(),
-                expires: Instant::now() + self.timeout,
+                expires,
                 sender,
             },
         );
         Ok(ApprovalTicket {
             id,
-            action,
             hash,
-            origin,
+            expires,
             receiver,
         })
+    }
+
+    pub async fn wait(
+        &self,
+        mut ticket: ApprovalTicket,
+        cancel: &tokio_util::sync::CancellationToken,
+    ) -> ApprovalDecision {
+        let remaining = ticket.expires.saturating_duration_since(Instant::now());
+        tokio::select! {
+            _ = cancel.cancelled() => match ticket.receiver.try_recv() {
+                Ok(decision) => decision,
+                Err(_) => {
+                    self.cancel(&ticket.id).await;
+                    ApprovalDecision::Cancelada
+                }
+            },
+            _ = tokio::time::sleep(remaining) => match ticket.receiver.try_recv() {
+                Ok(decision) => decision,
+                Err(_) => {
+                    self.expire(&ticket.id).await;
+                    ApprovalDecision::Expirada
+                }
+            },
+            received = &mut ticket.receiver => received.unwrap_or(ApprovalDecision::Cancelada),
+        }
     }
 
     pub async fn resolve(
@@ -117,6 +155,15 @@ impl ApprovalBroker {
     pub async fn cancel(&self, id: &str) -> bool {
         let entry = self.entries.lock().await.remove(id);
         entry.is_some_and(|entry| entry.sender.send(ApprovalDecision::Cancelada).is_ok())
+    }
+
+    pub async fn expire(&self, id: &str) -> bool {
+        let entry = self.entries.lock().await.remove(id);
+        entry.is_some_and(|entry| entry.sender.send(ApprovalDecision::Expirada).is_ok())
+    }
+
+    pub async fn contains(&self, id: &str) -> bool {
+        self.entries.lock().await.contains_key(id)
     }
 
     pub async fn stop_all(&self) {
@@ -249,6 +296,56 @@ mod broker_tests {
         let stopped = broker.request("stop", "debug".into()).await.unwrap();
         broker.stop_all().await;
         assert_eq!(stopped.receiver.await.unwrap(), ApprovalDecision::Parada);
+    }
+
+    #[tokio::test]
+    async fn waiter_observes_expiration_cancellation_and_kill_switch() {
+        let broker = ApprovalBroker::new(3, Duration::from_millis(30));
+        let expired = broker
+            .request_with_timeout(
+                serde_json::json!({"n":1}),
+                "model".into(),
+                Duration::from_millis(15),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            broker
+                .wait(expired, &tokio_util::sync::CancellationToken::new())
+                .await,
+            ApprovalDecision::Expirada
+        );
+
+        let canceled = broker
+            .request_with_timeout(
+                serde_json::json!({"n":2}),
+                "model".into(),
+                Duration::from_secs(1),
+            )
+            .await
+            .unwrap();
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        cancellation.cancel();
+        assert_eq!(
+            broker.wait(canceled, &cancellation).await,
+            ApprovalDecision::Cancelada
+        );
+
+        let stopped = broker
+            .request_with_timeout(
+                serde_json::json!({"n":3}),
+                "model".into(),
+                Duration::from_secs(1),
+            )
+            .await
+            .unwrap();
+        broker.stop_all().await;
+        assert_eq!(
+            broker
+                .wait(stopped, &tokio_util::sync::CancellationToken::new())
+                .await,
+            ApprovalDecision::Parada
+        );
     }
 
     #[tokio::test]
