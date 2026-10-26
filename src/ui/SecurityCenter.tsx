@@ -51,19 +51,19 @@ const modes: { id: Mode; title: string; description: string }[] = [
     id: 'aprovar_por_mim',
     title: 'Aprovar por mim',
     description:
-      'Leituras e alterações reversíveis na pasta de trabalho seguem automaticamente. Mensagens e ações destrutivas pedem aprovação.',
+      'Leituras e alterações reversíveis em pastas permitidas seguem automaticamente. Mensagens e ações destrutivas pedem aprovação.',
   },
   {
     id: 'sempre_perguntar',
     title: 'Sempre perguntar',
     description:
-      'Toda alteração ou envio de mensagem pede aprovação. Leituras na pasta de trabalho são permitidas.',
+      'Toda alteração ou envio de mensagem pede aprovação. Leituras em pastas permitidas são permitidas.',
   },
   {
     id: 'controle_total',
     title: 'Controle total',
     description:
-      'Executa ações permitidas sem perguntar. Pagamentos, segredos e ações destrutivas fora da pasta de trabalho continuam bloqueados ou exigem aprovação.',
+      'Executa ações permitidas sem perguntar. Pagamentos, segredos e caminhos bloqueados continuam bloqueados ou exigem aprovação.',
   },
 ];
 const risks: { id: Risk; title: string }[] = [
@@ -73,9 +73,9 @@ const risks: { id: Risk; title: string }[] = [
   { id: 'destrutivo_financeiro', title: 'Destrutivo ou financeiro' },
 ];
 const tools = [
-  ['workspace.read_file', 'Ler arquivo na pasta de trabalho'],
-  ['workspace.write_file', 'Salvar arquivo na pasta de trabalho'],
-  ['workspace.delete_file', 'Mover arquivo para a lixeira da pasta de trabalho'],
+  ['workspace.read_file', 'Ler arquivo em pasta permitida'],
+  ['workspace.write_file', 'Salvar arquivo em pasta permitida'],
+  ['workspace.delete_file', 'Mover arquivo permitido para a lixeira'],
   ['simulated.send_message', 'Simular envio de mensagem'],
   ['simulated.payment', 'Pagamento (bloqueado)'],
 ] as const;
@@ -89,12 +89,12 @@ function riskLabel(risk: Risk): string {
 }
 
 function decision(mode: Mode, risk: Risk): string {
-  if (risk === 'leitura') return 'Permitir na pasta de trabalho';
+  if (risk === 'leitura') return 'Permitir em pastas permitidas';
   if (mode === 'sempre_perguntar') return 'Pedir aprovação';
   if (mode === 'aprovar_por_mim')
-    return risk === 'escrita_reversivel' ? 'Permitir na pasta de trabalho' : 'Pedir aprovação';
+    return risk === 'escrita_reversivel' ? 'Permitir em pastas permitidas' : 'Pedir aprovação';
   if (risk === 'destrutivo_financeiro')
-    return 'Na lixeira: permitir na pasta de trabalho; fora dela: pedir aprovação';
+    return 'Na lixeira: permitir em pastas permitidas; caminhos bloqueados continuam indisponíveis';
   return 'Permitir (origem externa sempre pede aprovação)';
 }
 

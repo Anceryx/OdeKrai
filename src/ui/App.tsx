@@ -66,6 +66,7 @@ const ActivityScreen = lazy(() =>
 );
 import { initials } from './Profile';
 import { ApprovalWindow, isApprovalWindow } from './SecurityCenter';
+import { SkillsScreen } from './SkillsScreen';
 import { PETS } from '../core/pets';
 import { navigationItems, SidebarNavigation } from './SidebarNavigation';
 import {
@@ -826,6 +827,7 @@ function MainApp() {
                 />
               )}
               {section === 'computer' && <ComputerScreen />}
+              {section === 'skills' && <SkillsScreen />}
               {section === 'companion' && (
                 <AssistantScreen
                   settings={settings}

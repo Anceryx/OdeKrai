@@ -7,6 +7,7 @@ export const navigationItems: { id: Section; label: string; icon: IconName; grou
   { id: 'agent', label: 'Identidade e memória', icon: 'memory', group: 'ESPAÇO DE TRABALHO' },
   { id: 'providers', label: 'Conectores de IA', icon: 'connectors', group: 'INTELIGÊNCIA' },
   { id: 'computer', label: 'Seu computador', icon: 'activity', group: 'INTELIGÊNCIA' },
+  { id: 'skills', label: 'Habilidades', icon: 'activity', group: 'INTELIGÊNCIA' },
   { id: 'companion', label: 'Assistente do OdeKrai', icon: 'pet', group: 'PERSONALIZAÇÃO' },
   { id: 'settings', label: 'Configurações', icon: 'settings', group: 'PERSONALIZAÇÃO' },
   { id: 'permissions', label: 'Permissões', icon: 'shield', group: 'PERSONALIZAÇÃO' },

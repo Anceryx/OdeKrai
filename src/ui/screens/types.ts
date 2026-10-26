@@ -9,6 +9,7 @@ export type Section =
   | 'permissions'
   | 'activity'
   | 'agent'
-  | 'computer';
+  | 'computer'
+  | 'skills';
 
 export type Conversation = ConversationSummary;

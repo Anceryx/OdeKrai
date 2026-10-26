@@ -13,7 +13,13 @@ describe('SidebarNavigation', () => {
       />,
     );
 
-    for (const label of ['Visão geral', 'Identidade e memória', 'Configurações', 'Permissões']) {
+    for (const label of [
+      'Visão geral',
+      'Identidade e memória',
+      'Configurações',
+      'Permissões',
+      'Habilidades',
+    ]) {
       expect(markup).toContain(label);
     }
   });
