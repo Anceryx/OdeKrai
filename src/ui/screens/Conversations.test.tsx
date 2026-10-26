@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { ConversationsScreen } from './Conversations';
 
 describe('ConversationsScreen', () => {
-  it('monta a conversa e sua lista sem mensagens', () => {
+  it('monta a conversa e identifica mensagens com o nome salvo no perfil', () => {
     const markup = renderToStaticMarkup(
       <ConversationsScreen
-        messages={[]}
+        messages={[{ role: 'user', content: 'Olá', created_at: 1 }]}
         conversations={[]}
         conversationId={null}
         onConversation={() => undefined}
@@ -31,7 +31,7 @@ describe('ConversationsScreen', () => {
         onFixConfiguration={() => undefined}
         onRetry={() => undefined}
         canRetry={false}
-        profile={{ displayName: 'Teste', nickname: '', avatarDataUrl: null }}
+        profile={{ displayName: 'Oli', nickname: '', avatarDataUrl: null }}
         selectedPet="character-female-a"
       />,
     );
@@ -40,6 +40,7 @@ describe('ConversationsScreen', () => {
     expect(markup).toContain('Recolher lista de conversas');
     expect(markup).toContain('Redimensionar lista de conversas');
     expect(markup).not.toContain('chat-model-chip');
+    expect(markup).toContain('message-role">Oli</span>');
   });
 
   it('mostra o modelo no cabeçalho apenas quando difere do modelo atual', () => {

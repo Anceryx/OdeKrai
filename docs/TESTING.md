@@ -170,6 +170,8 @@ O padrão é Encerrar. Nessa opção, o X tenta cancelar solicitações registra
 
 ## Identidade e memória
 
+Na inicialização, nome e apelido aprovados em `ODEKRAI.md` preenchem campos vazios do perfil local; valores existentes e avatar são preservados. `identity.test.ts` cobre essa combinação. A validação do perfil no cartão lateral e das mensagens permanece incluída na conferência visual do Windows.
+
 `npm test` cobre a conversão das instruções pessoais e expressões para as notas locais e a sanitização dos campos de nome. `cargo test --manifest-path src-tauri/Cargo.toml` cobre a exigência de nova aprovação do arquivo base após trocar a pasta. A inspeção visual do assistente de primeira configuração, do painel unificado, da seleção de pasta e da comparação/confirmação do arquivo base ainda está pendente no Windows.
 
 ## Posição do pet por monitor

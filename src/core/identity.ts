@@ -1,6 +1,7 @@
 export type ConversationNotes = { instructions: string; slang: string };
 
 export type ApprovedProfile = { displayName: string; nickname: string };
+export type EditableProfile = ApprovedProfile & { avatarDataUrl: string | null };
 
 export function profileFromApprovedCore(content: string): ApprovedProfile | null {
   const displayName = content.match(/^- Nome: (.*)$/m)?.[1]?.trim() ?? '';
@@ -9,6 +10,19 @@ export function profileFromApprovedCore(content: string): ApprovedProfile | null
   return {
     displayName,
     nickname: savedNickname === 'não informado' ? '' : savedNickname,
+  };
+}
+
+export function mergeApprovedProfile(
+  profile: EditableProfile,
+  approvedContent: string,
+): EditableProfile | null {
+  const approved = profileFromApprovedCore(approvedContent);
+  if (!approved) return null;
+  return {
+    displayName: profile.displayName.trim() ? profile.displayName : approved.displayName,
+    nickname: profile.nickname.trim() ? profile.nickname : approved.nickname,
+    avatarDataUrl: profile.avatarDataUrl,
   };
 }
 

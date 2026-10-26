@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatConversationNotes,
+  mergeApprovedProfile,
   parseConversationNotes,
   profileFromApprovedCore,
   sanitizeIdentityName,
@@ -18,6 +19,23 @@ describe('preferências de identidade', () => {
       nickname: '',
     });
     expect(profileFromApprovedCore('- Nome: {{NOME}}\n- Apelido: {{APELIDO}}\n')).toBeNull();
+  });
+
+  it('preenche campos vazios do perfil aprovado e preserva dados que já existem', () => {
+    const approved = '- Nome: Oliver\n- Apelido: Oli\n';
+    expect(
+      mergeApprovedProfile({ displayName: '', nickname: '', avatarDataUrl: null }, approved),
+    ).toEqual({ displayName: 'Oliver', nickname: 'Oli', avatarDataUrl: null });
+    expect(
+      mergeApprovedProfile(
+        { displayName: 'Nome editado', nickname: '', avatarDataUrl: 'data:image/png;base64,abc' },
+        approved,
+      ),
+    ).toEqual({
+      displayName: 'Nome editado',
+      nickname: 'Oli',
+      avatarDataUrl: 'data:image/png;base64,abc',
+    });
   });
 
   it('preserva instruções e expressões ao salvar e reler as notas de conversa', () => {

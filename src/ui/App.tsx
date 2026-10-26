@@ -614,10 +614,7 @@ function MainApp() {
           </div>
           <div className="profile-copy">
             <strong>{profile.displayName || 'Seu perfil'}</strong>
-            <span>
-              {profile.nickname ||
-                (profile.displayName ? 'Editar perfil' : 'Local neste dispositivo')}
-            </span>
+            <span>{profile.nickname || 'Editar perfil'}</span>
           </div>
         </button>
         <SidebarNavigation

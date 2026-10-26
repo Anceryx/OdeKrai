@@ -5,7 +5,7 @@ import { AI_PROVIDERS } from '../../core/providers';
 import { loadSettings } from '../../core/settings';
 import { normalizeSoundPreferences, playSound } from '../../core/sounds';
 import type { ChatMessage } from '../../core/provider-messages';
-import { profileFromApprovedCore } from '../../core/identity';
+import { mergeApprovedProfile } from '../../core/identity';
 import type { useAppState } from './useAppState';
 import type { Conversation } from '../screens/types';
 import type { ProfileData } from '../Profile';
@@ -149,10 +149,14 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
           }
         }
       }
+      const currentProfile =
+        savedProfile.status === 'fulfilled'
+          ? savedProfile.value
+          : { displayName: '', nickname: '', avatarDataUrl: null };
       if (
         home.status === 'fulfilled' &&
         home.value.configured &&
-        (savedProfile.status !== 'fulfilled' || !savedProfile.value.displayName)
+        (!currentProfile.displayName.trim() || !currentProfile.nickname.trim())
       ) {
         try {
           const document = await startupInvoke<{ approved_content: string }>(
@@ -160,8 +164,16 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
             undefined,
             reportDiagnostic,
           );
-          const recovered = profileFromApprovedCore(document.approved_content);
-          if (recovered) setProfile((profile) => ({ ...profile, ...recovered }));
+          const recovered = mergeApprovedProfile(currentProfile, document.approved_content);
+          if (recovered) {
+            setProfile(recovered);
+            const saved = await startupInvoke<ProfileData>(
+              'save_profile',
+              { displayName: recovered.displayName, nickname: recovered.nickname },
+              reportDiagnostic,
+            );
+            setProfile(saved);
+          }
         } catch {
           // O banner persistente identifica o comando que falhou.
         }
