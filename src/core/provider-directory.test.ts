@@ -7,6 +7,8 @@ import {
   removeProviderCredential,
   removeConnectedProvider,
   setPrimaryProviderSettings,
+  moveFallbackProvider,
+  setFallbackProviderIds,
   setProviderEnabled,
   toggleProviderSettings,
 } from './provider-directory';
@@ -55,6 +57,22 @@ describe('diretório de provedores', () => {
       model: 'm1',
       enabled: false,
     });
+  });
+
+  it('mantém a ordem dos provedores alternativos e exclui o principal', () => {
+    const settings = {
+      ...defaultSettings,
+      activeProviderId: 'openai',
+      fallbackProviderIds: ['anthropic', 'groq'],
+    };
+    expect(moveFallbackProvider(settings, 'groq', -1).fallbackProviderIds).toEqual([
+      'groq',
+      'anthropic',
+    ]);
+    expect(
+      setFallbackProviderIds(settings, ['openai', 'groq', 'groq', 'invalid']).fallbackProviderIds,
+    ).toEqual(['groq']);
+    expect(setPrimaryProviderSettings(settings, 'anthropic').fallbackProviderIds).toEqual(['groq']);
   });
 
   it('define principal e limpa a seleção quando esse provedor é desativado', () => {

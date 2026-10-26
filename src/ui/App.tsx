@@ -4,6 +4,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type ComponentType,
   type FormEvent,
 } from 'react';
@@ -62,7 +63,11 @@ import { initials } from './Profile';
 import { ApprovalWindow, isApprovalWindow } from './SecurityCenter';
 import { PETS } from '../core/pets';
 import { navigationItems, SidebarNavigation } from './SidebarNavigation';
-import { setPrimaryProviderSettings, toggleProviderSettings } from '../core/provider-directory';
+import {
+  loadConnectedProviderIds,
+  setPrimaryProviderSettings,
+  toggleProviderSettings,
+} from '../core/provider-directory';
 import { loadSettings } from '../core/settings';
 import { useAppEffects } from './hooks/useAppEffects';
 
@@ -131,6 +136,7 @@ function MainApp() {
   }, []);
 
   const appState = useAppState();
+  const [usedProviderId, setUsedProviderId] = useState<string | null>(null);
   const thinkingSoundGate = useRef(new SoundTriggerGate());
   const lastThinkingSoundKey = useRef<string | null>(null);
   const diagnosticsSoundPlayed = useRef(false);
@@ -175,7 +181,13 @@ function MainApp() {
     setChatMode,
     request,
     companionStateTimer,
-  } = useAppState();
+  } = appState;
+  const usedProvider = usedProviderId
+    ? AI_PROVIDERS.find((item) => item.id === usedProviderId)
+    : undefined;
+  const shownProviderSettings = usedProviderId ? settings.providers[usedProviderId] : undefined;
+  const shownProviderName = usedProvider?.name ?? activeProvider.name;
+  const shownProviderModel = shownProviderSettings?.model ?? activeProvider.model;
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -252,6 +264,7 @@ function MainApp() {
   function setPrimaryProvider(providerId: string) {
     setSettings((current) => setPrimaryProviderSettings(current, providerId));
     setSelectedProviderId(providerId);
+    setUsedProviderId(null);
   }
 
   function setProviderEnabled(providerId: string, enabled: boolean) {
@@ -259,8 +272,22 @@ function MainApp() {
     if (!enabled && settings.activeProviderId === providerId) setKeySavedForSession(false);
   }
 
-  function beginChat() {
-    if (!keySavedForSession || !isTauri()) {
+  async function hasConfiguredChatProvider() {
+    const candidates = [settings.activeProviderId, ...settings.fallbackProviderIds].filter(
+      (providerId, index, all) =>
+        all.indexOf(providerId) === index && Boolean(settings.providers[providerId]?.model),
+    );
+    const { connectedIds } = await loadConnectedProviderIds(candidates, (providerId) =>
+      invoke<boolean>('has_provider_credential', { providerId }),
+    );
+    const available = candidates.find((providerId) => connectedIds.has(providerId));
+    if (available) setUsedProviderId(available);
+    setKeySavedForSession(Boolean(available));
+    return Boolean(available);
+  }
+
+  async function beginChat() {
+    if (!isTauri() || !(await hasConfiguredChatProvider())) {
       setSection('providers');
       setChatMode(false);
       return;
@@ -271,7 +298,7 @@ function MainApp() {
   async function sendMessage(rawText: string, reuseLastUserMessage = false) {
     const text = rawText.trim();
     if (!text || busy) return;
-    if (!keySavedForSession || !isTauri()) {
+    if (!isTauri() || !(await hasConfiguredChatProvider())) {
       setError('Configure um provedor de IA em Conectores para enviar mensagens.');
       setLastFailedPrompt('');
       return;
@@ -304,6 +331,7 @@ function MainApp() {
     try {
       const provider = AI_PROVIDERS.find((item) => item.id === settings.activeProviderId);
       if (!provider) throw new Error('O provedor selecionado não possui adaptador conhecido.');
+      setUsedProviderId(provider.id);
       if (!reuseLastUserMessage) {
         await invoke('append_conversation_message', {
           conversationId: activeId,
@@ -329,11 +357,16 @@ function MainApp() {
         | { type: 'textDelta'; text: string }
         | { type: 'toolCallComplete'; id: string; name: string; args: unknown }
         | { type: 'usage'; input: number; output: number }
+        | { type: 'providerSelected'; providerId: string }
         | { type: 'done'; stopReason: string | null }
         | { type: 'error'; kind: string; status: number | null; message: string }
       >();
       let streamed = '';
       onChunk.onmessage = (event) => {
+        if (event.type === 'providerSelected') {
+          setUsedProviderId(event.providerId);
+          return;
+        }
         if (event.type !== 'textDelta') return;
         streamed += event.text;
         setMessages([
@@ -352,6 +385,13 @@ function MainApp() {
             blocks: [{ type: 'text' as const, text: message.content }],
           })),
           tools: [],
+          fallbacks: settings.fallbackProviderIds.flatMap((fallbackId) => {
+            const config = settings.providers[fallbackId];
+            return config?.model
+              ? [{ providerId: fallbackId, baseUrl: config.baseUrl, model: config.model }]
+              : [];
+          }),
+          dailyTokenLimit: settings.dailyTokenLimit,
           requestId,
           onChunk,
         },
@@ -532,7 +572,7 @@ function MainApp() {
               aria-label="Abrir conectores de IA"
             >
               {keySavedForSession
-                ? `${activeProvider.name}${activeProvider.model ? ` · ${activeProvider.model}` : ''}`
+                ? `${shownProviderName}${shownProviderModel ? ` · ${shownProviderModel}` : ''}`
                 : 'Sem provedor'}
             </button>
             {permissionIndicator?.halted && (
@@ -607,8 +647,8 @@ function MainApp() {
               error={error}
               submit={submitMessage}
               cancel={cancelRequest}
-              providerName={activeProvider.name}
-              providerModel={activeProvider.model}
+              providerName={shownProviderName}
+              providerModel={shownProviderModel}
               providerConfigured={keySavedForSession}
               assistantUsesMascot={settings.useMascotAsAssistantAvatar}
               onFixConfiguration={() => {

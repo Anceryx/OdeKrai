@@ -1,4 +1,4 @@
-import type { AiProvider } from './providers';
+import { providerById, type AiProvider } from './providers';
 import { defaultProviderSettings, type AppSettings } from './settings';
 
 export type ProviderDirectoryTab = 'connected' | 'free' | 'all';
@@ -45,8 +45,32 @@ export function setPrimaryProviderSettings(settings: AppSettings, providerId: st
   return {
     ...settings,
     activeProviderId: providerId,
+    fallbackProviderIds: settings.fallbackProviderIds.filter((id) => id !== providerId),
     providers: { ...settings.providers, [providerId]: { ...provider, enabled: true } },
   };
+}
+
+export function setFallbackProviderIds(settings: AppSettings, providerIds: string[]): AppSettings {
+  const unique = [...new Set(providerIds)].filter(
+    (providerId) => providerId !== settings.activeProviderId && Boolean(providerById(providerId)),
+  );
+  return { ...settings, fallbackProviderIds: unique };
+}
+
+export function moveFallbackProvider(
+  settings: AppSettings,
+  providerId: string,
+  offset: -1 | 1,
+): AppSettings {
+  const from = settings.fallbackProviderIds.indexOf(providerId);
+  const to = from + offset;
+  if (from < 0 || to < 0 || to >= settings.fallbackProviderIds.length) return settings;
+  const fallbackProviderIds = [...settings.fallbackProviderIds];
+  [fallbackProviderIds[from], fallbackProviderIds[to]] = [
+    fallbackProviderIds[to],
+    fallbackProviderIds[from],
+  ];
+  return { ...settings, fallbackProviderIds };
 }
 
 export function toggleProviderSettings(

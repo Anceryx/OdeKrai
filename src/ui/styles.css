@@ -1235,6 +1235,47 @@ select:focus-visible {
   color: #ddd;
   font-size: 11px;
 }
+.fallback-provider-add,
+.fallback-provider-list li > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fallback-provider-list,
+.provider-usage-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.fallback-provider-list li,
+.provider-usage-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-raised, #211d14);
+}
+.provider-usage-list li span {
+  color: var(--text-secondary, #b8b2a6);
+  font-size: 0.875rem;
+}
+@media (max-width: 720px) {
+  .fallback-provider-list li,
+  .provider-usage-list li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .fallback-provider-list li > div,
+  .fallback-provider-add {
+    flex-wrap: wrap;
+  }
+}
 .sound-events-list {
   display: grid;
   gap: 18px;

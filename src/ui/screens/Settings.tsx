@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { defaultSettings, type AppSettings } from '../../core/settings';
+import { AI_PROVIDERS } from '../../core/providers';
+import { moveFallbackProvider, setFallbackProviderIds } from '../../core/provider-directory';
 import { PageHeader, Toggle } from '../DesignSystem';
 import { HistoryDeletionSettings } from '../HistoryDeletionSettings';
 
@@ -9,6 +11,14 @@ type BuildInfo = {
   commit: string;
   build_date: string;
   webview_version: string;
+};
+
+type ProviderUsage = {
+  providerId: string;
+  todayInput: number;
+  todayOutput: number;
+  sevenDayInput: number;
+  sevenDayOutput: number;
 };
 
 export function SettingsScreen({
@@ -21,12 +31,27 @@ export function SettingsScreen({
   onDeleteAllHistory: () => Promise<boolean>;
 }) {
   const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null);
+  const [usage, setUsage] = useState<ProviderUsage[]>([]);
+  const [fallbackToAdd, setFallbackToAdd] = useState('');
+  const totalTokensToday = usage.reduce(
+    (total, item) => total + item.todayInput + item.todayOutput,
+    0,
+  );
+  const usageStatus =
+    settings.dailyTokenLimit === 0
+      ? 'Limite desativado'
+      : totalTokensToday > settings.dailyTokenLimit
+        ? 'Limite ultrapassado'
+        : 'Dentro do limite';
 
   useEffect(() => {
     if (!isTauri()) return;
     void invoke<BuildInfo>('get_build_info')
       .then(setBuildInfo)
       .catch(() => setBuildInfo(null));
+    void invoke<ProviderUsage[]>('get_provider_usage')
+      .then(setUsage)
+      .catch(() => setUsage([]));
   }, []);
 
   return (
@@ -104,6 +129,155 @@ export function SettingsScreen({
             }
           />
         </div>
+      </section>
+      <section
+        className="settings-panel settings-section"
+        aria-labelledby="provider-fallback-heading"
+      >
+        <h2 id="provider-fallback-heading">Provedores alternativos</h2>
+        <p className="settings-description">
+          Se o provedor principal estiver temporariamente indisponível, o OdeKrai tentará os
+          próximos desta lista. Provedores sem credencial ou capacidade compatível serão ignorados.
+        </p>
+        <div className="preference-row">
+          <label htmlFor="fallback-provider-select">
+            <strong>Adicionar provedor</strong>
+          </label>
+          <div className="fallback-provider-add">
+            <select
+              id="fallback-provider-select"
+              value={fallbackToAdd}
+              onChange={(event) => setFallbackToAdd(event.target.value)}
+            >
+              <option value="">Selecione</option>
+              {AI_PROVIDERS.filter(
+                (provider) =>
+                  provider.integration !== 'guide' &&
+                  provider.id !== settings.activeProviderId &&
+                  !settings.fallbackProviderIds.includes(provider.id),
+              ).map((provider) => (
+                <option key={provider.id} value={provider.id}>
+                  {provider.name}
+                </option>
+              ))}
+            </select>
+            <button
+              className="secondary-button small-button"
+              type="button"
+              disabled={!fallbackToAdd}
+              onClick={() => {
+                update(
+                  setFallbackProviderIds(settings, [
+                    ...settings.fallbackProviderIds,
+                    fallbackToAdd,
+                  ]),
+                );
+                setFallbackToAdd('');
+              }}
+            >
+              Adicionar
+            </button>
+          </div>
+        </div>
+        {settings.fallbackProviderIds.length > 0 ? (
+          <ol className="fallback-provider-list" aria-label="Ordem dos provedores alternativos">
+            {settings.fallbackProviderIds.map((providerId, index) => {
+              const provider = AI_PROVIDERS.find((item) => item.id === providerId);
+              if (!provider) return null;
+              return (
+                <li key={providerId}>
+                  <span>{provider.name}</span>
+                  <div>
+                    <button
+                      type="button"
+                      className="secondary-button small-button"
+                      aria-label={`Mover ${provider.name} para cima`}
+                      disabled={index === 0}
+                      onClick={() => update(moveFallbackProvider(settings, providerId, -1))}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button small-button"
+                      aria-label={`Mover ${provider.name} para baixo`}
+                      disabled={index === settings.fallbackProviderIds.length - 1}
+                      onClick={() => update(moveFallbackProvider(settings, providerId, 1))}
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button small-button"
+                      onClick={() =>
+                        update(
+                          setFallbackProviderIds(
+                            settings,
+                            settings.fallbackProviderIds.filter((id) => id !== providerId),
+                          ),
+                        )
+                      }
+                    >
+                      Remover
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        ) : (
+          <p className="settings-description">Nenhum provedor alternativo configurado.</p>
+        )}
+      </section>
+      <section className="settings-panel settings-section" aria-labelledby="usage-heading">
+        <h2 id="usage-heading">Uso de tokens</h2>
+        <p role="status" aria-live="polite">
+          Estado: {usageStatus}
+        </p>
+        <div className="preference-row">
+          <div>
+            <strong>Limite diário total</strong>
+            <span>
+              Se uma resposta ultrapassar o limite, ela será descartada e as próximas serão
+              bloqueadas. Use 0 para não definir limite.
+            </span>
+          </div>
+          <input
+            type="number"
+            min="0"
+            max="100000000"
+            step="1000"
+            aria-label="Limite diário de tokens"
+            value={settings.dailyTokenLimit}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              if (Number.isSafeInteger(value) && value >= 0 && value <= 100_000_000)
+                update({ ...settings, dailyTokenLimit: value });
+            }}
+          />
+        </div>
+        <ul className="provider-usage-list" aria-label="Uso de tokens por provedor">
+          {AI_PROVIDERS.filter((provider) =>
+            usage.some((item) => item.providerId === provider.id),
+          ).map((provider) => {
+            const item = usage.find((entry) => entry.providerId === provider.id)!;
+            return (
+              <li key={provider.id}>
+                <strong>{provider.name}</strong>
+                <span>
+                  Hoje: {(item.todayInput + item.todayOutput).toLocaleString('pt-BR')} tokens
+                </span>
+                <span>
+                  Últimos 7 dias:{' '}
+                  {(item.sevenDayInput + item.sevenDayOutput).toLocaleString('pt-BR')} tokens
+                </span>
+              </li>
+            );
+          })}
+          {usage.length === 0 && (
+            <li className="settings-description">Ainda não há uso registrado.</li>
+          )}
+        </ul>
       </section>
       <section className="settings-panel settings-section">
         <h2>Dados e privacidade</h2>

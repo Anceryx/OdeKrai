@@ -23,6 +23,8 @@ export type AppSettings = {
   useMascotAsAssistantAvatar: boolean;
   closeBehavior: 'minimize_to_tray' | 'exit';
   activeProviderId: string;
+  fallbackProviderIds: string[];
+  dailyTokenLimit: number;
   providers: Record<string, ProviderSettings>;
   companion: {
     enabled: boolean;
@@ -71,6 +73,8 @@ export const defaultSettings: AppSettings = {
   useMascotAsAssistantAvatar: false,
   closeBehavior: 'exit',
   activeProviderId: 'openai',
+  fallbackProviderIds: [],
+  dailyTokenLimit: 100_000,
   providers: {},
   companion: {
     enabled: false,
@@ -188,6 +192,23 @@ export function loadSettingsWithWarnings(): { settings: AppSettings; warnings: s
       (value.activeProviderId === '' || providerById(value.activeProviderId))
         ? value.activeProviderId
         : (oldId ?? 'openai');
+    const fallbackProviderIds = Array.isArray(value.fallbackProviderIds)
+      ? [
+          ...new Set(
+            value.fallbackProviderIds.filter(
+              (id): id is string =>
+                typeof id === 'string' && Boolean(providerById(id)) && id !== activeProviderId,
+            ),
+          ),
+        ].slice(0, 15)
+      : [];
+    const dailyTokenLimit =
+      typeof value.dailyTokenLimit === 'number' &&
+      Number.isSafeInteger(value.dailyTokenLimit) &&
+      value.dailyTokenLimit >= 0 &&
+      value.dailyTokenLimit <= 100_000_000
+        ? value.dailyTokenLimit
+        : defaultSettings.dailyTokenLimit;
     const migrated = { ...value } as Record<string, unknown>;
     delete migrated.provider;
     return {
@@ -200,6 +221,8 @@ export function loadSettingsWithWarnings(): { settings: AppSettings; warnings: s
             : false,
         closeBehavior: value.closeBehavior === 'minimize_to_tray' ? 'minimize_to_tray' : 'exit',
         activeProviderId,
+        fallbackProviderIds,
+        dailyTokenLimit,
         providers,
         companion: {
           ...defaultSettings.companion,

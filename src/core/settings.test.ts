@@ -121,6 +121,24 @@ describe('preferências persistidas', () => {
     expect(loadSettings().providers.anthropic.providerId).toBe('anthropic');
   });
 
+  it('normaliza a ordem dos provedores alternativos e o limite diário de tokens', () => {
+    const storage = new Map<string, string>();
+    storage.set(
+      'odekrai.settings.v2',
+      JSON.stringify({
+        ...loadSettings(),
+        fallbackProviderIds: ['anthropic', 'anthropic', 'openai', 'missing'],
+        dailyTokenLimit: -1,
+      }),
+    );
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    });
+    expect(loadSettings().fallbackProviderIds).toEqual(['anthropic']);
+    expect(loadSettings().dailyTokenLimit).toBe(100_000);
+  });
+
   it('mantém endpoints e modelos independentes ao trocar de provedor', () => {
     const storage = new Map<string, string>();
     vi.stubGlobal('localStorage', {

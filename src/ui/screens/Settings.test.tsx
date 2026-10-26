@@ -13,6 +13,10 @@ describe('SettingsScreen', () => {
       />,
     );
     expect(markup).toContain('Dados e privacidade');
+    expect(markup).toContain('Provedores alternativos');
+    expect(markup).toContain('Uso de tokens');
+    expect(markup).toContain('Limite diário');
+    expect(markup).toContain('Estado: Dentro do limite');
     expect(markup).toContain('Ao fechar a janela');
     expect(markup).toContain('Sobre');
     expect(markup).toContain('WebView2');
