@@ -13,6 +13,37 @@ const MAX_RESULT_BYTES: usize = 32 * 1024;
 const MAX_MESSAGE_BYTES: usize = 1_000_000;
 const MAX_TOOL_CALLS_PER_TURN: usize = 8;
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct WorkspacePathArgs {
+    path: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct WorkspaceWriteArgs {
+    path: String,
+    content: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct SimulatedMessageArgs {
+    recipient: String,
+    message: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct SimulatedPaymentArgs {
+    amount_cents: u64,
+    currency: String,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AgentLimits {
     pub max_turns: usize,
@@ -167,6 +198,33 @@ pub async fn run_agent<B: AgentBackend>(
                 id: call.id.clone(),
                 name: call.name.clone(),
             });
+            if let Err(message) = validate_tool_call(&call, tools) {
+                let content = format!(
+                    "<tool-result trust=untrusted>\n[Ação negada] {message}\nNão tente obter o mesmo efeito por outra ferramenta ou caminho.\n</tool-result>"
+                );
+                emit(AgentEvent::ToolResult {
+                    id: call.id.clone(),
+                    audit_id: None,
+                    is_error: true,
+                });
+                messages.push(Message {
+                    role: "tool".into(),
+                    blocks: vec![crate::providers::Block::ToolResult {
+                        call_id: call.id,
+                        content,
+                        is_error: true,
+                    }],
+                });
+                tainted = true;
+                if message_bytes(messages) > MAX_MESSAGE_BYTES {
+                    return fail(
+                        &mut emit,
+                        "context_limit",
+                        "O histórico da execução excedeu o limite permitido.",
+                    );
+                }
+                continue;
+            }
             if call.name == "simulated.send_message" {
                 external_actions += 1;
                 if external_actions > limits.max_external_actions {
@@ -235,6 +293,44 @@ pub async fn run_agent<B: AgentBackend>(
         "turn_limit",
         "O n\u{00fa}mero m\u{00e1}ximo de etapas foi atingido.",
     )
+}
+
+fn validate_tool_call(call: &ToolCall, tools: &[ToolDef]) -> Result<(), String> {
+    let Some(_tool) = tools.iter().find(|tool| tool.name == call.name) else {
+        return Err("Ferramenta desconhecida; a chamada foi recusada.".into());
+    };
+    let valid = match call.name.as_str() {
+        "workspace.list" | "workspace.read_file" | "workspace.delete_file" => {
+            serde_json::from_value::<WorkspacePathArgs>(call.args.clone()).is_ok()
+        }
+        "workspace.write_file" => {
+            serde_json::from_value::<WorkspaceWriteArgs>(call.args.clone()).is_ok()
+        }
+        "simulated.send_message" => {
+            serde_json::from_value::<SimulatedMessageArgs>(call.args.clone()).is_ok()
+        }
+        "simulated.payment" => {
+            serde_json::from_value::<SimulatedPaymentArgs>(call.args.clone()).is_ok()
+                && call
+                    .args
+                    .get("amount_cents")
+                    .and_then(Value::as_i64)
+                    .is_some_and(|amount| amount >= 0)
+        }
+        _ => false,
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err("Os parâmetros não correspondem ao formato estrito da ferramenta.".into())
+    }
+}
+
+fn message_bytes(messages: &[Message]) -> usize {
+    messages
+        .iter()
+        .map(|message| message.blocks.iter().map(block_bytes).sum::<usize>())
+        .sum()
 }
 
 fn fail(emit: &mut impl FnMut(AgentEvent), kind: &str, message: &str) -> Result<String, String> {
@@ -350,7 +446,12 @@ mod tests {
         ToolCall {
             id: "call-1".into(),
             name: name.into(),
-            args: json!({"path":"a.txt"}),
+            args: match name {
+                "workspace.write_file" => json!({"path":"a.txt","content":"conteúdo"}),
+                "simulated.send_message" => json!({"recipient":"contato","message":"texto"}),
+                "simulated.payment" => json!({"amount_cents":100,"currency":"BRL"}),
+                _ => json!({"path":"a.txt"}),
+            },
         }
     }
 
@@ -531,5 +632,18 @@ mod tests {
             "a.txt"
         );
         assert_eq!(tool_definitions().len(), 6);
+    }
+
+    #[test]
+    fn tool_calls_reject_unknown_names_fields_and_invalid_types_before_dispatch() {
+        let tools = tool_definitions();
+        assert!(validate_tool_call(&call("workspace.unknown"), &tools).is_err());
+        let mut invalid = call("workspace.read_file");
+        invalid.args = json!({"path":"a.txt", "extra":true});
+        assert!(validate_tool_call(&invalid, &tools).is_err());
+        invalid.args = json!({"path":42});
+        assert!(validate_tool_call(&invalid, &tools).is_err());
+        invalid.args = json!({"path":"a.txt"});
+        assert!(validate_tool_call(&invalid, &tools).is_ok());
     }
 }
