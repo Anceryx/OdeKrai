@@ -98,13 +98,48 @@ mod feature_window_lifecycle_tests {
 
 #[cfg(test)]
 mod pet_position_tests {
-    use super::clamp_window_position;
+    use super::{clamp_window_position, WindowPosition, WindowSize, WorkArea};
 
     #[test]
     fn pet_position_is_limited_to_work_area_including_negative_monitor_origins() {
         assert_eq!(
-            clamp_window_position(4000.0, -400.0, -1920.0, 40.0, 1920.0, 1040.0, 300.0, 180.0),
-            (-300.0, 40.0)
+            clamp_window_position(
+                WindowPosition {
+                    x: 4000.0,
+                    y: -400.0
+                },
+                WorkArea {
+                    left: -1920.0,
+                    top: 40.0,
+                    width: 1920.0,
+                    height: 1040.0,
+                },
+                WindowSize {
+                    width: 300.0,
+                    height: 180.0,
+                },
+            ),
+            WindowPosition { x: -300.0, y: 40.0 }
+        );
+    }
+
+    #[test]
+    fn oversized_pet_stays_at_the_work_area_origin() {
+        assert_eq!(
+            clamp_window_position(
+                WindowPosition { x: 500.0, y: 500.0 },
+                WorkArea {
+                    left: -100.0,
+                    top: 20.0,
+                    width: 200.0,
+                    height: 120.0,
+                },
+                WindowSize {
+                    width: 300.0,
+                    height: 180.0,
+                },
+            ),
+            WindowPosition { x: -100.0, y: 20.0 }
         );
     }
 }
@@ -124,20 +159,41 @@ fn visibility_action(visible: bool, exists: bool) -> VisibilityAction {
     }
 }
 
-fn clamp_window_position(
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct WindowPosition {
     x: f64,
     y: f64,
+}
+
+#[derive(Clone, Copy)]
+struct WorkArea {
     left: f64,
     top: f64,
-    work_width: f64,
-    work_height: f64,
-    window_width: f64,
-    window_height: f64,
-) -> (f64, f64) {
-    (
-        x.clamp(left, (left + work_width - window_width).max(left)),
-        y.clamp(top, (top + work_height - window_height).max(top)),
-    )
+    width: f64,
+    height: f64,
+}
+
+#[derive(Clone, Copy)]
+struct WindowSize {
+    width: f64,
+    height: f64,
+}
+
+fn clamp_window_position(
+    position: WindowPosition,
+    work_area: WorkArea,
+    window_size: WindowSize,
+) -> WindowPosition {
+    WindowPosition {
+        x: position.x.clamp(
+            work_area.left,
+            (work_area.left + work_area.width - window_size.width).max(work_area.left),
+        ),
+        y: position.y.clamp(
+            work_area.top,
+            (work_area.top + work_area.height - window_size.height).max(work_area.top),
+        ),
+    }
 }
 
 async fn ensure_pet_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
@@ -167,20 +223,24 @@ async fn ensure_pet_window(app: &tauri::AppHandle) -> Result<WebviewWindow, Stri
                     let work = monitor.work_area();
                     let x = position.x as f64 / scale;
                     let y = position.y as f64 / scale;
-                    let (x, y) = clamp_window_position(
-                        x,
-                        y,
-                        work.position.x as f64 / scale,
-                        work.position.y as f64 / scale,
-                        work.size.width as f64 / scale,
-                        work.size.height as f64 / scale,
-                        size.width as f64 / scale,
-                        size.height as f64 / scale,
+                    let clamped = clamp_window_position(
+                        WindowPosition { x, y },
+                        WorkArea {
+                            left: work.position.x as f64 / scale,
+                            top: work.position.y as f64 / scale,
+                            width: work.size.width as f64 / scale,
+                            height: work.size.height as f64 / scale,
+                        },
+                        WindowSize {
+                            width: size.width as f64 / scale,
+                            height: size.height as f64 / scale,
+                        },
                     );
-                    if (x - position.x as f64 / scale).abs() > 1.0
-                        || (y - position.y as f64 / scale).abs() > 1.0
+                    if (clamped.x - position.x as f64 / scale).abs() > 1.0
+                        || (clamped.y - position.y as f64 / scale).abs() > 1.0
                     {
-                        let _ = moved_window.set_position(LogicalPosition::new(x, y));
+                        let _ =
+                            moved_window.set_position(LogicalPosition::new(clamped.x, clamped.y));
                     }
                 }
             }
@@ -252,20 +312,18 @@ async fn set_pet_position(
     let current = window.inner_size().map_err(|error| error.to_string())?;
     let width = current.width as f64 / scale;
     let height = current.height as f64 / scale;
-    let left = work.position.x as f64 / scale;
-    let top = work.position.y as f64 / scale;
-    let (x, y) = clamp_window_position(
-        x,
-        y,
-        left,
-        top,
-        work.size.width as f64 / scale,
-        work.size.height as f64 / scale,
-        width,
-        height,
+    let position = clamp_window_position(
+        WindowPosition { x, y },
+        WorkArea {
+            left: work.position.x as f64 / scale,
+            top: work.position.y as f64 / scale,
+            width: work.size.width as f64 / scale,
+            height: work.size.height as f64 / scale,
+        },
+        WindowSize { width, height },
     );
     window
-        .set_position(LogicalPosition::new(x, y))
+        .set_position(LogicalPosition::new(position.x, position.y))
         .map_err(|error| error.to_string())
 }
 
@@ -315,18 +373,24 @@ async fn set_pet_size(
     let position = window.outer_position().map_err(|error| error.to_string())?;
     let actual_size = window.inner_size().map_err(|error| error.to_string())?;
     let work = monitor.work_area();
-    let (x, y) = clamp_window_position(
-        position.x as f64 / scale,
-        position.y as f64 / scale,
-        work.position.x as f64 / scale,
-        work.position.y as f64 / scale,
-        work.size.width as f64 / scale,
-        work.size.height as f64 / scale,
-        actual_size.width as f64 / scale,
-        actual_size.height as f64 / scale,
+    let position = clamp_window_position(
+        WindowPosition {
+            x: position.x as f64 / scale,
+            y: position.y as f64 / scale,
+        },
+        WorkArea {
+            left: work.position.x as f64 / scale,
+            top: work.position.y as f64 / scale,
+            width: work.size.width as f64 / scale,
+            height: work.size.height as f64 / scale,
+        },
+        WindowSize {
+            width: actual_size.width as f64 / scale,
+            height: actual_size.height as f64 / scale,
+        },
     );
     window
-        .set_position(LogicalPosition::new(x, y))
+        .set_position(LogicalPosition::new(position.x, position.y))
         .map_err(|error| error.to_string())
 }
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
