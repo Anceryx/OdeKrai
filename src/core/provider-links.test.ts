@@ -4,7 +4,7 @@ import { openProviderLink } from './provider-links';
 
 describe('openProviderLink', () => {
   it('mantém links de cadastro e console HTTPS para todos os conectores', () => {
-    expect(AI_PROVIDERS.length).toBe(16);
+    expect(AI_PROVIDERS.length).toBe(17);
     for (const provider of AI_PROVIDERS) {
       expect(new URL(provider.signupUrl).protocol, provider.id).toBe('https:');
       expect(new URL(provider.consoleUrl).protocol, provider.id).toBe('https:');

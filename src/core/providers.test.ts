@@ -4,9 +4,10 @@ import { providerLogoFor } from './provider-logos';
 
 describe('catálogo de provedores', () => {
   it('mantém identificadores únicos para o catálogo de conectores', () => {
-    expect(AI_PROVIDERS).toHaveLength(16);
-    expect(new Set(AI_PROVIDERS.map(({ id }) => id)).size).toBe(16);
+    expect(AI_PROVIDERS).toHaveLength(17);
+    expect(new Set(AI_PROVIDERS.map(({ id }) => id)).size).toBe(17);
     expect(AI_PROVIDERS.map(({ name }) => name)).toEqual([
+      'IA local',
       'OpenAI',
       'Anthropic',
       'Google Gemini',
@@ -27,7 +28,11 @@ describe('catálogo de provedores', () => {
   });
 
   it('tem um SVG de marca local para cada provedor do catálogo', () => {
-    expect(AI_PROVIDERS.every((provider) => Boolean(providerLogoFor(provider.id)))).toBe(true);
+    expect(
+      AI_PROVIDERS.filter((provider) => provider.id !== 'local').every((provider) =>
+        Boolean(providerLogoFor(provider.id)),
+      ),
+    ).toBe(true);
   });
 
   it('separa conectores prontos para Chat Completions dos guias ainda sem adaptador', () => {
@@ -37,7 +42,7 @@ describe('catálogo de provedores', () => {
     expect(
       AI_PROVIDERS.filter(({ integration }) => integration === 'guide').map(({ id }) => id),
     ).toEqual(['vertex-ai']);
-    expect(AI_PROVIDERS.filter(({ integration }) => integration !== 'guide')).toHaveLength(15);
+    expect(AI_PROVIDERS.filter(({ integration }) => integration !== 'guide')).toHaveLength(16);
   });
 
   it('configura cabeçalho de autenticação e endpoint especiais do Azure e Bedrock', () => {
