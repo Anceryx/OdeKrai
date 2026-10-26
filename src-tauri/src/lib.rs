@@ -93,6 +93,7 @@ mod external_links;
 mod hardware;
 mod history;
 mod local_models;
+pub mod mcp;
 mod pet_position;
 mod policy;
 mod productivity;
