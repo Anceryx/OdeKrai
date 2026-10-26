@@ -83,7 +83,9 @@ O Rust compõe o prompt com regras fixas, preâmbulo local de data/hora/fuso/idi
 
 ## Motor de permissões
 
-`src-tauri/src/policy.rs` contém a política pura e tabelada de modo, risco, origem e localização no workspace. `src-tauri/src/security.rs` guarda o estado de segurança em SQLite, valida os parâmetros tipados de `SimulatedAction`, decide e registra auditoria antes da execução. Só as ações de arquivo dentro de `workspace/` têm efeito local; comunicação é apenas simulada e pagamento é sempre bloqueado.
+Os controles locais de áudio e mídia são encaminhados por `src-tauri/src/system_controls.rs`, cuja trait `SystemAdapter` separa o adapter nativo Windows do adapter simulado usado nos testes. Volume e teclas de mídia são skills registradas e desativadas por padrão até serem habilitadas em Habilidades; o volume usa Core Audio (`IAudioEndpointVolume`) e a mídia usa `SendInput` com teclas virtuais.
+
+`src-tauri/src/policy.rs` contém a política pura e tabelada de modo, risco, origem e localização no workspace. `src-tauri/src/security.rs` guarda o estado de segurança em SQLite, valida os parâmetros tipados de `SimulatedAction`, decide e registra auditoria antes da execução. Ações de arquivo permitidas e os controles locais de áudio e mídia podem produzir efeitos locais; comunicação simulada não envia mensagens e pagamentos são sempre bloqueados.
 
 Pedidos `AskUser` entram numa fila Rust limitada e abrem a janela Tauri `approval`. A capability `src-tauri/capabilities/approval.json` dá somente os eventos e o fechamento de janela necessários. A confirmação, expiração, hash dos parâmetros e uso único são verificados no Rust; a janela apenas resolve o canal, e o loop executa a ação aprovada. A janela principal configura modo/atalho e consulta a tela de atividade; não pode responder aprovações.
 

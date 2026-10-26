@@ -22,6 +22,9 @@ const SETTINGS_PAGES: &[(&str, &str)] = &[
 pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
     let object = params.as_object().ok_or("Parâmetros inválidos.")?;
     let expected: &[&str] = match skill_id {
+        "audio.get_volume" | "media.play_pause" | "media.next" | "media.previous" => &[],
+        "audio.set_volume" => &["volume"],
+        "audio.mute" => &["muted"],
         "system.open_url" => &["url"],
         "system.open_path" | "system.reveal_in_folder" => &["path"],
         "settings.open" => &["page"],
@@ -37,6 +40,21 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
         return Err("Os parâmetros não correspondem à habilidade permitida.".into());
     }
     match skill_id {
+        "audio.get_volume" | "media.play_pause" | "media.next" | "media.previous" => {}
+        "audio.set_volume" => {
+            if object
+                .get("volume")
+                .and_then(Value::as_u64)
+                .is_none_or(|value| value > 100)
+            {
+                return Err("O volume precisa ser um número inteiro entre 0 e 100.".into());
+            }
+        }
+        "audio.mute" => {
+            if object.get("muted").and_then(Value::as_bool).is_none() {
+                return Err("Informe se o áudio deve ficar sem som.".into());
+            }
+        }
         "system.open_url" => {
             let raw = bounded_string(object, "url", 2048)?;
             let normalized =
@@ -95,6 +113,12 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
 pub(crate) fn preview(skill_id: &str, params: &Value, root: &Path) -> Result<String, String> {
     validate(skill_id, params)?;
     Ok(match skill_id {
+        "audio.get_volume" => "Consultar o volume principal do Windows.".into(),
+        "audio.set_volume" => format!("Alterar o volume principal do Windows para {}%.", params["volume"]),
+        "audio.mute" => if params["muted"] == true { "Silenciar o áudio principal do Windows." } else { "Reativar o áudio principal do Windows." }.into(),
+        "media.play_pause" => "Enviar tecla de reproduzir/pausar para o Windows.".into(),
+        "media.next" => "Enviar tecla de próxima faixa para o Windows.".into(),
+        "media.previous" => "Enviar tecla de faixa anterior para o Windows.".into(),
         "system.open_url" => format!(
             "Abrir no navegador padrão: {}",
             params["url"].as_str().unwrap()
@@ -153,6 +177,8 @@ pub(crate) fn execute(
 ) -> Result<String, String> {
     validate(skill_id, params)?;
     match skill_id {
+        "audio.get_volume" | "audio.set_volume" | "audio.mute" | "media.play_pause"
+        | "media.next" | "media.previous" => crate::system_controls::execute(skill_id, params),
         "system.open_url" => {
             let normalized =
                 crate::external_links::validate_external_url(params["url"].as_str().unwrap())

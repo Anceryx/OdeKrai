@@ -76,6 +76,8 @@ pub(super) fn action_metadata(
             | "clipboard.write"
             | "clipboard.read"
             | "system.info" => skill_id,
+            "audio.get_volume" | "audio.set_volume" | "audio.mute" | "media.play_pause"
+            | "media.next" | "media.previous" => skill_id,
             _ => "productivity",
         },
         _ => tool.name(),

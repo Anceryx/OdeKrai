@@ -131,7 +131,8 @@ fn action_id(action: &SimulatedAction) -> &str {
             | "notification.show"
             | "app.launch" => skill_id,
             "clipboard.write" | "clipboard.read" => skill_id,
-            "system.info" => skill_id,
+            "system.info" | "audio.get_volume" | "audio.set_volume" | "audio.mute"
+            | "media.play_pause" | "media.next" | "media.previous" => skill_id,
             _ => "",
         },
     }
@@ -161,6 +162,12 @@ fn parse_action(id: &str, params: &Value) -> Result<SimulatedAction, String> {
             | "clipboard.write"
             | "clipboard.read"
             | "system.info"
+            | "audio.get_volume"
+            | "audio.set_volume"
+            | "audio.mute"
+            | "media.play_pause"
+            | "media.next"
+            | "media.previous"
             | "calendar.create_event"
             | "doc.create_markdown"
             | "doc.create_text"
@@ -201,7 +208,7 @@ pub(super) fn resolve_action_target(
     if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "web.fetch") {
         return Ok((std::path::PathBuf::new(), action.clone()));
     }
-    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "system.open_url" | "settings.open" | "notification.show" | "app.launch" | "clipboard.read" | "clipboard.write" | "system.info"))
+    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "system.open_url" | "settings.open" | "notification.show" | "app.launch" | "clipboard.read" | "clipboard.write" | "system.info" | "audio.get_volume" | "audio.set_volume" | "audio.mute" | "media.play_pause" | "media.next" | "media.previous"))
     {
         return Ok((std::path::PathBuf::new(), action.clone()));
     }
@@ -387,6 +394,12 @@ fn select_allowed_root(
 
 pub fn registry() -> Vec<Skill> {
     let rows = [
+        ("audio.get_volume", "Consultar volume", "Lê o volume principal do dispositivo de saída do Windows.", "Consulte o volume principal do dispositivo de saída.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
+        ("audio.set_volume", "Definir volume", "Altera o volume principal do Windows entre 0 e 100%.", "Defina o volume principal com um inteiro entre 0 e 100.", json!({"type":"object","properties":{"volume":{"type":"integer","minimum":0,"maximum":100}},"required":["volume"],"additionalProperties":false}), ResultTrust::Local),
+        ("audio.mute", "Silenciar áudio", "Silencia ou reativa o dispositivo de saída principal.", "Use muted=true para silenciar ou false para reativar o áudio.", json!({"type":"object","properties":{"muted":{"type":"boolean"}},"required":["muted"],"additionalProperties":false}), ResultTrust::Local),
+        ("media.play_pause", "Reproduzir ou pausar mídia", "Envia a tecla de mídia reproduzir/pausar ao Windows.", "Reproduza ou pause a mídia ativa no Windows.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
+        ("media.next", "Próxima faixa", "Envia a tecla de próxima faixa ao Windows.", "Avance para a próxima faixa.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
+        ("media.previous", "Faixa anterior", "Envia a tecla de faixa anterior ao Windows.", "Volte para a faixa anterior.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
         ("files.list", "Listar arquivos", "Lista arquivos e pastas em uma pasta permitida, com limites.", "Liste itens de uma pasta usando profundidade e limite explícitos.", json!({"type":"object","properties":{"path":{"type":"string"},"depth":{"type":"integer","minimum":1,"maximum":8},"limit":{"type":"integer","minimum":1,"maximum":500}},"required":["path","depth","limit"],"additionalProperties":false}), ResultTrust::Local),
         ("files.search", "Pesquisar arquivos", "Pesquisa nomes ou conteúdo textual com limites explícitos.", "Pesquise arquivos por nome ou trecho de texto. Informe pasta, modo, profundidade, tamanho máximo e limite de resultados.", json!({"type":"object","properties":{"path":{"type":"string"},"query":{"type":"string","minLength":1,"maxLength":256},"by":{"type":"string","enum":["name","text"]},"depth":{"type":"integer","minimum":1,"maximum":8},"max_file_bytes":{"type":"integer","minimum":1,"maximum":65536},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["path","query","by","depth","max_file_bytes","limit"],"additionalProperties":false}), ResultTrust::Local),
         ("files.read", "Ler arquivo de texto", "Lê texto UTF-8 ou Windows-1252 de até 64 KiB; recusa binários.", "Leia um arquivo textual de até 64 KiB em pasta permitida.", json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}), ResultTrust::Local),
@@ -576,6 +589,20 @@ fn action_example(id: &str) -> SimulatedAction {
         "simulated.send_message" => SimulatedAction::SendMessage {
             recipient: "sample".into(),
             message: String::new(),
+        },
+        "audio.get_volume" | "media.play_pause" | "media.next" | "media.previous" => {
+            SimulatedAction::Productivity {
+                skill_id: id.into(),
+                params: json!({}),
+            }
+        }
+        "audio.set_volume" => SimulatedAction::Productivity {
+            skill_id: id.into(),
+            params: json!({"volume":50}),
+        },
+        "audio.mute" => SimulatedAction::Productivity {
+            skill_id: id.into(),
+            params: json!({"muted":true}),
         },
         _ => SimulatedAction::Payment {
             amount_cents: 0,

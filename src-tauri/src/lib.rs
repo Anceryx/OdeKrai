@@ -100,6 +100,7 @@ mod profile;
 mod providers;
 mod security;
 mod system_actions;
+mod system_controls;
 mod tray;
 mod web_fetch;
 mod window_sizing;

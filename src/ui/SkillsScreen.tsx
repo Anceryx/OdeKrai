@@ -175,6 +175,8 @@ export function SkillsScreen() {
       'sheet.',
       'discord.',
       'system.',
+      'audio.',
+      'media.',
       'settings.',
       'notification.',
       'app.',

@@ -30,6 +30,8 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
         return crate::web_fetch::validate_skill_params(params);
     }
     if skill_id.starts_with("system.")
+        || skill_id.starts_with("audio.")
+        || skill_id.starts_with("media.")
         || skill_id == "settings.open"
         || skill_id == "notification.show"
         || skill_id == "app.launch"
@@ -171,6 +173,8 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
 
 pub(crate) fn preview(skill_id: &str, params: &Value, root: &Path) -> Result<String, String> {
     if skill_id.starts_with("system.")
+        || skill_id.starts_with("audio.")
+        || skill_id.starts_with("media.")
         || skill_id == "settings.open"
         || skill_id == "notification.show"
         || skill_id == "app.launch"
@@ -240,6 +244,8 @@ pub(crate) fn execute(
         return Err("O envio ao Discord requer a execução assíncrona aprovada.".into());
     }
     if skill_id.starts_with("system.")
+        || skill_id.starts_with("audio.")
+        || skill_id.starts_with("media.")
         || skill_id == "settings.open"
         || skill_id == "notification.show"
         || skill_id == "app.launch"
