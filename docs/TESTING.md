@@ -156,3 +156,9 @@ O padrão é Encerrar. Nessa opção, o X tenta cancelar solicitações registra
 ## Identidade e memória
 
 `npm test` cobre a conversão das instruções pessoais e expressões para as notas locais e a sanitização dos campos de nome. `cargo test --manifest-path src-tauri/Cargo.toml` cobre a exigência de nova aprovação do arquivo base após trocar a pasta. A inspeção visual do assistente de primeira configuração, do painel unificado, da seleção de pasta e da comparação/confirmação do arquivo base ainda está pendente no Windows.
+
+## Posição do pet por monitor
+
+A janela do pet salva a fração da posição dentro da área útil para cada monitor, junto com nome, origem, dimensões da área útil e escala DPI. Ao restaurar, usa o monitor salvo se ainda estiver disponível; se não estiver, usa o primário. Mudanças de DPI/monitor e a reexibição reposicionam e limitam a janela à área útil. Eventos de movimento persistem no máximo uma vez por segundo, com gravação imediata ao ocultar.
+
+A geometria tem testes unitários para escala alterada, monitor removido, origem negativa e resolução reduzida. A validação visual manual em múltiplos monitores e DPI permanece pendente; executar os itens 3, 4 e 9 do checklist nativo acima quando houver sessão Windows apropriada.

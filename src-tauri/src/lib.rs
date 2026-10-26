@@ -1,3 +1,9 @@
+use pet_position::{WindowPosition, WindowSize};
+use std::{
+    fs,
+    sync::Mutex,
+    time::{Duration, Instant},
+};
 use tauri::{
     Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
@@ -25,6 +31,7 @@ pub mod agent;
 mod agent_home;
 mod diagnostics;
 mod history;
+mod pet_position;
 mod policy;
 mod profile;
 mod providers;
@@ -98,12 +105,12 @@ mod feature_window_lifecycle_tests {
 
 #[cfg(test)]
 mod pet_position_tests {
-    use super::{clamp_window_position, WindowPosition, WindowSize, WorkArea};
+    use super::pet_position::{clamp_position, WindowPosition, WindowSize, WorkArea};
 
     #[test]
     fn pet_position_is_limited_to_work_area_including_negative_monitor_origins() {
         assert_eq!(
-            clamp_window_position(
+            clamp_position(
                 WindowPosition {
                     x: 4000.0,
                     y: -400.0
@@ -126,7 +133,7 @@ mod pet_position_tests {
     #[test]
     fn oversized_pet_stays_at_the_work_area_origin() {
         assert_eq!(
-            clamp_window_position(
+            clamp_position(
                 WindowPosition { x: 500.0, y: 500.0 },
                 WorkArea {
                     left: -100.0,
@@ -159,40 +166,316 @@ fn visibility_action(visible: bool, exists: bool) -> VisibilityAction {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct WindowPosition {
-    x: f64,
-    y: f64,
+#[derive(Default)]
+struct PetPositionStore {
+    saved: Mutex<Option<pet_position::PersistedPetPosition>>,
+    last_write: Mutex<Option<Instant>>,
+    expected_move: Mutex<Option<WindowPosition>>,
 }
 
-#[derive(Clone, Copy)]
-struct WorkArea {
-    left: f64,
-    top: f64,
-    width: f64,
-    height: f64,
+const PET_POSITION_FILE: &str = "pet-position.json";
+const PET_POSITION_WRITE_INTERVAL: Duration = Duration::from_secs(1);
+
+fn pet_position_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|directory| directory.join(PET_POSITION_FILE))
+        .map_err(|_| "Não foi possível localizar os dados do pet.".to_string())
 }
 
-#[derive(Clone, Copy)]
-struct WindowSize {
-    width: f64,
-    height: f64,
+fn save_pet_position(
+    app: &tauri::AppHandle,
+    saved: pet_position::PersistedPetPosition,
+    force: bool,
+) {
+    let Some(store) = app.try_state::<PetPositionStore>() else {
+        return;
+    };
+    let Ok(mut current) = store.saved.lock() else {
+        return;
+    };
+    *current = Some(saved.clone());
+    let now = Instant::now();
+    let Ok(mut last_write) = store.last_write.lock() else {
+        return;
+    };
+    if !force
+        && last_write.is_some_and(|last| now.duration_since(last) < PET_POSITION_WRITE_INTERVAL)
+    {
+        return;
+    }
+    let Ok(path) = pet_position_path(app) else {
+        return;
+    };
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    if fs::create_dir_all(parent).is_err() {
+        return;
+    }
+    let Ok(bytes) = serde_json::to_vec(&saved) else {
+        return;
+    };
+    if fs::write(path, bytes).is_ok() {
+        *last_write = Some(now);
+    }
 }
 
-fn clamp_window_position(
+fn load_pet_position(app: &tauri::AppHandle) {
+    let Ok(path) = pet_position_path(app) else {
+        return;
+    };
+    let Ok(bytes) = fs::read(path) else {
+        return;
+    };
+    let Ok(saved) = serde_json::from_slice::<pet_position::PersistedPetPosition>(&bytes) else {
+        return;
+    };
+    if let Some(store) = app.try_state::<PetPositionStore>() {
+        if let Ok(mut current) = store.saved.lock() {
+            *current = Some(saved);
+        }
+    }
+}
+
+fn monitor_id(monitor: &tauri::Monitor) -> pet_position::MonitorId {
+    let area = monitor.work_area();
+    pet_position::MonitorId {
+        name: monitor.name().cloned(),
+        left: area.position.x,
+        top: area.position.y,
+        width: area.size.width,
+        height: area.size.height,
+        scale_factor: monitor.scale_factor(),
+    }
+}
+
+fn monitor_work_area(monitor: &tauri::Monitor) -> pet_position::WorkArea {
+    let scale = monitor.scale_factor();
+    let work = monitor.work_area();
+    pet_position::WorkArea {
+        left: work.position.x as f64 / scale,
+        top: work.position.y as f64 / scale,
+        width: work.size.width as f64 / scale,
+        height: work.size.height as f64 / scale,
+    }
+}
+
+fn window_size_logical(window: &WebviewWindow) -> Result<WindowSize, String> {
+    let scale = window.scale_factor().map_err(|error| error.to_string())?;
+    let size = window.inner_size().map_err(|error| error.to_string())?;
+    Ok(WindowSize {
+        width: size.width as f64 / scale,
+        height: size.height as f64 / scale,
+    })
+}
+
+fn saved_position_for_monitor(
+    app: &tauri::AppHandle,
+    id: &pet_position::MonitorId,
+) -> Option<pet_position::RelativePosition> {
+    let store = app.try_state::<PetPositionStore>()?;
+    let saved = store.saved.lock().ok()?;
+    let saved = saved.as_ref()?;
+    pet_position::saved_for_monitor(saved, id).map(|entry| entry.relative)
+}
+
+fn set_position_expected(
+    window: &WebviewWindow,
+    app: &tauri::AppHandle,
     position: WindowPosition,
-    work_area: WorkArea,
-    window_size: WindowSize,
-) -> WindowPosition {
-    WindowPosition {
-        x: position.x.clamp(
-            work_area.left,
-            (work_area.left + work_area.width - window_size.width).max(work_area.left),
-        ),
-        y: position.y.clamp(
-            work_area.top,
-            (work_area.top + work_area.height - window_size.height).max(work_area.top),
-        ),
+) -> Result<(), String> {
+    if let Some(store) = app.try_state::<PetPositionStore>() {
+        if let Ok(mut expected) = store.expected_move.lock() {
+            *expected = Some(position);
+        }
+    }
+    window
+        .set_position(LogicalPosition::new(position.x, position.y))
+        .map_err(|error| error.to_string())
+}
+
+fn set_physical_position_expected(
+    window: &WebviewWindow,
+    app: &tauri::AppHandle,
+    position: WindowPosition,
+    scale_factor: f64,
+) -> Result<(), String> {
+    if let Some(store) = app.try_state::<PetPositionStore>() {
+        if let Ok(mut expected) = store.expected_move.lock() {
+            *expected = Some(position);
+        }
+    }
+    window
+        .set_position(tauri::PhysicalPosition::new(
+            (position.x * scale_factor).round() as i32,
+            (position.y * scale_factor).round() as i32,
+        ))
+        .map_err(|error| error.to_string())
+}
+
+fn consume_expected_move(
+    app: &tauri::AppHandle,
+    physical: tauri::PhysicalPosition<i32>,
+    scale: f64,
+) -> bool {
+    let Some(store) = app.try_state::<PetPositionStore>() else {
+        return false;
+    };
+    let Ok(mut expected) = store.expected_move.lock() else {
+        return false;
+    };
+    let actual = WindowPosition {
+        x: physical.x as f64 / scale,
+        y: physical.y as f64 / scale,
+    };
+    if expected.is_some_and(|position| {
+        (position.x - actual.x).abs() < 2.0 && (position.y - actual.y).abs() < 2.0
+    }) {
+        *expected = None;
+        true
+    } else {
+        false
+    }
+}
+
+fn record_window_position(
+    app: &tauri::AppHandle,
+    window: &WebviewWindow,
+    physical_position: tauri::PhysicalPosition<i32>,
+    force: bool,
+) -> Result<WindowPosition, String> {
+    let monitor = window
+        .current_monitor()
+        .map_err(|error| error.to_string())?
+        .or(window
+            .primary_monitor()
+            .map_err(|error| error.to_string())?)
+        .ok_or("Não foi possível localizar o monitor do pet.")?;
+    let scale = window.scale_factor().map_err(|error| error.to_string())?;
+    let work_area = monitor_work_area(&monitor);
+    let window_size = window_size_logical(window)?;
+    let position = pet_position::clamp_position(
+        WindowPosition {
+            x: physical_position.x as f64 / scale,
+            y: physical_position.y as f64 / scale,
+        },
+        work_area,
+        window_size,
+    );
+    let id = monitor_id(&monitor);
+    let relative = pet_position::relative_position(position, work_area, window_size);
+    store_monitor_position(app, id, relative, force);
+    Ok(position)
+}
+
+fn store_monitor_position(
+    app: &tauri::AppHandle,
+    id: pet_position::MonitorId,
+    relative: pet_position::RelativePosition,
+    force: bool,
+) {
+    let mut saved = app
+        .try_state::<PetPositionStore>()
+        .and_then(|store| store.saved.lock().ok()?.clone())
+        .unwrap_or_else(|| pet_position::PersistedPetPosition {
+            active_monitor: id.clone(),
+            monitors: Vec::new(),
+        });
+    saved.active_monitor = id.clone();
+    if let Some(existing) = saved
+        .monitors
+        .iter_mut()
+        .find(|entry| pet_position::monitor_matches(&entry.monitor, &id))
+    {
+        existing.monitor = id;
+        existing.relative = relative;
+    } else {
+        saved.monitors.push(pet_position::MonitorPosition {
+            monitor: id,
+            relative,
+        });
+    }
+    save_pet_position(app, saved, force);
+}
+
+fn restore_pet_position(app: &tauri::AppHandle, window: &WebviewWindow) -> Result<(), String> {
+    let monitors = window
+        .available_monitors()
+        .map_err(|error| error.to_string())?;
+    if monitors.is_empty() {
+        return Ok(());
+    }
+    let ids: Vec<_> = monitors.iter().map(monitor_id).collect();
+    let primary_id = window
+        .primary_monitor()
+        .map_err(|error| error.to_string())?
+        .as_ref()
+        .map(monitor_id);
+    let primary_index = primary_id
+        .as_ref()
+        .and_then(|id| pet_position::matching_monitor_index(id, &ids));
+    let saved = app
+        .try_state::<PetPositionStore>()
+        .and_then(|store| store.saved.lock().ok()?.clone());
+    let active_index = saved
+        .as_ref()
+        .and_then(|saved| pet_position::selected_monitor_index(saved, &ids, primary_index))
+        .or(primary_index)
+        .unwrap_or(0);
+    let monitor = &monitors[active_index];
+    let id = &ids[active_index];
+    let work_area = monitor_work_area(monitor);
+    let window_size = window_size_logical(window)?;
+    let current = window.outer_position().map_err(|error| error.to_string())?;
+    let current_scale = window.scale_factor().map_err(|error| error.to_string())?;
+    let current_position = WindowPosition {
+        x: current.x as f64 / current_scale,
+        y: current.y as f64 / current_scale,
+    };
+    let restored = saved
+        .as_ref()
+        .and_then(|saved| pet_position::saved_for_monitor(saved, id))
+        .map(|entry| pet_position::position_from_relative(entry.relative, work_area, window_size))
+        .unwrap_or_else(|| pet_position::clamp_position(current_position, work_area, window_size));
+    set_physical_position_expected(window, app, restored, monitor.scale_factor())?;
+    let relative = pet_position::relative_position(restored, work_area, window_size);
+    store_monitor_position(app, id.clone(), relative, true);
+    Ok(())
+}
+
+fn reconcile_current_monitor(app: &tauri::AppHandle, window: &WebviewWindow, scale_factor: f64) {
+    let Ok(Some(monitor)) = window.current_monitor() else {
+        return;
+    };
+    let id = monitor_id(&monitor);
+    let work_area = monitor_work_area(&monitor);
+    let Ok(size) = window.inner_size() else {
+        return;
+    };
+    let window_size = WindowSize {
+        width: size.width as f64 / scale_factor,
+        height: size.height as f64 / scale_factor,
+    };
+    let Ok(position) = window.outer_position() else {
+        return;
+    };
+    let relative = saved_position_for_monitor(app, &id);
+    let target = relative
+        .map(|relative| pet_position::position_from_relative(relative, work_area, window_size))
+        .unwrap_or_else(|| {
+            pet_position::clamp_position(
+                WindowPosition {
+                    x: position.x as f64 / scale_factor,
+                    y: position.y as f64 / scale_factor,
+                },
+                work_area,
+                window_size,
+            )
+        });
+    if set_physical_position_expected(window, app, target, monitor.scale_factor()).is_ok() {
+        let relative = pet_position::relative_position(target, work_area, window_size);
+        store_monitor_position(app, id, relative, true);
     }
 }
 
@@ -214,41 +497,44 @@ async fn ensure_pet_window(app: &tauri::AppHandle) -> Result<WebviewWindow, Stri
         .map_err(|_| "Não foi possível preparar a janela do pet.".to_string())?;
     let handle = app.clone();
     let moved_window = window.clone();
-    window.on_window_event(move |event| {
-        if let tauri::WindowEvent::Moved(position) = event {
+    window.on_window_event(move |event| match event {
+        tauri::WindowEvent::Moved(position) => {
+            if !moved_window.is_visible().unwrap_or(false) {
+                return;
+            }
             let scale = moved_window.scale_factor().unwrap_or(1.0);
+            if consume_expected_move(&handle, *position, scale) {
+                return;
+            }
             if let Ok(Some(monitor)) = moved_window.current_monitor() {
-                if let (Ok(size), Ok(_)) = (moved_window.inner_size(), moved_window.scale_factor())
-                {
-                    let work = monitor.work_area();
-                    let x = position.x as f64 / scale;
-                    let y = position.y as f64 / scale;
-                    let clamped = clamp_window_position(
-                        WindowPosition { x, y },
-                        WorkArea {
-                            left: work.position.x as f64 / scale,
-                            top: work.position.y as f64 / scale,
-                            width: work.size.width as f64 / scale,
-                            height: work.size.height as f64 / scale,
-                        },
-                        WindowSize {
-                            width: size.width as f64 / scale,
-                            height: size.height as f64 / scale,
-                        },
-                    );
-                    if (clamped.x - position.x as f64 / scale).abs() > 1.0
-                        || (clamped.y - position.y as f64 / scale).abs() > 1.0
-                    {
-                        let _ =
-                            moved_window.set_position(LogicalPosition::new(clamped.x, clamped.y));
-                    }
+                let current_id = monitor_id(&monitor);
+                let active_changed = handle
+                    .try_state::<PetPositionStore>()
+                    .and_then(|store| store.saved.lock().ok()?.clone())
+                    .is_some_and(|saved| {
+                        !pet_position::monitor_matches(&saved.active_monitor, &current_id)
+                            && pet_position::saved_for_monitor(&saved, &current_id).is_some()
+                    });
+                if active_changed {
+                    reconcile_current_monitor(&handle, &moved_window, scale);
+                    return;
                 }
             }
-            let _ = handle.emit(
-                "pet-moved",
-                (position.x as f64 / scale, position.y as f64 / scale),
-            );
+            if let Ok(clamped) = record_window_position(&handle, &moved_window, *position, false) {
+                let x = position.x as f64 / scale;
+                let y = position.y as f64 / scale;
+                if (clamped.x - x).abs() > 1.0 || (clamped.y - y).abs() > 1.0 {
+                    let _ = set_position_expected(&moved_window, &handle, clamped);
+                }
+                let _ = handle.emit("pet-moved", (clamped.x, clamped.y));
+            }
         }
+        tauri::WindowEvent::ScaleFactorChanged { scale_factor, .. }
+            if moved_window.is_visible().unwrap_or(false) =>
+        {
+            reconcile_current_monitor(&handle, &moved_window, *scale_factor);
+        }
+        _ => {}
     });
     Ok(window)
 }
@@ -256,10 +542,14 @@ async fn ensure_pet_window(app: &tauri::AppHandle) -> Result<WebviewWindow, Stri
 pub(crate) async fn toggle_pet_from_tray(app: &tauri::AppHandle) {
     match app.get_webview_window("pet") {
         Some(window) if window.is_visible().unwrap_or(false) => {
+            if let Ok(position) = window.outer_position() {
+                let _ = record_window_position(app, &window, position, true);
+            }
             let _ = window.hide();
         }
         _ => {
             if let Ok(window) = ensure_pet_window(app).await {
+                let _ = restore_pet_position(app, &window);
                 let _ = window.show();
             }
         }
@@ -275,10 +565,21 @@ async fn set_pet_visible(
     require_caller(&caller, &["main", "pet"])?;
     let existing = app.get_webview_window("pet");
     match visibility_action(visible, existing.is_some()) {
-        VisibilityAction::CreateOrShow => ensure_pet_window(&app).await?.show(),
-        VisibilityAction::Close => existing
-            .ok_or("Janela do pet indisponível para fechar.")?
-            .close(),
+        VisibilityAction::CreateOrShow => {
+            let window = ensure_pet_window(&app).await?;
+            restore_pet_position(&app, &window)?;
+            window.show()
+        }
+        VisibilityAction::Close => {
+            if let Some(window) = existing.as_ref() {
+                if let Ok(position) = window.outer_position() {
+                    let _ = record_window_position(&app, window, position, true);
+                }
+            }
+            existing
+                .ok_or("Janela do pet indisponível para fechar.")?
+                .close()
+        }
         VisibilityAction::Noop => Ok(()),
     }
     .map_err(|error| error.to_string())
@@ -312,9 +613,9 @@ async fn set_pet_position(
     let current = window.inner_size().map_err(|error| error.to_string())?;
     let width = current.width as f64 / scale;
     let height = current.height as f64 / scale;
-    let position = clamp_window_position(
+    let position = pet_position::clamp_position(
         WindowPosition { x, y },
-        WorkArea {
+        pet_position::WorkArea {
             left: work.position.x as f64 / scale,
             top: work.position.y as f64 / scale,
             width: work.size.width as f64 / scale,
@@ -322,9 +623,21 @@ async fn set_pet_position(
         },
         WindowSize { width, height },
     );
-    window
-        .set_position(LogicalPosition::new(position.x, position.y))
-        .map_err(|error| error.to_string())
+    set_position_expected(&window, &app, position)?;
+    let has_saved_position = app
+        .try_state::<PetPositionStore>()
+        .and_then(|store| store.saved.lock().ok().map(|saved| saved.is_some()))
+        .unwrap_or(false);
+    if window.is_visible().unwrap_or(false) || !has_saved_position {
+        let id = monitor_id(&monitor);
+        let relative = pet_position::relative_position(
+            position,
+            monitor_work_area(&monitor),
+            WindowSize { width, height },
+        );
+        store_monitor_position(&app, id, relative, true);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -373,12 +686,12 @@ async fn set_pet_size(
     let position = window.outer_position().map_err(|error| error.to_string())?;
     let actual_size = window.inner_size().map_err(|error| error.to_string())?;
     let work = monitor.work_area();
-    let position = clamp_window_position(
+    let position = pet_position::clamp_position(
         WindowPosition {
             x: position.x as f64 / scale,
             y: position.y as f64 / scale,
         },
-        WorkArea {
+        pet_position::WorkArea {
             left: work.position.x as f64 / scale,
             top: work.position.y as f64 / scale,
             width: work.size.width as f64 / scale,
@@ -389,9 +702,7 @@ async fn set_pet_size(
             height: actual_size.height as f64 / scale,
         },
     );
-    window
-        .set_position(LogicalPosition::new(position.x, position.y))
-        .map_err(|error| error.to_string())
+    set_position_expected(&window, &app, position)
 }
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> Result<(), tauri::Error> {
@@ -414,10 +725,12 @@ pub fn run() -> Result<(), tauri::Error> {
                 .build(),
         )
         .manage(providers::ProviderRequests::default())
+        .manage(PetPositionStore::default())
         .manage(security::SecurityState::new(true))
         .manage(tray::CloseBehaviorState::default())
         .manage(tray::ShutdownState::default())
         .setup(|app| {
+            load_pet_position(app.handle());
             let startup_state = diagnostics::setup(app.handle()).unwrap_or_else(|error| {
                 log::error!("Não foi possível preparar o estado de inicialização: {error}");
                 diagnostics::StartupState::safe_fallback()

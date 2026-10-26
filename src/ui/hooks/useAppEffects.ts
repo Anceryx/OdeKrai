@@ -241,6 +241,11 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
       listen<boolean>('pet-visibility-changed', ({ payload }) => setPetVisible(payload)),
       listen('security-resumed', () => {
         setToast('O OdeKrai foi retomado.');
+        if (loadSettings().companion.enabled) {
+          void startupInvoke<void>('set_pet_visible', { visible: true }, reportDiagnostic).then(
+            () => setPetVisible(true),
+          );
+        }
         void startupInvoke<{ mode: string; halted: boolean }>(
           'get_permission_settings',
           undefined,
