@@ -337,7 +337,9 @@ function MainApp() {
   async function hasConfiguredChatProvider() {
     const candidates = [settings.activeProviderId, ...settings.fallbackProviderIds].filter(
       (providerId, index, all) =>
-        all.indexOf(providerId) === index && Boolean(settings.providers[providerId]?.model),
+        all.indexOf(providerId) === index &&
+        settings.providers[providerId]?.enabled !== false &&
+        Boolean(settings.providers[providerId]?.model),
     );
     const { connectedIds } = await loadConnectedProviderIds(candidates, (providerId) =>
       invoke<boolean>('has_provider_credential', { providerId }),
@@ -406,7 +408,7 @@ function MainApp() {
         { providerId: provider.id, baseUrl: activeProvider.baseUrl, model: activeProvider.model },
         ...settings.fallbackProviderIds.flatMap((fallbackId) => {
           const config = settings.providers[fallbackId];
-          return config?.model
+          return config?.enabled !== false && config?.model
             ? [{ providerId: fallbackId, baseUrl: config.baseUrl, model: config.model }]
             : [];
         }),
@@ -587,7 +589,7 @@ function MainApp() {
           tools: [],
           fallbacks: settings.fallbackProviderIds.flatMap((fallbackId) => {
             const config = settings.providers[fallbackId];
-            return config?.model
+            return config?.enabled !== false && config?.model
               ? [{ providerId: fallbackId, baseUrl: config.baseUrl, model: config.model }]
               : [];
           }),

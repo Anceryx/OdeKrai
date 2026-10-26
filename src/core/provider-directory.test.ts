@@ -11,6 +11,10 @@ import {
   setFallbackProviderIds,
   setProviderEnabled,
   toggleProviderSettings,
+  loadProviderDirectoryTab,
+  saveProviderDirectoryTab,
+  confirmProviderCredentialRemoval,
+  providerCardHasManagement,
 } from './provider-directory';
 
 describe('diretório de provedores', () => {
@@ -50,6 +54,30 @@ describe('diretório de provedores', () => {
     expect(
       filterProviderDirectory(AI_PROVIDERS, 'all', 'cere', connected).map((p) => p.id),
     ).toEqual(['cerebras']);
+    expect(filterProviderDirectory(AI_PROVIDERS, 'connected', '', new Set())).toEqual([]);
+    expect(filterProviderDirectory(AI_PROVIDERS, 'all', '', connected)).toHaveLength(
+      AI_PROVIDERS.length,
+    );
+  });
+
+  it('só mostra gerenciamento nos cartões conectados da aba Conectados', () => {
+    expect(providerCardHasManagement('connected', true)).toBe(true);
+    expect(providerCardHasManagement('free', true)).toBe(false);
+    expect(providerCardHasManagement('all', true)).toBe(false);
+    expect(providerCardHasManagement('connected', false)).toBe(false);
+  });
+
+  it('persiste e valida a aba selecionada', () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    };
+    expect(loadProviderDirectoryTab(storage)).toBe('all');
+    saveProviderDirectoryTab('connected', storage);
+    expect(loadProviderDirectoryTab(storage)).toBe('connected');
+    values.set('odekrai.provider-directory.tab', 'invalid');
+    expect(loadProviderDirectoryTab(storage)).toBe('all');
   });
 
   it('ativa e desativa o provedor sem alterar os demais campos', () => {
@@ -72,6 +100,14 @@ describe('diretório de provedores', () => {
     expect(
       setFallbackProviderIds(settings, ['openai', 'groq', 'groq', 'invalid']).fallbackProviderIds,
     ).toEqual(['groq']);
+    const disabledFallback = {
+      ...settings,
+      providers: {
+        ...settings.providers,
+        groq: { ...defaultSettings.providers.groq, enabled: false },
+      },
+    };
+    expect(setFallbackProviderIds(disabledFallback, ['groq']).fallbackProviderIds).toEqual([]);
     expect(setPrimaryProviderSettings(settings, 'anthropic').fallbackProviderIds).toEqual(['groq']);
   });
 
@@ -82,6 +118,7 @@ describe('diretório de provedores', () => {
     const disabled = toggleProviderSettings(primary, 'groq', false);
     expect(disabled.activeProviderId).toBe('');
     expect(disabled.providers.groq.enabled).toBe(false);
+    expect(disabled.fallbackProviderIds).not.toContain('groq');
   });
 
   it('remove da lista conectada após a credencial ser removida', () => {
@@ -96,5 +133,17 @@ describe('diretório de provedores', () => {
     expect(remove).toHaveBeenCalledWith('groq');
     const failed = vi.fn().mockRejectedValue(new Error('falhou'));
     await expect(removeProviderCredential('groq', failed, connected)).rejects.toThrow('falhou');
+  });
+
+  it('só remove credencial após confirmação explícita', async () => {
+    const remove = vi.fn().mockResolvedValue(undefined);
+    await expect(confirmProviderCredentialRemoval('OpenAI', () => false, remove)).resolves.toBe(
+      false,
+    );
+    expect(remove).not.toHaveBeenCalled();
+    await expect(confirmProviderCredentialRemoval('OpenAI', () => true, remove)).resolves.toBe(
+      true,
+    );
+    expect(remove).toHaveBeenCalledOnce();
   });
 });

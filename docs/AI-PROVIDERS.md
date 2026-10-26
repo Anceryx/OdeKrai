@@ -1,5 +1,9 @@
 # Conectores de IA
 
+## Comportamento do catálogo
+
+A aba **Conectados** lista credenciais salvas e, para IA local, um servidor encontrado nas portas padrão. **Gratuitos** inclui apenas provedores com plano gratuito confirmado no catálogo; **Todos** apresenta o catálogo completo. A aba escolhida fica salva localmente. Os cartões usam o tipo de API como subtítulo; a aba Conectados oferece controles de ativação, provedor principal e ações, enquanto as demais abas abrem os detalhes sem deslocar a grade. Desativar o provedor principal exige escolher outro provedor conectado e ativo. A remoção de credencial pede confirmação.
+
 ## Capacidades dos adaptadores
 
 Capacidades de tool calling conferidas em 25/10/2026: Groq, Cerebras e Mistral documentam chamadas de ferramentas no formato Chat Completions; OpenRouter documenta o mesmo formato, mas a disponibilidade depende do modelo e pode ser consultada no catálogo do próprio provedor. Google Gemini documenta Function Calling na API nativa, porém a documentação de compatibilidade OpenAI não confirma esse recurso nesse endpoint; por isso, o catálogo mantém `tools: false` e `verified: false` para Gemini. O cache local por `providerId` e modelo continua registrando recusas explícitas de tools.

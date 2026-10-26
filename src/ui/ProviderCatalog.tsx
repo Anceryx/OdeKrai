@@ -11,8 +11,12 @@ import { openProviderLink } from '../core/provider-links';
 import { providerLogoFor } from '../core/provider-logos';
 import {
   filterProviderDirectory,
+  providerCardHasManagement,
+  loadProviderDirectoryTab,
   loadConnectedProviderIds,
   removeProviderCredential,
+  confirmProviderCredentialRemoval,
+  saveProviderDirectoryTab,
   type ProviderDirectoryTab,
 } from '../core/provider-directory';
 import { PageHeader } from './DesignSystem';
@@ -56,10 +60,17 @@ export function ProviderCatalog({
   const [secret, setSecret] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [search, setSearch] = useState('');
-  const [tab, setTab] = useState<ProviderDirectoryTab>('all');
+  const [tab, setTab] = useState<ProviderDirectoryTab>(() =>
+    loadProviderDirectoryTab(typeof localStorage === 'undefined' ? undefined : localStorage),
+  );
   const [connectedIds, setConnectedIds] = useState<Set<string>>(new Set());
+  const primaryConnected =
+    Boolean(settings.activeProviderId) &&
+    connectedIds.has(settings.activeProviderId) &&
+    settings.providers[settings.activeProviderId]?.enabled !== false;
   const [credentialChecksComplete, setCredentialChecksComplete] = useState(false);
   const [credentialCheckFailed, setCredentialCheckFailed] = useState(false);
+  const [localServerAvailable, setLocalServerAvailable] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [externalLinkError, setExternalLinkError] = useState('');
@@ -69,6 +80,8 @@ export function ProviderCatalog({
   const [localModelEndpoints, setLocalModelEndpoints] = useState<Record<string, string>>({});
   const [stages, setStages] = useState<{ id: string; status: string; message: string }[]>([]);
   const [technicalError, setTechnicalError] = useState('');
+  const [replacementPrimary, setReplacementPrimary] = useState('');
+  const [primaryToReplace, setPrimaryToReplace] = useState('');
   const [effectiveCapabilities, setEffectiveCapabilities] = useState<ProviderCapabilities | null>(
     null,
   );
@@ -80,28 +93,37 @@ export function ProviderCatalog({
     setTechnicalError('');
     setModels([]);
     setStages([]);
+  }, [selected.id, settings.providers[selected.id]]);
+  useEffect(() => {
     let current = true;
-    setCredentialAvailable(false);
     setCredentialChecksComplete(false);
     setCredentialCheckFailed(false);
     if (isTauri()) {
       const providerIds = AI_PROVIDERS.filter((provider) => provider.integration !== 'guide').map(
         (provider) => provider.id,
       );
-      void loadConnectedProviderIds(providerIds, (providerId) =>
-        invoke<boolean>('has_provider_credential', { providerId }),
-      ).then((result) => {
+      void Promise.all([
+        loadConnectedProviderIds(providerIds, (providerId) =>
+          invoke<boolean>('has_provider_credential', { providerId }),
+        ),
+        invoke<{ model: { id: string } }[]>('discover_local_models').catch(() => []),
+      ]).then(([result, localModels]) => {
         if (!current) return;
-        setConnectedIds(result.connectedIds);
+        const connected = new Set(result.connectedIds);
+        if (localModels.length > 0) connected.add('local');
+        setConnectedIds(connected);
+        setLocalServerAvailable(localModels.length > 0);
         setCredentialChecksComplete(true);
         setCredentialCheckFailed(result.failedIds.size > 0);
-        setCredentialAvailable(result.connectedIds.has(selected.id));
       });
     } else setCredentialChecksComplete(true);
     return () => {
       current = false;
     };
-  }, [selected.id, settings.providers[selected.id]]);
+  }, []);
+  useEffect(() => {
+    setCredentialAvailable(connectedIds.has(selected.id));
+  }, [selected.id, connectedIds]);
   useEffect(() => {
     let current = true;
     const baseCapabilities = catalogEntry?.capabilities ?? null;
@@ -137,6 +159,20 @@ export function ProviderCatalog({
     Boolean(draft.model.trim() && (selected.id === 'local' || credentialAvailable));
   function updateDraft(field: keyof ProviderSettings, value: string) {
     setDraft((current) => ({ ...current, [field]: value }));
+  }
+  function changeTab(next: ProviderDirectoryTab) {
+    setTab(next);
+    saveProviderDirectoryTab(next, typeof localStorage === 'undefined' ? undefined : localStorage);
+    setDetailsOpen(false);
+  }
+  function providerApiType(provider: AiProvider) {
+    return {
+      'openai-chat': 'Chat Completions',
+      'anthropic-messages': 'Anthropic Messages',
+      'perplexity-agent': 'Perplexity Agent API',
+      'local-chat': 'API local compatível com OpenAI',
+      guide: 'Guia de integração',
+    }[provider.integration];
   }
   function endpointForDraft() {
     return selected.region
@@ -298,19 +334,81 @@ export function ProviderCatalog({
   }
   async function removeCredential(providerId: string) {
     if (busy) return;
+    const provider = AI_PROVIDERS.find((item) => item.id === providerId);
+    await confirmProviderCredentialRemoval(
+      provider?.name ?? providerId,
+      (message) => window.confirm(message),
+      async () => {
+        setBusy(true);
+        try {
+          const next = await removeProviderCredential(
+            providerId,
+            (id) => invoke('remove_provider_credential', { providerId: id }),
+            connectedIds,
+          );
+          onCredentialRemoved(providerId);
+          if (providerId === selected.id) setCredentialAvailable(false);
+          setConnectedIds(next);
+          setNotice('Credencial removida do Gerenciador do Windows.');
+        } catch {
+          setNotice('Não foi possível remover a credencial.');
+        } finally {
+          setBusy(false);
+        }
+      },
+    );
+  }
+  async function testSavedConnection(provider: AiProvider) {
+    const config = settings.providers[provider.id] ?? defaultProviderSettings(provider.id);
+    onSelect(provider);
+    setDetailsOpen(true);
+    if (!config.model.trim()) {
+      setNotice('Escolha um modelo antes de testar a conexão.');
+      return;
+    }
     setBusy(true);
+    setNotice('');
     try {
-      const next = await removeProviderCredential(
-        providerId,
-        (id) => invoke('remove_provider_credential', { providerId: id }),
-        connectedIds,
+      const result = await invoke<{ stages: typeof stages; overall: string }>(
+        'test_provider_connection',
+        { providerId: provider.id, baseUrl: config.baseUrl, model: config.model },
       );
-      onCredentialRemoved(providerId);
-      if (providerId === selected.id) setCredentialAvailable(false);
-      setConnectedIds(next);
-      setNotice('Credencial removida do Gerenciador do Windows.');
-    } catch {
-      setNotice('Não foi possível remover a credencial.');
+      setStages(result.stages);
+      setNotice(
+        result.overall === 'passed'
+          ? 'Conexão validada.'
+          : 'Verificação parcial; consulte as etapas.',
+      );
+    } catch (error) {
+      setTechnicalError(typeof error === 'string' ? error : 'Falha ao testar a conexão.');
+      setNotice('Não foi possível testar a conexão. Consulte os detalhes técnicos.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function discoverLocalForCard(provider: AiProvider) {
+    onSelect(provider);
+    setDetailsOpen(true);
+    setBusy(true);
+    setNotice('Procurando servidores locais…');
+    try {
+      const discovered =
+        await invoke<{ baseUrl: string; model: { id: string; name: string } }[]>(
+          'discover_local_models',
+        );
+      setModels(discovered.map((item) => item.model));
+      setLocalModelEndpoints(
+        Object.fromEntries(discovered.map((item) => [item.model.id, item.baseUrl])),
+      );
+      if (discovered.length) setConnectedIds((ids) => new Set([...ids, 'local']));
+      setLocalServerAvailable(discovered.length > 0);
+      setNotice(
+        discovered.length
+          ? `${discovered.length} modelos locais encontrados.`
+          : 'Servidor encontrado, sem modelos disponíveis.',
+      );
+    } catch (error) {
+      setNotice(typeof error === 'string' ? error : 'Nenhum servidor local foi encontrado.');
     } finally {
       setBusy(false);
     }
@@ -332,15 +430,19 @@ export function ProviderCatalog({
         <span className={`connection-orb ${keySaved ? 'ready' : ''}`} />
         <div>
           <strong>
-            {keySaved ? `${active.name} tem credencial salva` : 'Nenhum provedor configurado'}
+            {primaryConnected
+              ? `${active.name} · Principal · Ativo`
+              : 'Nenhum provedor principal conectado'}
           </strong>
           <span>
             {keySaved
-              ? 'Credencial salva não significa conexão validada.'
-              : 'Escolha um provedor para configurar o acesso.'}
+              ? 'Credencial disponível nesta sessão; o teste de conexão é opcional.'
+              : active.name === 'IA local' && localServerAvailable
+                ? 'Servidor local disponível neste dispositivo.'
+                : 'Escolha um provedor conectado ou configure um novo acesso.'}
           </span>
         </div>
-        {keySaved && isActive && (
+        {primaryConnected && isActive && (
           <button className="text-button" onClick={onChat}>
             Abrir conversas <Icon name="external-link" />
           </button>
@@ -377,10 +479,7 @@ export function ProviderCatalog({
                 aria-selected={tab === id}
                 className={tab === id ? 'active' : ''}
                 key={id}
-                onClick={() => {
-                  setTab(id);
-                  setDetailsOpen(false);
-                }}
+                onClick={() => changeTab(id)}
               >
                 {label}
               </button>
@@ -394,7 +493,6 @@ export function ProviderCatalog({
           <div className="provider-grid">
             {filtered.map((provider) => {
               const connected = connectedIds.has(provider.id);
-              const tested = settings.providers[provider.id]?.lastTest?.status === 'passed';
               const enabled = settings.providers[provider.id]?.enabled !== false;
               const primary = settings.activeProviderId === provider.id;
               return (
@@ -412,43 +510,48 @@ export function ProviderCatalog({
                     <ProviderLogo provider={provider} />
                     <span className="provider-tile-copy">
                       <strong>{provider.name}</strong>
-                      <small>
-                        {connected
-                          ? 'Credencial salva'
-                          : provider.freePlan
-                            ? 'Plano gratuito disponível'
-                            : provider.integration === 'guide'
-                              ? 'Guia de integração'
-                              : provider.integration === 'anthropic-messages'
-                                ? 'Anthropic Messages'
-                                : provider.integration === 'perplexity-agent'
-                                  ? 'Perplexity Agent API'
-                                  : 'Chat Completions'}
-                      </small>
+                      <small>{providerApiType(provider)}</small>
                     </span>
-                    {provider.freePlan && (
-                      <span className="provider-free-badge">Plano gratuito</span>
-                    )}
-                    {primary && <span className="provider-active-dot" title="Principal" />}
+                    <span className="provider-badges">
+                      {[
+                        connected && 'Conectado',
+                        primary && 'Principal',
+                        connected && enabled && 'Ativo',
+                        provider.freePlan && 'Plano gratuito',
+                        provider.id === 'local' && 'Local',
+                        provider.id === 'local' && localServerAvailable && 'Servidor disponível',
+                      ]
+                        .filter(Boolean)
+                        .map((badge) => (
+                          <span key={badge as string}>{badge}</span>
+                        ))}
+                    </span>
                   </button>
-                  {connected && (
+                  {provider.id === 'local' && (
+                    <button
+                      type="button"
+                      className="provider-local-action"
+                      disabled={busy}
+                      onClick={() => void discoverLocalForCard(provider)}
+                    >
+                      Procurar IA local
+                    </button>
+                  )}
+                  {providerCardHasManagement(tab, connected) && (
                     <div className="provider-card-controls">
-                      <div
-                        className="provider-status-list"
-                        aria-label={`Status de ${provider.name}`}
-                      >
-                        <span>Salva</span>
-                        {tested && <span>Testada</span>}
-                        {primary && <span>Ativa</span>}
-                      </div>
                       <label className="provider-enable">
                         <input
                           type="checkbox"
                           checked={enabled}
                           aria-label={`Ativar ${provider.name}`}
-                          onChange={(event) => onToggleEnabled(provider.id, event.target.checked)}
+                          onChange={(event) => {
+                            if (!event.target.checked && primary) {
+                              setPrimaryToReplace(provider.id);
+                              setReplacementPrimary('');
+                            } else onToggleEnabled(provider.id, event.target.checked);
+                          }}
                         />
-                        Ativar
+                        {enabled ? 'Ativo' : 'Desativado'}
                       </label>
                       {!primary && (
                         <button
@@ -459,13 +562,79 @@ export function ProviderCatalog({
                           Definir como principal
                         </button>
                       )}
+                      <details className="provider-actions-menu">
+                        <summary aria-label={`Ações de ${provider.name}`}>⋯</summary>
+                        <div>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void testSavedConnection(provider)}
+                          >
+                            Testar conexão
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExternalLinkErrorSafely(provider.docsUrl, setExternalLinkError)
+                            }
+                          >
+                            Abrir documentação
+                          </button>
+                          <button
+                            type="button"
+                            className="danger-text"
+                            disabled={busy}
+                            onClick={() => void removeCredential(provider.id)}
+                          >
+                            Remover credencial
+                          </button>
+                        </div>
+                      </details>
+                    </div>
+                  )}
+                  {primaryToReplace === provider.id && (
+                    <div
+                      className="provider-primary-dialog"
+                      role="group"
+                      aria-label="Escolher novo provedor principal"
+                    >
+                      <label>
+                        Escolha o novo principal
+                        <select
+                          value={replacementPrimary}
+                          onChange={(event) => setReplacementPrimary(event.target.value)}
+                        >
+                          <option value="">Selecione um provedor conectado</option>
+                          {[...connectedIds]
+                            .filter(
+                              (id) =>
+                                id !== provider.id && settings.providers[id]?.enabled !== false,
+                            )
+                            .map((id) => (
+                              <option key={id} value={id}>
+                                {AI_PROVIDERS.find((item) => item.id === id)?.name ?? id}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
                       <button
                         type="button"
-                        className="text-button danger-text"
-                        disabled={busy}
-                        onClick={() => void removeCredential(provider.id)}
+                        className="secondary-button small-button"
+                        disabled={!replacementPrimary}
+                        onClick={() => {
+                          onSetPrimary(replacementPrimary);
+                          onToggleEnabled(provider.id, false);
+                          setPrimaryToReplace('');
+                        }}
                       >
-                        Remover credencial
+                        Confirmar
+                      </button>
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => setPrimaryToReplace('')}
+                      >
+                        Cancelar
                       </button>
                     </div>
                   )}
@@ -480,7 +649,7 @@ export function ProviderCatalog({
                 : tab === 'connected' && !search.trim() && credentialCheckFailed
                   ? 'Não foi possível consultar as credenciais. A lista pode estar incompleta.'
                   : tab === 'connected' && !search.trim()
-                    ? 'Nenhum provedor tem credencial salva neste dispositivo.'
+                    ? 'Nenhum provedor conectado.'
                     : 'Nenhum provedor corresponde à busca.'}
             </p>
           )}
@@ -488,6 +657,24 @@ export function ProviderCatalog({
             A consulta sem enviar mensagem carrega os modelos da conta quando o provedor oferece
             esse recurso. O teste de conexão é opcional e pode gerar cobrança.
           </p>
+          {tab === 'connected' &&
+            filtered.length === 0 &&
+            credentialChecksComplete &&
+            !credentialCheckFailed &&
+            !search.trim() && (
+              <div className="provider-empty-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => changeTab('free')}
+                >
+                  Ver gratuitos
+                </button>
+                <button type="button" className="secondary-button" onClick={() => changeTab('all')}>
+                  Ver todos
+                </button>
+              </div>
+            )}
         </section>
         {detailsOpen && (
           <button
@@ -518,6 +705,86 @@ export function ProviderCatalog({
               </div>
             </div>
             <p className="provider-description">{selected.description}</p>
+            {selected.id === 'local' && (
+              <p className="provider-key-note" role="status">
+                <strong>Servidor local:</strong>{' '}
+                {localServerAvailable ? 'disponível' : 'não encontrado nas portas padrão'}.
+              </p>
+            )}
+            {connectedIds.has(selected.id) && selected.integration !== 'guide' && (
+              <div className="provider-detail-controls">
+                <label className="provider-enable">
+                  <input
+                    type="checkbox"
+                    checked={settings.providers[selected.id]?.enabled !== false}
+                    aria-label={`Ativar ${selected.name}`}
+                    onChange={(event) => {
+                      if (!event.target.checked && isActive) {
+                        setPrimaryToReplace(selected.id);
+                        setReplacementPrimary('');
+                      } else onToggleEnabled(selected.id, event.target.checked);
+                    }}
+                  />
+                  {settings.providers[selected.id]?.enabled === false ? 'Desativado' : 'Ativo'}
+                </label>
+                {isActive ? (
+                  <span className="provider-badge">Principal</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => onSetPrimary(selected.id)}
+                  >
+                    Definir como principal
+                  </button>
+                )}
+              </div>
+            )}
+            {primaryToReplace === selected.id && detailsOpen && tab !== 'connected' && (
+              <div
+                className="provider-primary-dialog"
+                role="group"
+                aria-label="Escolher novo provedor principal"
+              >
+                <label>
+                  Escolha o novo principal
+                  <select
+                    value={replacementPrimary}
+                    onChange={(event) => setReplacementPrimary(event.target.value)}
+                  >
+                    <option value="">Selecione um provedor conectado</option>
+                    {[...connectedIds]
+                      .filter(
+                        (id) => id !== selected.id && settings.providers[id]?.enabled !== false,
+                      )
+                      .map((id) => (
+                        <option key={id} value={id}>
+                          {AI_PROVIDERS.find((item) => item.id === id)?.name ?? id}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="secondary-button small-button"
+                  disabled={!replacementPrimary}
+                  onClick={() => {
+                    onSetPrimary(replacementPrimary);
+                    onToggleEnabled(selected.id, false);
+                    setPrimaryToReplace('');
+                  }}
+                >
+                  Confirmar
+                </button>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => setPrimaryToReplace('')}
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
             {effectiveCapabilities && selected.integration !== 'guide' && (
               <p className="provider-capability-note">
                 Ferramentas:{' '}
@@ -948,7 +1215,11 @@ function ProviderLogo({ provider, large = false }: { provider: AiProvider; large
       className={`provider-logo ${large ? 'large' : ''}`}
       style={{ '--provider-color': provider.color } as React.CSSProperties}
     >
-      <img src={icon} alt="" aria-hidden="true" />
+      {icon ? (
+        <img src={icon} alt="" aria-hidden="true" />
+      ) : (
+        <Icon name={provider.id === 'local' ? 'harddrives' : 'desktop'} size={large ? 23 : 18} />
+      )}
     </span>
   );
 }

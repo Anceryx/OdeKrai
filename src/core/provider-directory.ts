@@ -2,6 +2,29 @@ import { providerById, type AiProvider } from './providers';
 import { defaultProviderSettings, type AppSettings } from './settings';
 
 export type ProviderDirectoryTab = 'connected' | 'free' | 'all';
+export const providerCardHasManagement = (tab: ProviderDirectoryTab, connected: boolean): boolean =>
+  tab === 'connected' && connected;
+const PROVIDER_TAB_STORAGE_KEY = 'odekrai.provider-directory.tab';
+
+export function loadProviderDirectoryTab(storage?: Pick<Storage, 'getItem'>): ProviderDirectoryTab {
+  try {
+    const value = storage?.getItem(PROVIDER_TAB_STORAGE_KEY);
+    return value === 'connected' || value === 'free' || value === 'all' ? value : 'all';
+  } catch {
+    return 'all';
+  }
+}
+
+export function saveProviderDirectoryTab(
+  tab: ProviderDirectoryTab,
+  storage?: Pick<Storage, 'setItem'>,
+): void {
+  try {
+    storage?.setItem(PROVIDER_TAB_STORAGE_KEY, tab);
+  } catch {
+    // A aba continua funcional quando o armazenamento do navegador está indisponível.
+  }
+}
 
 export async function loadConnectedProviderIds(
   providerIds: readonly string[],
@@ -52,7 +75,10 @@ export function setPrimaryProviderSettings(settings: AppSettings, providerId: st
 
 export function setFallbackProviderIds(settings: AppSettings, providerIds: string[]): AppSettings {
   const unique = [...new Set(providerIds)].filter(
-    (providerId) => providerId !== settings.activeProviderId && Boolean(providerById(providerId)),
+    (providerId) =>
+      providerId !== settings.activeProviderId &&
+      Boolean(providerById(providerId)) &&
+      settings.providers[providerId]?.enabled !== false,
   );
   return { ...settings, fallbackProviderIds: unique };
 }
@@ -83,6 +109,9 @@ export function toggleProviderSettings(
     ...settings,
     activeProviderId:
       !enabled && settings.activeProviderId === providerId ? '' : settings.activeProviderId,
+    fallbackProviderIds: enabled
+      ? settings.fallbackProviderIds
+      : settings.fallbackProviderIds.filter((id) => id !== providerId),
     providers: { ...settings.providers, [providerId]: { ...provider, enabled } },
   };
 }
@@ -103,4 +132,14 @@ export async function removeProviderCredential(
 ): Promise<Set<string>> {
   await remove(providerId);
   return removeConnectedProvider(connectedIds, providerId);
+}
+
+export async function confirmProviderCredentialRemoval(
+  providerName: string,
+  confirm: (message: string) => boolean,
+  remove: () => Promise<void>,
+): Promise<boolean> {
+  if (!confirm(`Remover a credencial salva de ${providerName}?`)) return false;
+  await remove();
+  return true;
 }

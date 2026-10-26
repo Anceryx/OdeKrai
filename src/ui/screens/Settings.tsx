@@ -378,6 +378,7 @@ export function SettingsScreen({
                 (provider) =>
                   provider.integration !== 'guide' &&
                   provider.id !== settings.activeProviderId &&
+                  settings.providers[provider.id]?.enabled !== false &&
                   !settings.fallbackProviderIds.includes(provider.id),
               ).map((provider) => (
                 <option key={provider.id} value={provider.id}>
@@ -403,51 +404,53 @@ export function SettingsScreen({
             </button>
           </div>
         </div>
-        {settings.fallbackProviderIds.length > 0 ? (
+        {settings.fallbackProviderIds.some((id) => settings.providers[id]?.enabled !== false) ? (
           <ol className="fallback-provider-list" aria-label="Ordem dos provedores alternativos">
-            {settings.fallbackProviderIds.map((providerId, index) => {
-              const provider = AI_PROVIDERS.find((item) => item.id === providerId);
-              if (!provider) return null;
-              return (
-                <li key={providerId}>
-                  <span>{provider.name}</span>
-                  <div>
-                    <button
-                      type="button"
-                      className="secondary-button small-button"
-                      aria-label={`Mover ${provider.name} para cima`}
-                      disabled={index === 0}
-                      onClick={() => update(moveFallbackProvider(settings, providerId, -1))}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-button small-button"
-                      aria-label={`Mover ${provider.name} para baixo`}
-                      disabled={index === settings.fallbackProviderIds.length - 1}
-                      onClick={() => update(moveFallbackProvider(settings, providerId, 1))}
-                    >
-                      ↓
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-button small-button"
-                      onClick={() =>
-                        update(
-                          setFallbackProviderIds(
-                            settings,
-                            settings.fallbackProviderIds.filter((id) => id !== providerId),
-                          ),
-                        )
-                      }
-                    >
-                      Remover
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
+            {settings.fallbackProviderIds
+              .filter((id) => settings.providers[id]?.enabled !== false)
+              .map((providerId, index, activeFallbacks) => {
+                const provider = AI_PROVIDERS.find((item) => item.id === providerId);
+                if (!provider) return null;
+                return (
+                  <li key={providerId}>
+                    <span>{provider.name}</span>
+                    <div>
+                      <button
+                        type="button"
+                        className="secondary-button small-button"
+                        aria-label={`Mover ${provider.name} para cima`}
+                        disabled={index === 0}
+                        onClick={() => update(moveFallbackProvider(settings, providerId, -1))}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button small-button"
+                        aria-label={`Mover ${provider.name} para baixo`}
+                        disabled={index === activeFallbacks.length - 1}
+                        onClick={() => update(moveFallbackProvider(settings, providerId, 1))}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button small-button"
+                        onClick={() =>
+                          update(
+                            setFallbackProviderIds(
+                              settings,
+                              settings.fallbackProviderIds.filter((id) => id !== providerId),
+                            ),
+                          )
+                        }
+                      >
+                        Remover
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
           </ol>
         ) : (
           <p className="settings-description">Nenhum provedor alternativo configurado.</p>

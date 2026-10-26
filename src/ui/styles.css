@@ -2633,8 +2633,13 @@ html.island-window-html {
 .provider-grid {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 10px;
+  align-items: stretch;
+  grid-auto-rows: 1fr;
 }
 .provider-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 174px;
   min-width: 0;
   overflow: hidden;
   border: 1px solid #ffffff12;
@@ -2642,7 +2647,14 @@ html.island-window-html {
   background: #111214;
 }
 .provider-card .provider-tile {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-rows: minmax(55px, 1fr) auto;
+  align-content: start;
+  align-items: center;
+  flex: 1;
   width: 100%;
+  min-height: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -2655,13 +2667,119 @@ html.island-window-html {
   color: #fdba74;
   font-size: 10px;
 }
+.provider-badges {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 20px;
+}
+.provider-badges span,
+.provider-badge {
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: #ffffff0d;
+  color: #c7c3ca;
+  font-size: 10px;
+  line-height: 1.2;
+}
+.provider-badges span:nth-child(2) {
+  color: #fdba74;
+}
+.provider-tile-copy small {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  line-height: 1.35;
+}
 .provider-card-controls {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 7px 12px;
+  justify-content: space-between;
+  gap: 7px;
+  min-height: 48px;
   padding: 8px 10px 10px;
   border-top: 1px solid #ffffff10;
+}
+.provider-local-action {
+  min-height: 30px;
+  margin: 0 10px 8px;
+  border: 1px solid #ffffff16;
+  border-radius: 6px;
+  background: #ffffff08;
+  color: #e5e7eb;
+  cursor: pointer;
+  font: 500 11px var(--font-sans);
+}
+.provider-actions-menu {
+  position: relative;
+  flex: none;
+}
+.provider-actions-menu summary {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 6px;
+  color: #c7c3ca;
+  cursor: pointer;
+  font-size: 20px;
+  list-style: none;
+}
+.provider-actions-menu > div {
+  position: absolute;
+  z-index: 4;
+  right: 0;
+  bottom: calc(100% + 5px);
+  display: grid;
+  min-width: 180px;
+  padding: 5px;
+  border: 1px solid #ffffff20;
+  border-radius: 8px;
+  background: #1a1b1f;
+  box-shadow: 0 10px 26px #0009;
+}
+.provider-actions-menu button {
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: #ddd;
+  text-align: left;
+  cursor: pointer;
+}
+.provider-primary-dialog,
+.provider-detail-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid #ffffff14;
+}
+.provider-primary-dialog label {
+  display: grid;
+  flex: 1 1 100%;
+  gap: 5px;
+  color: #c7c3ca;
+  font-size: 11px;
+}
+.provider-primary-dialog select {
+  min-height: 34px;
+  border: 1px solid #ffffff20;
+  border-radius: 6px;
+  background: #17181b;
+  color: #eee;
+}
+.provider-empty-actions {
+  display: flex;
+  gap: 8px;
+}
+.provider-detail-controls {
+  margin-bottom: 14px;
+  padding: 12px 0;
+  border-top: 0;
+  border-bottom: 1px solid #ffffff14;
 }
 .provider-status-list {
   display: flex;
