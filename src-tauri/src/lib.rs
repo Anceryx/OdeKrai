@@ -779,6 +779,7 @@ pub fn run() -> Result<(), tauri::Error> {
             history::delete_conversation,
             history::rename_conversation,
             history::delete_all_conversations,
+            history::get_provider_usage,
             history::get_selected_pet,
             history::get_pet_mode,
             history::set_pet_mode,

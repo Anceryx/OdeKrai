@@ -51,6 +51,8 @@ O componente `PetSprite` renderiza o PNG selecionado e animações CSS associada
 
 ## Ilha, áudio e armazenamento
 
+O SQLite também soma tokens de entrada e saída por provedor e dia UTC. A interface consulta os totais do dia e dos últimos sete dias; o limite diário é configurado pelo usuário e zero desativa o limite.
+
 `src/core/island.ts` implementa transições e prioridades. `src/core/sounds.ts` carrega sons sob demanda, mantém cache, limita repetições, aplica volume e ignora arquivos ausentes ou inválidos. Preferências não secretas ficam no armazenamento local do WebView; chaves de API não são salvas. O histórico de conversas fica em SQLite na pasta de dados do aplicativo, acessado somente pelos comandos Rust da janela principal.
 
 Conversas apresenta uma lista pesquisável com título, data e prévia; o SQLite armazena título e

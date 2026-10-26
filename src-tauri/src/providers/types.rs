@@ -74,6 +74,9 @@ pub struct Usage {
     rename_all_fields = "camelCase"
 )]
 pub enum ProviderEvent {
+    ProviderSelected {
+        provider_id: String,
+    },
     TextDelta {
         text: String,
     },

@@ -7,7 +7,10 @@ use serde_json::{json, Value};
 use std::time::Duration;
 use std::{
     collections::HashMap,
-    sync::{atomic::AtomicU64, Mutex},
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc, Mutex,
+    },
 };
 use tauri::{ipc::Channel, Manager, State};
 use tokio_util::sync::CancellationToken;
@@ -18,6 +21,7 @@ mod catalog;
 mod chat_completions;
 mod credentials;
 mod endpoint;
+mod failover;
 mod http;
 mod llm_provider;
 use endpoint::provider_endpoint;
@@ -84,6 +88,14 @@ pub struct ProviderReply {
     pub tool_calls: Vec<ToolCall>,
     pub usage: Option<Usage>,
     pub stop_reason: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderTarget {
+    provider_id: String,
+    base_url: String,
+    model: String,
 }
 
 #[derive(Default)]
@@ -427,6 +439,8 @@ pub async fn send_provider_message(
         model,
         messages,
         Vec::new(),
+        Vec::new(),
+        0,
         request_id,
         None,
         security,
@@ -446,6 +460,8 @@ pub async fn stream_provider_message(
     model: String,
     messages: Vec<Message>,
     tools: Vec<ToolDef>,
+    fallbacks: Vec<ProviderTarget>,
+    daily_token_limit: u64,
     request_id: String,
     on_chunk: Channel<ProviderEvent>,
 ) -> Result<ProviderReply, String> {
@@ -474,6 +490,8 @@ pub async fn stream_provider_message(
         model,
         messages,
         tools,
+        fallbacks,
+        daily_token_limit,
         request_id,
         Some(on_chunk),
         security,
@@ -490,6 +508,8 @@ async fn send_message_inner(
     model: String,
     messages: Vec<Message>,
     tools: Vec<ToolDef>,
+    fallbacks: Vec<ProviderTarget>,
+    daily_token_limit: u64,
     request_id: String,
     on_chunk: Option<Channel<ProviderEvent>>,
     security: State<'_, crate::security::SecurityState>,
@@ -511,16 +531,35 @@ async fn send_message_inner(
     if !valid_messages(&messages) || !valid_tools(&tools) {
         return Err("A conversa está vazia ou excede o limite permitido.".into());
     }
-    if !tools.is_empty() {
-        let capabilities = effective_capabilities(&app, &provider_id, &model)?;
-        if !capabilities.tools || !capabilities.verified {
-            return Err(
-                "O uso de ferramentas não está verificado para este provedor ou modelo.".into(),
-            );
-        }
-    }
     if on_chunk.is_none() && messages.iter().any(|message| message.role == "system") {
         return Err("A mensagem de sistema só pode ser criada pelo aplicativo.".into());
+    }
+    let mut targets = vec![ProviderTarget {
+        provider_id,
+        base_url,
+        model,
+    }];
+    targets.extend(fallbacks);
+    if targets.len() > 16 {
+        return Err("A lista de provedores excede o limite permitido.".into());
+    }
+    let targets = eligible_provider_targets(&app, targets, !tools.is_empty())?;
+    if targets.is_empty() {
+        return Err("Nenhum provedor configurado tem credencial e capacidades disponíveis.".into());
+    }
+    let used_today = crate::history::provider_usage_total_today(&app)?;
+    if crate::history::daily_token_limit_exceeded(used_today, daily_token_limit) {
+        crate::security::audit_provider_usage_limit(
+            &app,
+            &security,
+            &targets[0].provider_id,
+            used_today,
+            daily_token_limit,
+        )?;
+        return Err(
+            "O limite diário de tokens já foi ultrapassado. Tente novamente amanhã ou ajuste o limite em Configurações."
+                .into(),
+        );
     }
 
     let cancellation = CancellationToken::new();
@@ -542,25 +581,105 @@ async fn send_message_inner(
         return Err("O OdeKrai está parado pelo kill switch.".into());
     }
 
+    let observed_output = Arc::new(AtomicBool::new(false));
     let result = tokio::select! {
         _ = cancellation.cancelled() => Err("Solicitação cancelada.".into()),
-        response = request_provider(
-            &app,
-            &provider_id,
-            &base_url,
-            ChatRequest {
-                model,
-                messages,
-                tools,
-                streaming: on_chunk.is_some(),
-            },
-            on_chunk,
-        ) => response,
+        response = async {
+            let request = ChatRequest { model: String::new(), messages, tools, streaming: on_chunk.is_some() };
+            let response = failover::try_candidates(
+                &targets,
+                |target| {
+                    let mut attempt = request.clone();
+                    attempt.model = target.model.clone();
+                    let provider_id = target.provider_id.clone();
+                    let base_url = target.base_url.clone();
+                    let channel = on_chunk.clone();
+                    let seen_output = observed_output.clone();
+                    let app = &app;
+                    async move {
+                        if let Some(channel) = channel.as_ref() {
+                            let _ = channel.send(ProviderEvent::ProviderSelected { provider_id: provider_id.clone() });
+                        }
+                        request_provider(app, &provider_id, &base_url, attempt, channel, Some(seen_output)).await
+                    }
+                },
+                |from, to, reason| crate::security::audit_provider_fallback(&app, &security, &from.provider_id, &to.provider_id, reason),
+                || observed_output.load(Ordering::SeqCst),
+            ).await;
+            let (index, reply) = match response {
+                Ok(result) => result,
+                Err(error) => {
+                    if let Some(channel) = on_chunk.as_ref() {
+                        let _ = channel.send(ProviderEvent::Error { kind: "provider".into(), status: None, message: error.clone() });
+                    }
+                    return Err(error);
+                }
+            };
+            let target = &targets[index];
+            if let Some(usage) = reply.usage.as_ref() {
+                let total = crate::history::record_provider_usage(&app, &target.provider_id, usage.input, usage.output)?;
+                if crate::history::daily_token_limit_exceeded(total, daily_token_limit) {
+                    crate::security::audit_provider_usage_limit(&app, &security, &target.provider_id, total, daily_token_limit)?;
+                    if let Some(channel) = on_chunk.as_ref() {
+                        let _ = channel.send(ProviderEvent::Error {
+                            kind: "daily_token_limit".into(), status: None,
+                            message: "O limite diário de tokens foi atingido. A resposta foi interrompida.".into(),
+                        });
+                    }
+                    return Err("O limite diário de tokens foi atingido. Ajuste o limite em Configurações ou tente novamente amanhã.".into());
+                }
+            }
+            Ok(reply)
+        } => response,
     };
     if let Ok(mut requests) = state.0.lock() {
         requests.remove(&request_id);
     }
     result
+}
+
+fn eligible_provider_targets(
+    app: &tauri::AppHandle,
+    targets: Vec<ProviderTarget>,
+    tools_required: bool,
+) -> Result<Vec<ProviderTarget>, String> {
+    let mut seen = std::collections::HashSet::new();
+    failover::filter_candidates(targets, |target| {
+        if !seen.insert(target.provider_id.clone()) {
+            return Ok(false);
+        }
+        let Some(entry) = catalog_entry(&target.provider_id) else {
+            return Ok(false);
+        };
+        if target.provider_id.len() > 80
+            || target.base_url.len() > 2_000
+            || target.model.trim().is_empty()
+            || target.model.len() > 200
+        {
+            return Ok(false);
+        }
+        let has_credential = match credential_entry(&target.provider_id)?.get_password() {
+            Ok(_) => true,
+            Err(keyring::Error::NoEntry) => false,
+            Err(_) => {
+                return Err("Não foi possível consultar as credenciais dos provedores.".into())
+            }
+        };
+        if !has_credential {
+            return Ok(false);
+        }
+        if tools_required {
+            let capabilities = effective_capabilities(app, &target.provider_id, &target.model)?;
+            if !entry.capabilities.tools
+                || !entry.capabilities.verified
+                || !capabilities.tools
+                || !capabilities.verified
+            {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    })
 }
 
 fn valid_messages(messages: &[Message]) -> bool {
@@ -615,6 +734,7 @@ async fn request_provider(
     base_url: &str,
     request_data: ChatRequest,
     on_chunk: Option<Channel<ProviderEvent>>,
+    observed_output: Option<Arc<AtomicBool>>,
 ) -> Result<ProviderReply, String> {
     let endpoint = provider_endpoint(provider_id, base_url)?;
     let entry = credential_entry(provider_id)?;
@@ -709,6 +829,14 @@ async fn request_provider(
     if let Some(channel) = on_chunk {
         if provider_id != "perplexity" {
             return consume_stream_response(provider_id, response, move |event| {
+                if matches!(
+                    event,
+                    ProviderEvent::TextDelta { .. } | ProviderEvent::ToolCallComplete { .. }
+                ) {
+                    if let Some(observed_output) = observed_output.as_ref() {
+                        observed_output.store(true, Ordering::SeqCst);
+                    }
+                }
                 let _ = channel.send(event);
             })
             .await;

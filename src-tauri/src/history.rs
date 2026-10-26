@@ -44,9 +44,128 @@ fn init_schema(db: &Connection) -> Result<(), String> {
             model TEXT NOT NULL,
             tools_supported INTEGER NOT NULL CHECK(tools_supported IN (0, 1)),
             PRIMARY KEY(provider_id, model)
+        );
+        CREATE TABLE IF NOT EXISTS provider_usage_daily (
+            provider_id TEXT NOT NULL,
+            utc_day INTEGER NOT NULL,
+            input_tokens INTEGER NOT NULL CHECK(input_tokens >= 0),
+            output_tokens INTEGER NOT NULL CHECK(output_tokens >= 0),
+            PRIMARY KEY(provider_id, utc_day)
         );")
         .map_err(|_| "Não foi possível preparar o histórico local.".to_string())?;
     Ok(())
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderUsageSummary {
+    pub provider_id: String,
+    pub today_input: u64,
+    pub today_output: u64,
+    pub seven_day_input: u64,
+    pub seven_day_output: u64,
+}
+
+fn utc_day() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64
+        / 86_400
+}
+
+pub(crate) fn daily_token_limit_exceeded(used: u64, limit: u64) -> bool {
+    limit > 0 && used > limit
+}
+
+fn record_provider_usage_db(
+    db: &Connection,
+    provider_id: &str,
+    day: i64,
+    input: u64,
+    output: u64,
+) -> Result<u64, String> {
+    if provider_id.is_empty() || provider_id.len() > 80 || provider_id.chars().any(char::is_control)
+    {
+        return Err("O identificador do provedor é inválido.".into());
+    }
+    let input = i64::try_from(input)
+        .map_err(|_| "O volume de tokens informado excede o limite suportado.".to_string())?;
+    let output = i64::try_from(output)
+        .map_err(|_| "O volume de tokens informado excede o limite suportado.".to_string())?;
+    db.execute(
+        "INSERT INTO provider_usage_daily(provider_id, utc_day, input_tokens, output_tokens)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(provider_id, utc_day) DO UPDATE SET
+           input_tokens=input_tokens+excluded.input_tokens,
+           output_tokens=output_tokens+excluded.output_tokens",
+        params![provider_id, day, input, output],
+    )
+    .map_err(|_| "Não foi possível salvar o uso de tokens localmente.".to_string())?;
+    db.query_row(
+        "SELECT COALESCE(SUM(input_tokens + output_tokens), 0)
+         FROM provider_usage_daily WHERE utc_day=?1",
+        [day],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(|total| total.max(0) as u64)
+    .map_err(|_| "Não foi possível calcular o uso diário de tokens.".to_string())
+}
+
+pub(crate) fn record_provider_usage(
+    app: &tauri::AppHandle,
+    provider_id: &str,
+    input: u64,
+    output: u64,
+) -> Result<u64, String> {
+    record_provider_usage_db(&database(app)?, provider_id, utc_day(), input, output)
+}
+
+pub(crate) fn provider_usage_total_today(app: &tauri::AppHandle) -> Result<u64, String> {
+    let db = database(app)?;
+    db.query_row(
+        "SELECT COALESCE(SUM(input_tokens + output_tokens), 0)
+         FROM provider_usage_daily WHERE utc_day=?1",
+        [utc_day()],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(|total| total.max(0) as u64)
+    .map_err(|_| "Não foi possível calcular o uso diário de tokens.".to_string())
+}
+
+fn provider_usage_db(db: &Connection, today: i64) -> Result<Vec<ProviderUsageSummary>, String> {
+    let mut statement = db
+        .prepare(
+            "SELECT provider_id,
+               COALESCE(SUM(CASE WHEN utc_day=?1 THEN input_tokens ELSE 0 END), 0),
+               COALESCE(SUM(CASE WHEN utc_day=?1 THEN output_tokens ELSE 0 END), 0),
+               COALESCE(SUM(CASE WHEN utc_day>=?2 THEN input_tokens ELSE 0 END), 0),
+               COALESCE(SUM(CASE WHEN utc_day>=?2 THEN output_tokens ELSE 0 END), 0)
+             FROM provider_usage_daily WHERE utc_day>=?2 GROUP BY provider_id ORDER BY provider_id",
+        )
+        .map_err(|_| "Não foi possível consultar o uso de tokens.".to_string())?;
+    let rows = statement
+        .query_map(params![today, today - 6], |row| {
+            Ok(ProviderUsageSummary {
+                provider_id: row.get(0)?,
+                today_input: row.get::<_, i64>(1)?.max(0) as u64,
+                today_output: row.get::<_, i64>(2)?.max(0) as u64,
+                seven_day_input: row.get::<_, i64>(3)?.max(0) as u64,
+                seven_day_output: row.get::<_, i64>(4)?.max(0) as u64,
+            })
+        })
+        .map_err(|_| "Não foi possível consultar o uso de tokens.".to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|_| "Não foi possível consultar o uso de tokens.".to_string())
+}
+
+#[tauri::command]
+pub fn get_provider_usage(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+) -> Result<Vec<ProviderUsageSummary>, String> {
+    super::require_main(&caller)?;
+    provider_usage_db(&database(&app)?, utc_day())
 }
 
 pub(crate) fn cached_tool_support(
@@ -422,6 +541,57 @@ mod tests {
             cached_tool_support_db(&db, "anthropic", "model-a").unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn provider_usage_accumulates_and_reports_today_and_seven_day_totals() {
+        let db = Connection::open_in_memory().unwrap();
+        init_schema(&db).unwrap();
+        assert_eq!(
+            record_provider_usage_db(&db, "openai", 100, 10, 5).unwrap(),
+            15
+        );
+        assert_eq!(
+            record_provider_usage_db(&db, "openai", 100, 7, 3).unwrap(),
+            25
+        );
+        record_provider_usage_db(&db, "anthropic", 94, 20, 4).unwrap();
+        record_provider_usage_db(&db, "openai", 93, 100, 100).unwrap();
+
+        let summary = provider_usage_db(&db, 100).unwrap();
+        assert_eq!(summary.len(), 2);
+        assert_eq!(summary[0].provider_id, "anthropic");
+        assert_eq!(summary[0].today_input, 0);
+        assert_eq!(summary[0].seven_day_input, 20);
+        assert_eq!(summary[1].provider_id, "openai");
+        assert_eq!(summary[1].today_input, 17);
+        assert_eq!(summary[1].today_output, 8);
+        assert_eq!(summary[1].seven_day_input, 17);
+        assert_eq!(summary[1].seven_day_output, 8);
+        assert!(!daily_token_limit_exceeded(25, 25));
+        assert!(daily_token_limit_exceeded(26, 25));
+        assert!(!daily_token_limit_exceeded(1, 0));
+    }
+
+    #[test]
+    fn usage_table_is_added_to_an_existing_database_without_dropping_history() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "CREATE TABLE conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
+             CREATE TABLE messages (id INTEGER PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('user','assistant')), content TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
+             INSERT INTO conversations (id, title) VALUES ('keep', 'Preservada');",
+        )
+        .unwrap();
+        init_schema(&db).unwrap();
+        let title: String = db
+            .query_row(
+                "SELECT title FROM conversations WHERE id='keep'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(title, "Preservada");
+        assert!(record_provider_usage_db(&db, "openai", 100, 1, 1).is_ok());
     }
 
     #[test]

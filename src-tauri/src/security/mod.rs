@@ -178,6 +178,54 @@ pub struct ActionResult {
     pub result: Option<String>,
 }
 
+pub(crate) fn audit_provider_fallback(
+    app: &tauri::AppHandle,
+    state: &SecurityState,
+    from: &str,
+    to: &str,
+    reason: &str,
+) -> Result<(), String> {
+    dispatch::record(
+        app,
+        state,
+        &id(),
+        "provider.failover",
+        Risk::Leitura,
+        &Origin::Model,
+        "retry",
+        reason,
+        "not_required",
+        0,
+        format!("from={from}; to={to}"),
+        "continued",
+        None,
+    )
+}
+
+pub(crate) fn audit_provider_usage_limit(
+    app: &tauri::AppHandle,
+    state: &SecurityState,
+    provider_id: &str,
+    used: u64,
+    limit: u64,
+) -> Result<(), String> {
+    dispatch::record(
+        app,
+        state,
+        &id(),
+        "provider.daily_token_limit",
+        Risk::Leitura,
+        &Origin::User,
+        "stop",
+        "daily_token_limit",
+        "not_required",
+        0,
+        format!("provider={provider_id}; used={used}; limit={limit}"),
+        "blocked",
+        Some("O limite diário de tokens foi atingido.".into()),
+    )
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PendingView {
