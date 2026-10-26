@@ -23,7 +23,7 @@ A seção **Configurações > Sobre** mostra versão, commit, data UTC do build 
 
 Para compilar localmente sem empacotar instalador, use `npx tauri build --no-bundle`. O build de diagnóstico pode ser feito com `npx tauri build --no-bundle --features diagnostics`; a feature `diagnostics` ativa `tauri/devtools` apenas quando explicitamente passada. O workflow verifica que as features padrão não ativam DevTools.
 
-O aplicativo grava `diagnostic.log` em `app_data_dir/logs`. O arquivo registra horários, etapas de inicialização e nomes, resultado e duração dos comandos; não registra mensagens de conversa, segredos nem o texto dos erros do frontend. Falhas de inicialização aparecem no banner **Diagnóstico**. Se a execução anterior não concluiu a inicialização, o app mantém a janela principal aberta, desliga ilha e mascote nessa sessão e informa o modo seguro no mesmo banner.
+O aplicativo grava `diagnostic.log` em `app_data_dir/logs`. O arquivo registra horários, etapas de inicialização e nomes, resultado e duração dos comandos; evento, comando e resultado precisam pertencer a listas fechadas. Detalhes gravados têm limite de tamanho e removem credenciais conhecidas, emails e o caminho do perfil do Windows, substituído por `%USERPROFILE%`. O log não registra mensagens de conversa nem texto livre dos erros do frontend. Falhas de inicialização aparecem no banner **Diagnóstico**. Se a execução anterior não concluiu a inicialização, o app mantém a janela principal aberta, desliga ilha e mascote nessa sessão e informa o modo seguro no mesmo banner.
 
 ## Estrutura
 

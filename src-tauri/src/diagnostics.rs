@@ -82,6 +82,8 @@ fn write_log(path: &PathBuf, event: &str, details: &str) -> io::Result<()> {
     }
     let timestamp = timestamp_utc(SystemTime::now());
     let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    let user_profile = std::env::var("USERPROFILE").ok();
+    let details = sanitize_log_details(details, user_profile.as_deref());
     writeln!(file, "{timestamp} {event} {details}")
 }
 
@@ -127,6 +129,129 @@ fn safe_token(input: &str) -> String {
             }
         })
         .collect()
+}
+
+fn sanitize_log_details(input: &str, user_profile: Option<&str>) -> String {
+    let mut details: String = input
+        .chars()
+        .take(512)
+        .map(|character| {
+            if character.is_control() {
+                '_'
+            } else {
+                character
+            }
+        })
+        .collect();
+
+    if let Some(profile) = user_profile.filter(|profile| !profile.is_empty()) {
+        details = replace_user_profile(&details, profile);
+    }
+
+    for marker in [
+        "Bearer ",
+        "sk-",
+        "pplx-",
+        "api_key=",
+        "api-key=",
+        "token=",
+        "authorization:",
+    ] {
+        details = redact_marker_values(&details, marker);
+    }
+    redact_email_addresses(&details)
+}
+
+fn replace_user_profile(input: &str, user_profile: &str) -> String {
+    let variants = [
+        user_profile.to_string(),
+        user_profile.replace('\\', "/"),
+        user_profile.replace('/', "\\"),
+    ];
+    let mut details = input.to_string();
+    for variant in variants {
+        details = replace_case_insensitive(&details, &variant, "%USERPROFILE%");
+    }
+    details
+}
+
+fn replace_case_insensitive(input: &str, needle: &str, replacement: &str) -> String {
+    if needle.is_empty() {
+        return input.to_string();
+    }
+    let needle_lower = needle.to_ascii_lowercase();
+    let mut output = input.to_string();
+    let mut search_from = 0;
+    while let Some(relative_start) = output[search_from..]
+        .to_ascii_lowercase()
+        .find(&needle_lower)
+    {
+        let start = search_from + relative_start;
+        let end = start + needle.len();
+        output.replace_range(start..end, replacement);
+        search_from = start + replacement.len();
+        if search_from >= output.len() {
+            break;
+        }
+    }
+    output
+}
+
+fn redact_marker_values(input: &str, marker: &str) -> String {
+    let marker_lower = marker.to_ascii_lowercase();
+    let mut output = input.to_string();
+    let mut search_from = 0;
+    loop {
+        let lower = output.to_ascii_lowercase();
+        let Some(relative_start) = lower[search_from..].find(&marker_lower) else {
+            break;
+        };
+        let start = search_from + relative_start;
+        let mut end = start + marker.len();
+        while end < output.len()
+            && !output.as_bytes()[end].is_ascii_whitespace()
+            && !b",;\"'<>)]}".contains(&output.as_bytes()[end])
+        {
+            end += 1;
+        }
+        output.replace_range(start..end, "[credencial removida]");
+        search_from = start + "[credencial removida]".len();
+        if search_from >= output.len() {
+            break;
+        }
+    }
+    output
+}
+
+fn redact_email_addresses(input: &str) -> String {
+    let mut output = input.to_string();
+    let mut search_from = 0;
+    loop {
+        let lower = output.to_ascii_lowercase();
+        let Some(relative_at) = lower[search_from..].find('@') else {
+            break;
+        };
+        let at = search_from + relative_at;
+        let bytes = output.as_bytes();
+        let mut start = at;
+        while start > 0 && !is_email_boundary(bytes[start - 1]) {
+            start -= 1;
+        }
+        let mut end = at + 1;
+        while end < bytes.len() && !is_email_boundary(bytes[end]) {
+            end += 1;
+        }
+        output.replace_range(start..end, "[email removido]");
+        search_from = start + "[email removido]".len();
+        if search_from >= output.len() {
+            break;
+        }
+    }
+    output
+}
+
+fn is_email_boundary(byte: u8) -> bool {
+    byte.is_ascii_whitespace() || b",;()[]<>\"'".contains(&byte)
 }
 
 fn is_safe_diagnostic(event: &str, command: &str, outcome: &str) -> bool {
@@ -228,17 +353,60 @@ mod tests {
 
     #[test]
     fn diagnostic_events_reject_free_text() {
-        assert!(is_safe_diagnostic("startup_command", "get_profile", "ok"));
-        assert!(!is_safe_diagnostic(
-            "startup_command",
-            "texto da conversa",
+        assert!(is_safe_diagnostic(
+            "startup_command_start",
+            "get_profile",
             "ok"
         ));
-        assert!(!is_safe_diagnostic(
-            "startup_command",
+        assert!(is_safe_diagnostic(
+            "startup_command_finish",
             "get_profile",
-            "mensagem secreta"
+            "error"
         ));
+
+        let untrusted_values = [
+            "texto da conversa".to_string(),
+            "x".repeat(600),
+            "sk-example-secret-key".to_string(),
+            "pplx-example-secret-key".to_string(),
+            "Bearer example-secret-token".to_string(),
+            "ana@example.com".to_string(),
+            r"C:\Users\Daniel\Documents\conversa.txt".to_string(),
+        ];
+        for value in untrusted_values {
+            assert!(!is_safe_diagnostic("startup_command_start", &value, "ok"));
+            assert!(!is_safe_diagnostic(
+                "startup_command_finish",
+                "get_profile",
+                &value
+            ));
+            assert!(!is_safe_diagnostic(&value, "get_profile", "ok"));
+        }
+    }
+
+    #[test]
+    fn diagnostic_log_redacts_credentials_emails_and_profile_paths() {
+        let details = sanitize_log_details(
+            "Bearer bearer-secret sk-api-secret pplx-api-secret api_key=key-secret token=token-secret ana@example.com C:\\Users\\Daniel\\AppData\\Local\\OdeKrai",
+            Some(r"C:\Users\Daniel"),
+        );
+
+        for secret in [
+            "bearer-secret",
+            "sk-api-secret",
+            "pplx-api-secret",
+            "key-secret",
+            "token-secret",
+            "ana@example.com",
+            "C:\\Users\\Daniel",
+        ] {
+            assert!(
+                !details.contains(secret),
+                "valor sensível permaneceu: {secret}"
+            );
+        }
+        assert!(details.contains("%USERPROFILE%\\AppData\\Local\\OdeKrai"));
+        assert!(sanitize_log_details(&"x".repeat(600), None).len() <= 512);
     }
 
     #[test]
