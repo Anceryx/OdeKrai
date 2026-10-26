@@ -50,7 +50,7 @@ island/mascote.
 ### Links em respostas
 
 - `markdown.test.ts` cobre links Markdown e URLs soltas, esquemas proibidos, caracteres de controle e normalização de domínios; `MessageMarkdown.test.tsx` verifica o rótulo do domínio de destino.
-- `external_links.rs` valida HTTP, HTTPS e mailto antes de usar o navegador padrão. Os comandos Rust têm teste unitário com destinos maliciosos; não há chamadas de rede nos testes.
+- `external_links.rs` valida HTTP, HTTPS e mailto, recusa IPs privados/loopback/especiais e verifica destinos maliciosos antes de usar o navegador padrão; os testes não fazem chamadas de rede.
 - A confirmação de domínio e a abertura pelo navegador padrão ainda precisam de validação visual/nativa no Windows.
 
 ### UI-3 — pet 2D
