@@ -67,6 +67,11 @@ pub(super) fn transient_failure_reason(error: &str) -> Option<&'static str> {
     None
 }
 
+pub(super) fn is_offline_network_failure(error: &str) -> bool {
+    error == "O provedor demorou para responder. Tente novamente."
+        || error == "Não foi possível conectar ao provedor. Verifique sua conexão."
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -184,6 +189,25 @@ mod tests {
             "A resposta do provedor está em formato inválido.",
         ] {
             assert_eq!(transient_failure_reason(error), None, "{error}");
+        }
+    }
+
+    #[test]
+    fn offline_detection_is_limited_to_connection_and_timeout_errors() {
+        assert!(is_offline_network_failure(
+            "Não foi possível conectar ao provedor. Verifique sua conexão."
+        ));
+        assert!(is_offline_network_failure(
+            "O provedor demorou para responder. Tente novamente."
+        ));
+        for error in [
+            "Credencial inválida (HTTP 401).",
+            "Sem permissão (HTTP 403).",
+            "Limite de uso atingido (HTTP 429).",
+            "Serviço indisponível (HTTP 503).",
+            "A comunicação segura com o provedor falhou.",
+        ] {
+            assert!(!is_offline_network_failure(error), "{error}");
         }
     }
 }

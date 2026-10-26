@@ -30,6 +30,7 @@ island/mascote.
 - Testes Vitest da migração v1 e isolamento de endpoint/modelo entre provedores.
 - `provider-directory.test.ts`: filtros das abas, ativação/desativação e remoção da credencial após sucesso.
 - `providers.test.ts`: Cerebras no catálogo e provedores marcados com plano gratuito.
+- `providers::failover::tests::offline_detection_is_limited_to_connection_and_timeout_errors`: diferencia erros de conexão/timeout de HTTP 401, 403, 429 e 5xx.
 - `npm run tauri:build`: compila o aplicativo Tauri. A ausência de assets proprietários no bundle deve ser conferida no resultado do build.
 - `git diff --check`: whitespace e marcadores de conflito.
 

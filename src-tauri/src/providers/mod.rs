@@ -712,7 +712,12 @@ async fn send_message_inner(
                 Ok(result) => result,
                 Err(error) => {
                     if let Some(channel) = on_chunk.as_ref() {
-                        let _ = channel.send(ProviderEvent::Error { kind: "provider".into(), status: None, message: error.clone() });
+                        let kind = if failover::is_offline_network_failure(&error) {
+                            "offline_network"
+                        } else {
+                            "provider"
+                        };
+                        let _ = channel.send(ProviderEvent::Error { kind: kind.into(), status: None, message: error.clone() });
                     }
                     return Err(error);
                 }
