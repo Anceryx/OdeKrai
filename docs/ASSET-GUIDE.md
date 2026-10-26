@@ -5,6 +5,23 @@ O runtime usa imagens PNG estáticas e folhas de sprites WebP. Os modelos 3D Ken
 ## Personagens Kenney 2D
 
 - `assets/pets/kenney-mini-characters/` contém 12 renderizações CC0 dos modelos do pacote Mini Characters. Cada PNG estático mede 512×512 px, tem canal alfa e usa um quadro central do clipe `idle`, sem a pose em T. A subpasta `animations/` contém folhas WebP horizontais com quadros de 192×192 px e manifestos JSON individuais por personagem.
+- Os nomes de exibição e as descrições visuais em português ficam em `pets.json`; os IDs e nomes de arquivo são estáveis para preservar as seleções salvas.
+
+| ID                   | Nome  | Aparência descrita                                                |
+| -------------------- | ----- | ----------------------------------------------------------------- |
+| `character-female-a` | Nina  | Pele morena, cabelo escuro preso e roupa lilás                    |
+| `character-female-b` | Mel   | Cabelo loiro preso, blusa amarela e calça roxa                    |
+| `character-female-c` | Clara | Cabelo escuro preso com faixa laranja, blusa azul e saia vermelha |
+| `character-female-d` | Alice | Cabelo ruivo preso, roupa cinza e brincos claros                  |
+| `character-female-e` | Vera  | Cabelo preto preso, roupa branca e luvas azuis                    |
+| `character-female-f` | Bia   | Cabelo castanho, blusa escura com alças amarelas e calça roxa     |
+| `character-male-a`   | Theo  | Pele escura, óculos claros, camisa verde e tênis amarelos         |
+| `character-male-b`   | Beto  | Barba grisalha, camisa coral e calça azul                         |
+| `character-male-c`   | Guto  | Bigode, boné azul e uniforme azul                                 |
+| `character-male-d`   | Davi  | Cabelo castanho curto, terno escuro e gravata vermelha            |
+| `character-male-e`   | Caio  | Óculos claros, cabelo castanho e suspensórios amarelos            |
+| `character-male-f`   | Leo   | Cabelo escuro, blusa verde e suspensórios marrons                 |
+
 - Para regenerar no Windows, instale Google Chrome, Microsoft Edge ou Brave e execute:
 
   ```powershell

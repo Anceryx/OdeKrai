@@ -10,7 +10,7 @@ import {
 } from '../core/island';
 import { loadSettings, saveSettings } from '../core/settings';
 import { normalizeSoundPreferences, playSound } from '../core/sounds';
-import { petAnimationForIslandState } from '../core/pets';
+import { DEFAULT_PET_ID, PETS, petAnimationForIslandState, petGreeting } from '../core/pets';
 import { PetSprite } from './PetSprite';
 import { Icon } from './Icon';
 import { petWindowLayout } from '../core/pet-layout';
@@ -18,6 +18,7 @@ import { petWindowLayout } from '../core/pet-layout';
 export function IslandWindow() {
   const [snapshot, setSnapshot] = useState<IslandSnapshot>(initialIslandSnapshot);
   const [settings, setSettings] = useState(loadSettings);
+  const [selectedPetId, setSelectedPetId] = useState(DEFAULT_PET_ID);
   const moveTimer = useRef<number | undefined>(undefined);
   const initialLayout = petWindowLayout(
     settings.companion.freeMode,
@@ -42,9 +43,17 @@ export function IslandWindow() {
           saveSettings({ ...current, companion: { ...current.companion, coordinates: { x, y } } });
         }, 180);
       }),
+      listen<string>('selected-pet-updated', ({ payload }) => {
+        if (PETS.some((pet) => pet.id === payload)) setSelectedPetId(payload);
+      }),
     ]).then((off) => {
       unlisten = off;
     });
+    void invoke<string>('get_selected_pet')
+      .then((petId) => {
+        if (PETS.some((pet) => pet.id === petId)) setSelectedPetId(petId);
+      })
+      .catch(() => {});
     return () => {
       document.body.classList.remove('island-window-body');
       document.documentElement.classList.remove('island-window-html');
@@ -126,7 +135,7 @@ export function IslandWindow() {
         </button>
         {!settings.companion.freeMode && (
           <span className="island-copy">
-            <strong>OdeKrai</strong>
+            <strong>{petGreeting(selectedPetId)}</strong>
             <span>{snapshot.message || islandLabels[state]}</span>
           </span>
         )}

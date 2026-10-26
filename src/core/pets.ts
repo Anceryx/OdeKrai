@@ -4,6 +4,7 @@ export type PetCatalogEntry = {
   id: string;
   name: string;
   file: string;
+  description: string;
   altText: string;
 };
 
@@ -48,7 +49,11 @@ export function validatePetCatalog(value: unknown): PetCatalogEntry[] | null {
       !/^[a-z0-9-]+$/.test(pet.id) ||
       ids.has(pet.id) ||
       typeof pet.name !== 'string' ||
+      !pet.name.trim() ||
+      typeof pet.description !== 'string' ||
+      !pet.description.trim() ||
       typeof pet.altText !== 'string' ||
+      !pet.altText.trim() ||
       typeof pet.file !== 'string' ||
       !/^[a-z0-9-]+\.png$/.test(pet.file)
     ) {
@@ -60,6 +65,13 @@ export function validatePetCatalog(value: unknown): PetCatalogEntry[] | null {
 }
 
 export const PETS = validatePetCatalog(catalogJson) ?? [];
+
+export function petGreeting(petId: string): string {
+  const pet = PETS.find((entry) => entry.id === petId);
+  if (!pet) return 'Oi, eu sou seu mascote';
+  const article = petId.includes('-female-') ? 'a' : 'o';
+  return `Oi, eu sou ${article} ${pet.name}`;
+}
 
 const petAssets = import.meta.glob<string>('../../assets/pets/kenney-mini-characters/*.png', {
   eager: true,

@@ -1,74 +1,86 @@
 [
   {
     "id": "character-female-a",
-    "name": "Feminino A",
+    "name": "Nina",
     "file": "character-female-a.png",
-    "altText": "Personagem feminino com roupa azul"
+    "description": "pele morena, cabelo escuro preso e roupa lilás",
+    "altText": "Nina, com pele morena, cabelo escuro preso e roupa lilás"
   },
   {
     "id": "character-female-b",
-    "name": "Feminino B",
+    "name": "Mel",
     "file": "character-female-b.png",
-    "altText": "Personagem feminino com roupa verde"
+    "description": "cabelo loiro preso, blusa amarela e calça roxa",
+    "altText": "Mel, com cabelo loiro preso, blusa amarela e calça roxa"
   },
   {
     "id": "character-female-c",
-    "name": "Feminino C",
+    "name": "Clara",
     "file": "character-female-c.png",
-    "altText": "Personagem feminino com roupa vermelha"
+    "description": "cabelo escuro preso com faixa laranja, blusa azul e saia vermelha",
+    "altText": "Clara, com cabelo escuro preso com faixa laranja, blusa azul e saia vermelha"
   },
   {
     "id": "character-female-d",
-    "name": "Feminino D",
+    "name": "Alice",
     "file": "character-female-d.png",
-    "altText": "Personagem feminino com roupa amarela"
+    "description": "cabelo ruivo preso, roupa cinza e brincos claros",
+    "altText": "Alice, com cabelo ruivo preso, roupa cinza e brincos claros"
   },
   {
     "id": "character-female-e",
-    "name": "Feminino E",
+    "name": "Vera",
     "file": "character-female-e.png",
-    "altText": "Personagem feminino com roupa roxa"
+    "description": "cabelo preto preso, roupa branca e luvas azuis",
+    "altText": "Vera, com cabelo preto preso, roupa branca e luvas azuis"
   },
   {
     "id": "character-female-f",
-    "name": "Feminino F",
+    "name": "Bia",
     "file": "character-female-f.png",
-    "altText": "Personagem feminino com roupa escura"
+    "description": "cabelo castanho, blusa escura com alças amarelas e calça roxa",
+    "altText": "Bia, com cabelo castanho, blusa escura com alças amarelas e calça roxa"
   },
   {
     "id": "character-male-a",
-    "name": "Masculino A",
+    "name": "Theo",
     "file": "character-male-a.png",
-    "altText": "Personagem masculino com roupa azul"
+    "description": "pele escura, óculos claros, camisa verde e tênis amarelos",
+    "altText": "Theo, com pele escura, óculos claros, camisa verde e tênis amarelos"
   },
   {
     "id": "character-male-b",
-    "name": "Masculino B",
+    "name": "Beto",
     "file": "character-male-b.png",
-    "altText": "Personagem masculino com roupa verde"
+    "description": "barba grisalha, camisa coral e calça azul",
+    "altText": "Beto, com barba grisalha, camisa coral e calça azul"
   },
   {
     "id": "character-male-c",
-    "name": "Masculino C",
+    "name": "Guto",
     "file": "character-male-c.png",
-    "altText": "Personagem masculino com roupa vermelha"
+    "description": "bigode, boné azul e uniforme azul",
+    "altText": "Guto, com bigode, boné azul e uniforme azul"
   },
   {
     "id": "character-male-d",
-    "name": "Masculino D",
+    "name": "Davi",
     "file": "character-male-d.png",
-    "altText": "Personagem masculino com roupa amarela"
+    "description": "cabelo castanho curto, terno escuro e gravata vermelha",
+    "altText": "Davi, com cabelo castanho curto, terno escuro e gravata vermelha"
   },
   {
     "id": "character-male-e",
-    "name": "Masculino E",
+    "name": "Caio",
     "file": "character-male-e.png",
-    "altText": "Personagem masculino com roupa roxa"
+    "description": "óculos claros, cabelo castanho e suspensórios amarelos",
+    "altText": "Caio, com óculos claros, cabelo castanho e suspensórios amarelos"
   },
   {
     "id": "character-male-f",
-    "name": "Masculino F",
+    "name": "Leo",
     "file": "character-male-f.png",
-    "altText": "Personagem masculino com roupa escura"
+    "description": "cabelo escuro, blusa verde e suspensórios marrons",
+    "altText": "Leo, com cabelo escuro, blusa verde e suspensórios marrons"
   }
 ]

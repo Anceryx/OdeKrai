@@ -29,6 +29,11 @@ describe('AssistantScreen', () => {
       />,
     );
     expect(markup).toContain('Escolha seu mascote');
+    expect(markup).toContain('Nina');
+    expect(markup).toContain(
+      'aria-label="Nina, com pele morena, cabelo escuro preso e roupa lilás"',
+    );
+    expect(markup).toContain('alt="Nina, com pele morena, cabelo escuro preso e roupa lilás"');
     expect(markup).toContain('Pet na');
     expect(markup).toContain('Modo do pet');
     expect(markup).toContain('>Ilha<');

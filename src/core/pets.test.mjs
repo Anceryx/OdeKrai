@@ -7,6 +7,7 @@ import {
   PET_ANIMATION_LABELS,
   PETS,
   petAnimationForIslandState,
+  petGreeting,
   petAnimationSheet,
   petImageUrl,
   petMotionDisabled,
@@ -101,19 +102,63 @@ describe('catálogo e imagens do mascote', () => {
   it('rejeita um pets.json ausente ou inválido', () => {
     expect(validatePetCatalog(undefined)).toBeNull();
     expect(validatePetCatalog(null)).toBeNull();
-    expect(validatePetCatalog([{ id: 'x', name: 'x', file: '../x.png', altText: 'x' }])).toBeNull();
-    expect(validatePetCatalog([{ id: 'x', name: 'x', file: 'x.png', altText: 'x' }])).toBeNull();
+    expect(
+      validatePetCatalog([
+        { id: 'x', name: 'x', file: '../x.png', description: 'x', altText: 'x' },
+      ]),
+    ).toBeNull();
+    expect(
+      validatePetCatalog([{ id: 'x', name: 'x', file: 'x.png', description: 'x', altText: 'x' }]),
+    ).toBeNull();
     expect(
       validatePetCatalog(
         Array.from({ length: 12 }, (_, i) => ({
           id: `pet-${i}`,
           name: 'Pet',
           file: `pet-${i}.png`,
+          description: 'aparência visual',
           altText: 'Pet',
         })),
       ),
     ).toHaveLength(12);
+    expect(
+      validatePetCatalog(
+        Array.from({ length: 12 }, (_, i) => ({
+          id: `pet-${i}`,
+          name: 'Pet',
+          file: `pet-${i}.png`,
+          ...(i === 0 ? {} : { description: 'aparência visual' }),
+          altText: 'Pet',
+        })),
+      ),
+    ).toBeNull();
     expect(DEFAULT_PET_ID).toBe('character-female-a');
+  });
+
+  it('mantém os IDs e associa os nomes próprios solicitados às aparências visuais', () => {
+    const expectedNames = {
+      'character-female-a': 'Nina',
+      'character-female-b': 'Mel',
+      'character-female-c': 'Clara',
+      'character-female-d': 'Alice',
+      'character-female-e': 'Vera',
+      'character-female-f': 'Bia',
+      'character-male-a': 'Theo',
+      'character-male-b': 'Beto',
+      'character-male-c': 'Guto',
+      'character-male-d': 'Davi',
+      'character-male-e': 'Caio',
+      'character-male-f': 'Leo',
+    };
+    expect(Object.fromEntries(PETS.map(({ id, name }) => [id, name]))).toEqual(expectedNames);
+    for (const pet of PETS) {
+      expect(pet.description.length).toBeGreaterThan(0);
+      expect(pet.altText).toContain(pet.name);
+      expect(pet.altText).toContain(pet.description);
+    }
+    expect(DEFAULT_PET_ID).toBe('character-female-a');
+    expect(petGreeting('character-male-d')).toBe('Oi, eu sou o Davi');
+    expect(petGreeting('character-female-a')).toBe('Oi, eu sou a Nina');
   });
 
   it('inclui os 12 arquivos renderizados em 512×512 com transparência', () => {

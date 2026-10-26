@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   DEFAULT_PET_ID,
+  PETS,
   petAnimationSheet,
   petImageUrl,
   petMotionDisabled,
@@ -80,6 +81,8 @@ export function PetSprite({
   }, [petId]);
 
   const selected = petId ?? storedPetId;
+  const pet = PETS.find((entry) => entry.id === selected);
+  const accessibleDescription = pet?.altText ?? 'Mascote do OdeKrai';
   const motionDisabled = petMotionDisabled(reduceMotion, prefersReducedMotion);
   const sheet = avatar || staticImage ? null : petAnimationSheet(selected, visualState);
   useEffect(() => {
@@ -91,9 +94,9 @@ export function PetSprite({
   return (
     <span
       className={`pet-sprite pet-state-${visualState} ${motionDisabled ? 'pet-reduce-motion' : ''} ${!documentVisible ? 'pet-hidden' : ''} ${avatar ? 'pet-avatar' : ''} ${className}`.trim()}
-      role={avatar ? 'img' : undefined}
-      aria-label={avatar ? 'Avatar do OdeKrai' : undefined}
-      aria-hidden={avatar ? undefined : true}
+      role="img"
+      aria-label={avatar ? `Avatar do OdeKrai: ${accessibleDescription}` : accessibleDescription}
+      title={accessibleDescription}
       style={style}
     >
       <span className="pet-shadow" aria-hidden="true" />
@@ -102,7 +105,7 @@ export function PetSprite({
           <img
             className={`pet-sheet ${sheet.loop ? 'pet-sheet-loop' : 'pet-sheet-once'}`}
             src={sheet.url}
-            alt=""
+            alt={pet?.altText ?? ''}
             draggable="false"
             style={
               {
@@ -123,7 +126,7 @@ export function PetSprite({
         <img
           className="pet-image"
           src={image}
-          alt=""
+          alt={pet?.altText ?? ''}
           draggable="false"
           onError={() => setImageFailed(true)}
         />
