@@ -180,21 +180,29 @@ function MainApp() {
       });
       return;
     }
-    void invoke<{ available: boolean; reason: string | null; workspacePath: string | null }>(
-      'agent_availability',
-      { providerId: activeProvider.providerId, model: activeProvider.model },
-    )
-      .then((availability) => {
-        setAgentAvailability(availability);
-        if (!conversationId) setAgentEnabled(availability.available);
-      })
-      .catch(() =>
-        setAgentAvailability({
-          available: false,
-          reason: 'Não foi possível verificar a pasta, o provedor e as habilidades do agente.',
-          workspacePath: null,
-        }),
-      );
+    const checkAvailability = () =>
+      invoke<{ available: boolean; reason: string | null; workspacePath: string | null }>(
+        'agent_availability',
+        { providerId: activeProvider.providerId, model: activeProvider.model },
+      )
+        .then((availability) => {
+          setAgentAvailability(availability);
+          if (!availability.available) setAgentEnabled(false);
+          else if (!conversationId) setAgentEnabled(true);
+        })
+        .catch(() =>
+          setAgentAvailability({
+            available: false,
+            reason: 'Não foi possível verificar a pasta, o provedor e as habilidades do agente.',
+            workspacePath: null,
+          }),
+        );
+    void checkAvailability();
+    const onFocus = () => {
+      void checkAvailability();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, [
     activeProvider.providerId,
     activeProvider.model,

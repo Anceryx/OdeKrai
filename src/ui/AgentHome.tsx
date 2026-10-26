@@ -14,6 +14,8 @@ const TONE_PRESETS = ['direto e cordial', 'acolhedor', 'formal'];
 type HomeStatus = {
   configured: boolean;
   path: string;
+  state: string;
+  message: string | null;
   warning: string | null;
   changed_externally: boolean;
 };
@@ -31,6 +33,18 @@ type IdentityDraft = {
   tone: string;
   mode: string;
 };
+
+function withTimeout<T>(promise: Promise<T>, message: string): Promise<T> {
+  let timer: number | undefined;
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      timer = window.setTimeout(() => reject(new Error(message)), 10000);
+    }),
+  ]).finally(() => {
+    if (timer !== undefined) window.clearTimeout(timer);
+  });
+}
 
 export function AgentHome({
   onStatus,
@@ -68,7 +82,15 @@ export function AgentHome({
   const [slang, setSlang] = useState('');
 
   async function refresh() {
-    const next = await invoke<HomeStatus>('agent_home_status');
+    const next = await Promise.race([
+      invoke<HomeStatus>('agent_home_status'),
+      new Promise<never>((_, reject) =>
+        window.setTimeout(
+          () => reject(new Error('A verificação da pasta excedeu o tempo limite.')),
+          8000,
+        ),
+      ),
+    ]);
     setStatus(next);
     setPath(next.path);
     onStatus?.(next);
@@ -96,7 +118,11 @@ export function AgentHome({
     }
   }
   useEffect(() => {
-    if (isTauri()) void refresh().catch((cause) => setError(String(cause)));
+    if (isTauri()) {
+      void withTimeout(refresh(), 'O carregamento das preferências excedeu o tempo limite.').catch(
+        (cause) => setError(String(cause)),
+      );
+    }
   }, []);
   useEffect(() => {
     setProfile((current) => ({
@@ -248,7 +274,105 @@ export function AgentHome({
         </Banner>
       )}
       {status === null ? (
-        <p>Carregando suas preferências…</p>
+        <div>
+          <p>Carregando suas preferências…</p>
+          {error && (
+            <Button
+              onClick={() => {
+                setError('');
+                void refresh().catch((cause) => setError(String(cause)));
+              }}
+            >
+              Tentar de novo
+            </Button>
+          )}
+        </div>
+      ) : status.state === 'ausente' ? (
+        <Card className="settings-card identity-section" role="status">
+          <h2>A pasta do OdeKrai não foi encontrada</h2>
+          <p>Não encontrei a pasta do OdeKrai que estava configurada ({status.path}).</p>
+          <p>As notas e memórias antigas só voltarão se a pasta anterior for encontrada.</p>
+          <div className="identity-actions">
+            <Button
+              disabled={busy}
+              onClick={() => {
+                setError('');
+                void refresh()
+                  .then(() =>
+                    setNotice(
+                      'Verifiquei novamente o caminho configurado. Se a pasta foi movida, escolha a pasta recuperada manualmente.',
+                    ),
+                  )
+                  .catch((cause) => setError(String(cause)));
+              }}
+            >
+              Procurar de novo
+            </Button>
+            <Button
+              disabled={busy}
+              onClick={async () => {
+                const selected = await open({
+                  directory: true,
+                  multiple: false,
+                  title: 'Escolha onde criar a pasta do OdeKrai',
+                });
+                if (typeof selected !== 'string') return;
+                await run(async () => {
+                  await invoke('agent_home_init', {
+                    path: selected,
+                    profile: {
+                      ...profile,
+                      name: profile.name || initialName || 'Usuário',
+                      nickname: profile.nickname || initialNickname || 'Usuário',
+                    },
+                  });
+                  await refresh();
+                  setNotice(
+                    'Nova pasta criada. As notas e memórias antigas só voltarão se a pasta anterior for encontrada.',
+                  );
+                });
+              }}
+            >
+              Criar uma nova pasta
+            </Button>
+            <Button
+              disabled={busy}
+              onClick={async () => {
+                const selected = await open({
+                  directory: true,
+                  multiple: false,
+                  title: 'Escolha uma pasta existente do OdeKrai',
+                });
+                if (typeof selected !== 'string') return;
+                await run(async () => {
+                  await invoke('agent_home_change_path', { path: selected });
+                  await refresh();
+                });
+              }}
+            >
+              Escolher uma pasta existente
+            </Button>
+          </div>
+        </Card>
+      ) : status.state === 'sem_permissao' || status.state === 'estrutura_incompleta' ? (
+        <Card className="settings-card identity-section" role="alert">
+          <h2>
+            {status.state === 'sem_permissao'
+              ? 'Sem permissão para acessar a pasta'
+              : 'Estrutura do OdeKrai incompleta'}
+          </h2>
+          <p>
+            {status.message} ({status.path})
+          </p>
+          <Button
+            onClick={() => {
+              setError('');
+              void refresh().catch((cause) => setError(String(cause)));
+            }}
+          >
+            Tentar de novo
+          </Button>
+        </Card>
       ) : !status.configured ? (
         <form onSubmit={initialize} className="settings-card identity-wizard">
           <div className="wizard-steps" aria-label={`Passo ${setupStep} de 3`}>

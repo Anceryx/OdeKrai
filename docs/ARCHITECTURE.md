@@ -77,6 +77,8 @@ A janela `pet` usa transparência sem região Win32 e não ignora eventos do pon
 
 `src-tauri/src/agent_home.rs` valida a pasta escolhida na primeira execução (sugestão: `%USERPROFILE%\OdeKrai`) e cria `ODEKRAI.md`, `memory/`, `workspace/`, `skills/` e `logs/`. O template está embutido no Rust; o repositório não contém o arquivo pessoal gerado. A última versão aprovada e seu SHA-256 ficam nos dados locais do aplicativo. Uma alteração externa suspende o prompt até revisão e aprovação.
 
+O comando de status distingue pasta íntegra, ausente, com estrutura incompleta, inacessível e ainda não configurada. Quando a pasta configurada não existe, Identidade e memória permite escolher uma pasta existente ou criar outra sem sobrescrever `ODEKRAI.md`; a disponibilidade do modo agente é reavaliada ao focar a janela.
+
 O Rust compõe o prompt com regras fixas, preâmbulo local de data/hora/fuso/idioma, identidade aprovada, até 1.024 caracteres de `memory/estilo.md` e o modo efetivo lido do SQLite local. `agent_run` acrescenta apenas descrições de habilidades ativas. Anthropic recebe `system`, APIs Chat Completions recebem mensagem `system` e a Perplexity Agent API recebe `instructions`; provedores sem tool calling elegível são excluídos do loop. O chat textual existente continua disponível sem pasta configurada.
 
 ## Motor de permissões

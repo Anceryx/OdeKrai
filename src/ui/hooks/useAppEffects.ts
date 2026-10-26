@@ -128,7 +128,11 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
           reportDiagnostic,
         ),
         startupInvoke<ProfileData>('get_profile', undefined, reportDiagnostic),
-        startupInvoke<{ configured: boolean }>('agent_home_status', undefined, reportDiagnostic),
+        startupInvoke<{ configured: boolean; state: string }>(
+          'agent_home_status',
+          undefined,
+          reportDiagnostic,
+        ),
         startupInvoke<Conversation[]>('list_conversations', undefined, reportDiagnostic),
         provider
           ? startupInvoke<boolean>(
@@ -169,7 +173,7 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
           : { displayName: '', nickname: '', avatarDataUrl: null };
       if (
         home.status === 'fulfilled' &&
-        home.value.configured &&
+        home.value.state === 'integra' &&
         (!currentProfile.displayName.trim() || !currentProfile.nickname.trim())
       ) {
         try {

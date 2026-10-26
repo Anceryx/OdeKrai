@@ -33,6 +33,8 @@ pub struct Profile {
 pub struct HomeStatus {
     configured: bool,
     path: String,
+    state: String,
+    message: Option<String>,
     warning: Option<String>,
     changed_externally: bool,
 }
@@ -341,6 +343,13 @@ fn read_core(path: &Path) -> Result<String, String> {
     String::from_utf8(bytes).map_err(|_| "ODEKRAI.md não está em UTF-8.".into())
 }
 
+fn valid_home_structure(path: &Path) -> bool {
+    path.join("ODEKRAI.md").is_file()
+        && ["memory", "workspace", "skills", "logs"]
+            .iter()
+            .all(|name| path.join(name).is_dir())
+}
+
 fn diff_text(approved: &str, current: &str) -> String {
     if approved == current {
         return String::new();
@@ -384,11 +393,74 @@ pub async fn agent_home_status(
     caller: tauri::WebviewWindow,
 ) -> Result<HomeStatus, String> {
     super::require_main(&caller)?;
-    if let Some((config, path)) = configured_home(&app)? {
-        let current = read_core(&path)?;
+    if let Some(config) = read_config(&app)? {
+        let path = config.path.clone();
+        let metadata = match fs::metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(HomeStatus {
+                    configured: true,
+                    path: path.to_string_lossy().into_owned(),
+                    state: "ausente".into(),
+                    message: Some("A pasta configurada não foi encontrada.".into()),
+                    warning: None,
+                    changed_externally: false,
+                });
+            }
+            Err(_) => {
+                return Ok(HomeStatus {
+                    configured: true,
+                    path: path.to_string_lossy().into_owned(),
+                    state: "sem_permissao".into(),
+                    message: Some("Não foi possível acessar a pasta configurada.".into()),
+                    warning: None,
+                    changed_externally: false,
+                });
+            }
+        };
+        if !metadata.is_dir() || has_reparse(&path) {
+            return Ok(HomeStatus {
+                configured: true,
+                path: path.to_string_lossy().into_owned(),
+                state: "estrutura_incompleta".into(),
+                message: Some(
+                    "A pasta configurada não contém uma estrutura válida do OdeKrai.".into(),
+                ),
+                warning: None,
+                changed_externally: false,
+            });
+        }
+        if !valid_home_structure(&path) {
+            return Ok(HomeStatus {
+                configured: true,
+                path: path.to_string_lossy().into_owned(),
+                state: "estrutura_incompleta".into(),
+                message: Some(
+                    "A pasta existe, mas falta ODEKRAI.md ou uma pasta da estrutura do OdeKrai."
+                        .into(),
+                ),
+                warning: None,
+                changed_externally: false,
+            });
+        }
+        let current = match read_core(&path) {
+            Ok(current) => current,
+            Err(_) => {
+                return Ok(HomeStatus {
+                    configured: true,
+                    path: path.to_string_lossy().into_owned(),
+                    state: "sem_permissao".into(),
+                    message: Some("Não foi possível ler ODEKRAI.md.".into()),
+                    warning: None,
+                    changed_externally: false,
+                })
+            }
+        };
         Ok(HomeStatus {
             configured: true,
             path: config.path.to_string_lossy().into_owned(),
+            state: "integra".into(),
+            message: None,
             warning: warning(&path),
             changed_externally: hash(&current) != config.approved_hash,
         })
@@ -398,6 +470,8 @@ pub async fn agent_home_status(
         Ok(HomeStatus {
             configured: false,
             path: path.to_string_lossy().into_owned(),
+            state: "nao_configurada".into(),
+            message: None,
             warning: warning(&path),
             changed_externally: false,
         })
@@ -425,18 +499,9 @@ pub fn agent_home_change_path(
     path: String,
 ) -> Result<HomeStatus, String> {
     super::require_main(&caller)?;
-    let (config, current_home) =
-        configured_home(&app)?.ok_or("Configure a pasta do OdeKrai primeiro.")?;
+    let previous = read_config(&app)?;
+    let current_home = previous.as_ref().map(|config| config.path.clone());
     let home = validate_path(Path::new(&path), &protected_roots(&app))?;
-    if canonical_string(&home) == canonical_string(&current_home) {
-        let current = read_core(&home)?;
-        return Ok(HomeStatus {
-            configured: true,
-            path: home.to_string_lossy().into_owned(),
-            warning: warning(&home),
-            changed_externally: hash(&current) != config.approved_hash,
-        });
-    }
     if !home.is_dir() || has_reparse(&home) {
         return Err("Escolha uma pasta local existente e sem redirecionamentos.".into());
     }
@@ -451,11 +516,24 @@ pub fn agent_home_change_path(
         }
     }
     read_core(&home)?;
-    let config = require_core_reapproval(config, home.clone());
+    let config = previous
+        .filter(|_| {
+            current_home
+                .as_ref()
+                .is_some_and(|old| canonical_string(old) == canonical_string(&home))
+        })
+        .map(|config| require_core_reapproval(config, home.clone()))
+        .unwrap_or(HomeConfig {
+            path: home.clone(),
+            approved_hash: String::new(),
+            approved_content: String::new(),
+        });
     write_config(&app, &config)?;
     Ok(HomeStatus {
         configured: true,
         path: home.to_string_lossy().into_owned(),
+        state: "integra".into(),
+        message: None,
         warning: warning(&home),
         changed_externally: true,
     })
@@ -469,7 +547,7 @@ pub fn agent_home_init(
     profile: Profile,
 ) -> Result<HomeStatus, String> {
     super::require_main(&caller)?;
-    if read_config(&app)?.is_some() {
+    if read_config(&app)?.is_some_and(|config| config.path.exists()) {
         return Err("A pasta do agente já foi configurada.".into());
     }
     let home = validate_path(Path::new(&path), &protected_roots(&app))?;
@@ -509,6 +587,8 @@ pub fn agent_home_init(
     Ok(HomeStatus {
         configured: true,
         path: home.to_string_lossy().into_owned(),
+        state: "integra".into(),
+        message: None,
         warning: warning(&home),
         changed_externally: false,
     })
@@ -840,6 +920,20 @@ mod tests {
         let prompt = append_effective_mode(&compose_prompt("identidade", None), "sempre_perguntar");
         assert!(prompt.starts_with(FIXED_RULES));
         assert!(prompt.ends_with("Modo de permissão efetivo, definido nas configurações locais do aplicativo: sempre_perguntar. Esse modo é informativo; as decisões são aplicadas pelo Rust."));
+    }
+
+    #[test]
+    fn home_structure_check_detects_missing_and_complete_directories() {
+        let root = std::env::temp_dir().join(format!("odekrai-home-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        assert!(!valid_home_structure(&root));
+        for name in ["memory", "workspace", "skills", "logs"] {
+            fs::create_dir(root.join(name)).unwrap();
+        }
+        fs::write(root.join("ODEKRAI.md"), "# identidade").unwrap();
+        assert!(valid_home_structure(&root));
+        fs::remove_dir_all(&root).unwrap();
     }
     #[cfg(windows)]
     #[test]
