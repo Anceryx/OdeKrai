@@ -6,6 +6,15 @@ pub(super) fn provider_endpoint(provider_id: &str, base_url: &str) -> Result<Url
     }
     let mut url =
         Url::parse(base_url.trim()).map_err(|_| "Informe um endpoint válido.".to_string())?;
+    if provider_id == "local" {
+        validate_local_url(&url)?;
+        let path = url.path().trim_end_matches('/');
+        if path != "" && path != "/v1" {
+            return Err("O endereço local deve terminar na raiz ou em /v1.".into());
+        }
+        url.set_path("/v1/chat/completions");
+        return Ok(url);
+    }
     if url.scheme() != "https"
         || url.port().is_some_and(|port| port != 443)
         || url.username() != ""
@@ -68,4 +77,38 @@ pub(super) fn provider_endpoint(provider_id: &str, base_url: &str) -> Result<Url
     };
     url.set_path(&path);
     Ok(url)
+}
+
+pub(super) fn validate_local_url(url: &Url) -> Result<Vec<std::net::SocketAddr>, String> {
+    use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
+    if url.scheme() != "http"
+        || url.username() != ""
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err("A IA local aceita somente HTTP sem credenciais ou parâmetros.".into());
+    }
+    let host = url.host_str().unwrap_or_default();
+    let port = url
+        .port_or_known_default()
+        .ok_or("Informe uma porta local válida.")?;
+    let ip_host = host
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .unwrap_or(host);
+    let addresses = match ip_host {
+        "localhost" => (host, port)
+            .to_socket_addrs()
+            .map_err(|_| "Não foi possível resolver localhost para loopback.")?
+            .collect::<Vec<_>>(),
+        _ => match ip_host.parse::<IpAddr>() {
+            Ok(ip) => vec![SocketAddr::new(ip, port)],
+            Err(_) => return Err("A IA local só pode usar 127.0.0.1, ::1 ou localhost.".into()),
+        },
+    };
+    if addresses.is_empty() || addresses.iter().any(|address| !address.ip().is_loopback()) {
+        return Err("O endereço da IA local não resolve exclusivamente para loopback.".into());
+    }
+    Ok(addresses)
 }

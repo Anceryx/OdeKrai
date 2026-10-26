@@ -66,6 +66,7 @@ export function ProviderCatalog({
   const [busy, setBusy] = useState(false);
   const [credentialAvailable, setCredentialAvailable] = useState(keySaved);
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
+  const [localModelEndpoints, setLocalModelEndpoints] = useState<Record<string, string>>({});
   const [stages, setStages] = useState<{ id: string; status: string; message: string }[]>([]);
   const [technicalError, setTechnicalError] = useState('');
   const [effectiveCapabilities, setEffectiveCapabilities] = useState<ProviderCapabilities | null>(
@@ -127,9 +128,13 @@ export function ProviderCatalog({
   );
   const readyToSave =
     selected.integration !== 'guide' &&
-    Boolean((draft.baseUrl.trim() || selected.region) && (secret.trim() || credentialAvailable));
+    Boolean(
+      (draft.baseUrl.trim() || selected.region) &&
+      (selected.id === 'local' || secret.trim() || credentialAvailable),
+    );
   const readyToTest =
-    selected.integration !== 'guide' && Boolean(draft.model.trim() && credentialAvailable);
+    selected.integration !== 'guide' &&
+    Boolean(draft.model.trim() && (selected.id === 'local' || credentialAvailable));
   function updateDraft(field: keyof ProviderSettings, value: string) {
     setDraft((current) => ({ ...current, [field]: value }));
   }
@@ -160,8 +165,10 @@ export function ProviderCatalog({
           providerId: selected.id,
           credential: secret.trim(),
         });
-      setCredentialAvailable(true);
-      setConnectedIds((ids) => new Set(ids).add(selected.id));
+      if (secret.trim() || credentialAvailable) {
+        setCredentialAvailable(true);
+        setConnectedIds((ids) => new Set(ids).add(selected.id));
+      }
       setCredentialChecksComplete(true);
       onSave(next);
       setSecret('');
@@ -218,6 +225,19 @@ export function ProviderCatalog({
     setBusy(true);
     setNotice('');
     try {
+      if (selected.id === 'local') {
+        const discovered =
+          await invoke<{ baseUrl: string; model: { id: string; name: string } }[]>(
+            'discover_local_models',
+          );
+        setModels(discovered.map((item) => item.model));
+        setLocalModelEndpoints(
+          Object.fromEntries(discovered.map((item) => [item.model.id, item.baseUrl])),
+        );
+        if (discovered[0]) updateDraft('baseUrl', discovered[0].baseUrl);
+        setNotice(`${discovered.length} modelos locais encontrados.`);
+        return;
+      }
       await invoke('validate_provider_endpoint', {
         providerId: selected.id,
         baseUrl: endpointForDraft(),
@@ -558,26 +578,63 @@ export function ProviderCatalog({
             </div>
             {selected.integration !== 'guide' ? (
               <div className="provider-form">
+                {selected.id === 'local' && (
+                  <p className="provider-key-note">
+                    <strong>Local</strong> · A conversa não sai do seu computador.
+                  </p>
+                )}
                 <ol className="provider-steps">
-                  <li>
-                    <strong>1. Crie sua conta</strong>
-                    <ProviderExternalLink href={selected.signupUrl} onError={setExternalLinkError}>
-                      Criar conta <Icon name="external-link" />
-                    </ProviderExternalLink>
-                  </li>
-                  <li>
-                    <strong>2. Gere uma chave de API</strong>
-                    <ProviderExternalLink href={selected.consoleUrl} onError={setExternalLinkError}>
-                      Gerar chave <Icon name="external-link" />
-                    </ProviderExternalLink>
-                  </li>
-                  <li>
-                    <strong>3. Salve a chave no OdeKrai</strong>
-                    <span>Ela fica no Gerenciador de Credenciais do Windows.</span>
-                  </li>
-                  <li>
-                    <strong>4. Carregue e selecione um modelo</strong>
-                  </li>
+                  {selected.id === 'local' ? (
+                    <>
+                      <li>
+                        Instale o{' '}
+                        <ProviderExternalLink
+                          href="https://ollama.com/download"
+                          onError={setExternalLinkError}
+                        >
+                          Ollama
+                        </ProviderExternalLink>{' '}
+                        ou consulte o{' '}
+                        <ProviderExternalLink
+                          href="https://github.com/ggml-org/llama.cpp/tree/master/tools/server"
+                          onError={setExternalLinkError}
+                        >
+                          llama.cpp server
+                        </ProviderExternalLink>
+                        .
+                      </li>
+                      <li>Baixe e carregue um modelo no servidor.</li>
+                      <li>Inicie o servidor e procure modelos disponíveis.</li>
+                    </>
+                  ) : (
+                    <>
+                      <li>
+                        <strong>1. Crie sua conta</strong>
+                        <ProviderExternalLink
+                          href={selected.signupUrl}
+                          onError={setExternalLinkError}
+                        >
+                          Criar conta <Icon name="external-link" />
+                        </ProviderExternalLink>
+                      </li>
+                      <li>
+                        <strong>2. Gere uma chave de API</strong>
+                        <ProviderExternalLink
+                          href={selected.consoleUrl}
+                          onError={setExternalLinkError}
+                        >
+                          Gerar chave <Icon name="external-link" />
+                        </ProviderExternalLink>
+                      </li>
+                      <li>
+                        <strong>3. Salve a chave no OdeKrai</strong>
+                        <span>Ela fica no Gerenciador de Credenciais do Windows.</span>
+                      </li>
+                      <li>
+                        <strong>4. Carregue e selecione um modelo</strong>
+                      </li>
+                    </>
+                  )}
                   <li>
                     <strong>5. Teste a conexão</strong>
                   </li>
@@ -593,26 +650,68 @@ export function ProviderCatalog({
                     />
                   </label>
                 )}
-                <details className="provider-advanced">
-                  <summary>Avançado</summary>
+                {selected.id === 'local' && (
                   <label className="field-label">
-                    {selected.region
-                      ? 'Endereço'
-                      : selected.id === 'azure-openai'
-                        ? 'Endereço do recurso'
-                        : 'Endereço da API'}
-                    <input
+                    Servidor local
+                    <select
                       value={
-                        selected.region
-                          ? `https://bedrock-runtime.${draft.region || '{região}'}.amazonaws.com/openai/v1`
-                          : draft.baseUrl
+                        draft.baseUrl === 'http://127.0.0.1:11434/v1' ||
+                        draft.baseUrl === 'http://127.0.0.1:8080/v1'
+                          ? draft.baseUrl
+                          : 'custom'
                       }
+                      onChange={(event) => {
+                        if (event.target.value !== 'custom')
+                          updateDraft('baseUrl', event.target.value);
+                      }}
+                    >
+                      <option value="http://127.0.0.1:11434/v1">Ollama · 127.0.0.1:11434</option>
+                      <option value="http://127.0.0.1:8080/v1">
+                        llama.cpp server · 127.0.0.1:8080
+                      </option>
+                      <option value="custom">Endereço personalizado</option>
+                    </select>
+                  </label>
+                )}
+                {selected.id === 'local' && (
+                  <label className="field-label">
+                    Endereço local (HTTP)
+                    <input
+                      value={draft.baseUrl}
                       onChange={(event) => updateDraft('baseUrl', event.target.value)}
-                      placeholder="https://api.exemplo.com/v1"
+                      placeholder="http://127.0.0.1:11434/v1"
                       spellCheck={false}
-                      readOnly={Boolean(selected.region)}
                     />
                   </label>
+                )}
+                <details className="provider-advanced">
+                  <summary>Avançado</summary>
+                  {selected.id !== 'local' && (
+                    <label className="field-label">
+                      {selected.region
+                        ? 'Endereço'
+                        : selected.id === 'azure-openai'
+                          ? 'Endereço do recurso'
+                          : selected.id === 'local'
+                            ? 'Endereço local (HTTP)'
+                            : 'Endereço da API'}
+                      <input
+                        value={
+                          selected.region
+                            ? `https://bedrock-runtime.${draft.region || '{região}'}.amazonaws.com/openai/v1`
+                            : draft.baseUrl
+                        }
+                        onChange={(event) => updateDraft('baseUrl', event.target.value)}
+                        placeholder={
+                          selected.id === 'local'
+                            ? 'http://127.0.0.1:11434/v1'
+                            : 'https://api.exemplo.com/v1'
+                        }
+                        spellCheck={false}
+                        readOnly={Boolean(selected.region)}
+                      />
+                    </label>
+                  )}
                   <button
                     className="text-button"
                     type="button"
@@ -631,13 +730,38 @@ export function ProviderCatalog({
                   <button
                     className="text-button"
                     type="button"
-                    disabled={!credentialAvailable || busy}
+                    disabled={(selected.id !== 'local' && !credentialAvailable) || busy}
                     onClick={() => void loadModels()}
                   >
-                    Carregar modelos da conta
+                    {selected.id === 'local' ? 'Procurar IA local' : 'Carregar modelos da conta'}
                   </button>
                 )}
-                {models.length > 0 ? (
+                {selected.id === 'local' && (
+                  <label className="field-label">
+                    Modelo local
+                    <select
+                      value={models.some((item) => item.id === draft.model) ? draft.model : ''}
+                      onChange={(event) => {
+                        const selectedModel = models.find((item) => item.id === event.target.value);
+                        if (selectedModel) {
+                          updateDraft('model', selectedModel.id);
+                          updateDraft(
+                            'baseUrl',
+                            localModelEndpoints[selectedModel.id] ?? draft.baseUrl,
+                          );
+                        }
+                      }}
+                    >
+                      <option value="">Selecione um modelo encontrado</option>
+                      {models.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {selected.id !== 'local' && models.length > 0 ? (
                   <label className="field-label">
                     Modelo
                     <select
@@ -669,32 +793,35 @@ export function ProviderCatalog({
                     />
                   </label>
                 ) : null}
-                <label className="field-label">
-                  {selected.id === 'bedrock'
-                    ? 'Chave de API Bedrock'
-                    : selected.id === 'azure-openai'
-                      ? 'Chave do recurso'
-                      : 'Chave de API'}
-                  <span className="secret-input provider-key-input">
-                    <input
-                      type={showKey ? 'text' : 'password'}
-                      value={secret}
-                      autoComplete="off"
-                      onChange={(event) => setSecret(event.target.value)}
-                      placeholder={
-                        credentialAvailable
-                          ? 'Deixe vazio para usar a credencial salva'
-                          : 'Cole sua chave de API'
-                      }
-                    />
-                    <button type="button" onClick={() => setShowKey((value) => !value)}>
-                      {showKey ? 'Ocultar' : 'Exibir'}
-                    </button>
-                  </span>
-                </label>
+                {selected.id !== 'local' && (
+                  <label className="field-label">
+                    {selected.id === 'bedrock'
+                      ? 'Chave de API Bedrock'
+                      : selected.id === 'azure-openai'
+                        ? 'Chave do recurso'
+                        : 'Chave de API'}
+                    <span className="secret-input provider-key-input">
+                      <input
+                        type={showKey ? 'text' : 'password'}
+                        value={secret}
+                        autoComplete="off"
+                        onChange={(event) => setSecret(event.target.value)}
+                        placeholder={
+                          credentialAvailable
+                            ? 'Deixe vazio para usar a credencial salva'
+                            : 'Cole sua chave de API'
+                        }
+                      />
+                      <button type="button" onClick={() => setShowKey((value) => !value)}>
+                        {showKey ? 'Ocultar' : 'Exibir'}
+                      </button>
+                    </span>
+                  </label>
+                )}
                 <p className="provider-key-note">
-                  A credencial fica no Gerenciador de Credenciais do Windows. O endereço é restrito
-                  a domínios HTTPS oficiais do provedor.
+                  {selected.id === 'local'
+                    ? 'Chave opcional, salva no Gerenciador de Credenciais do Windows. O endereço HTTP é permitido apenas para loopback.'
+                    : 'A credencial fica no Gerenciador de Credenciais do Windows. O endereço é restrito a domínios HTTPS oficiais do provedor.'}
                 </p>
                 <button
                   className="primary-button provider-connect"
@@ -710,7 +837,7 @@ export function ProviderCatalog({
                 >
                   Testar conexão sem gerar resposta
                 </button>
-                {selected.id !== 'perplexity' && (
+                {selected.id !== 'perplexity' && selected.id !== 'local' && (
                   <button
                     className="text-button"
                     disabled={!credentialAvailable || !draft.model.trim() || busy}

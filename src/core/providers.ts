@@ -1,6 +1,6 @@
 export type ProviderAuthMode = 'bearer' | 'api-key' | 'x-api-key';
 export type ProviderIntegration =
-  'openai-chat' | 'anthropic-messages' | 'perplexity-agent' | 'guide';
+  'openai-chat' | 'anthropic-messages' | 'perplexity-agent' | 'local-chat' | 'guide';
 
 export type AiProvider = {
   id: string;
@@ -49,6 +49,20 @@ export const providerCatalogEntry = (id: string) =>
   PROVIDER_CATALOG.find((entry) => entry.id === id);
 
 const providerDefinitions: AiProvider[] = [
+  {
+    id: 'local',
+    name: 'IA local',
+    description: 'Conecte um servidor compatível executado no seu computador.',
+    integration: 'local-chat',
+    docsUrl: 'https://github.com/ollama/ollama/blob/main/docs/api/openai-compatibility.mdx',
+    signupUrl: 'https://ollama.com/download',
+    consoleUrl: 'https://github.com/ggml-org/llama.cpp/tree/master/tools/server',
+    baseUrl: 'http://127.0.0.1:11434/v1',
+    modelHint: 'Selecione um modelo carregado',
+    authMode: 'bearer',
+    requirements: ['Servidor local já instalado e iniciado', 'Modelo local carregado'],
+    color: '#7c7cf5',
+  },
   {
     id: 'openai',
     name: 'OpenAI',
@@ -347,7 +361,7 @@ export const AI_PROVIDERS = providerDefinitions.map((provider) => {
   return {
     ...provider,
     docsUrl: entry.docsUrl,
-    baseUrl: entry.baseUrl,
+    baseUrl: entry.baseUrl || provider.baseUrl,
     authMode,
     modelHint: 'ID do modelo habilitado na sua conta',
   };

@@ -15,6 +15,8 @@
 
 ### Conectores
 
+- Adicionado o conector IA local para Ollama e llama.cpp server compatíveis com OpenAI, com busca de modelos nas portas padrão, HTTP limitado a loopback e chave opcional no Gerenciador de Credenciais.
+
 - As etapas “Criar conta” e “Gerar chave” agora apontam para o cadastro/console e a página de credenciais de cada provedor; links HTTPS estão autorizados apenas nos domínios oficiais listados.
 - A consulta de credenciais da aba “Conectados” agora é sequencial e diferencia falhas de consulta de uma lista realmente vazia.
 - A tela de conectores ganhou filtros por provedores conectados, planos gratuitos confirmados e catálogo completo, com busca e detalhes em painel sobreposto.

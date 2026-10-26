@@ -1,5 +1,25 @@
 [
   {
+    "id": "local",
+    "baseUrl": "",
+    "chatPath": "/chat/completions",
+    "authHeader": "Authorization",
+    "modelListPath": "/models",
+    "modelListShape": "data",
+    "hostRule": null,
+    "docsUrl": "https://github.com/ollama/ollama/blob/main/docs/api/openai-compatibility.mdx",
+    "verifiedAt": "2026-10-26",
+    "verification": "verified",
+    "fields": [],
+    "capabilities": {
+      "streaming": true,
+      "tools": false,
+      "vision": false,
+      "imageGeneration": false,
+      "verified": false
+    }
+  },
+  {
     "id": "openai",
     "baseUrl": "https://api.openai.com/v1",
     "chatPath": "/chat/completions",

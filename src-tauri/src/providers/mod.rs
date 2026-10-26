@@ -25,7 +25,7 @@ mod failover;
 mod http;
 mod llm_provider;
 use endpoint::provider_endpoint;
-use http::{http_client, provider_http_error, safe_transport_error, AuthRequest};
+use http::{provider_client, provider_http_error, safe_transport_error, AuthRequest};
 mod perplexity;
 mod stream;
 mod types;
@@ -51,6 +51,13 @@ const MAX_MESSAGE_BYTES: usize = 1_000_000;
 pub struct ModelOption {
     pub id: String,
     pub name: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalModelOption {
+    pub base_url: String,
+    pub model: ModelOption,
 }
 
 #[derive(Serialize)]
@@ -196,22 +203,78 @@ pub async fn list_provider_models(
     cancellable_request(&state, &security, fetch_models(&provider_id, &base_url)).await
 }
 
+#[tauri::command]
+pub async fn discover_local_models(
+    caller: tauri::WebviewWindow,
+    state: State<'_, ProviderRequests>,
+    security: State<'_, crate::security::SecurityState>,
+) -> Result<Vec<LocalModelOption>, String> {
+    super::require_main(&caller)?;
+    cancellable_request(&state, &security, async {
+        let mut found = Vec::new();
+        let mut server_responded = false;
+        let mut invalid_response = false;
+        for base_url in ["http://127.0.0.1:11434/v1", "http://127.0.0.1:8080/v1"] {
+            match fetch_models_with_auth("local", base_url, false).await {
+                Ok(models) => {
+                    server_responded = true;
+                    found.extend(models.into_iter().map(|model| LocalModelOption {
+                        base_url: base_url.to_string(),
+                        model,
+                    }));
+                }
+                Err(message) if !message.contains("conectar") && !message.contains("demorou") => {
+                    server_responded = true;
+                    invalid_response = true;
+                }
+                Err(_) => {}
+            }
+        }
+        if !server_responded {
+            return Err("Servidor local não encontrado nas portas padrão (11434 e 8080).".into());
+        }
+        if invalid_response && found.is_empty() {
+            return Err("O servidor local respondeu com dados inválidos ou não compatíveis com a API OpenAI.".into());
+        }
+        if found.is_empty() {
+            return Err("Servidor local encontrado, mas nenhum modelo está carregado. Carregue um modelo e tente novamente.".into());
+        }
+        Ok(found)
+    }).await
+}
+
 async fn fetch_models(provider_id: &str, base_url: &str) -> Result<Vec<ModelOption>, String> {
+    fetch_models_with_auth(provider_id, base_url, true).await
+}
+
+async fn fetch_models_with_auth(
+    provider_id: &str,
+    base_url: &str,
+    include_local_credential: bool,
+) -> Result<Vec<ModelOption>, String> {
     let mut url = provider_endpoint(provider_id, base_url)?;
     let entry =
         catalog_entry(provider_id).ok_or("O catálogo deste provedor não está disponível.")?;
     let path = entry.model_list_path.as_deref().ok_or(
         "A documentação oficial deste provedor não oferece listagem de modelos neste endpoint.",
     )?;
-    let credential = credential_entry(provider_id)?
-        .get_password()
-        .map_err(|_| "Salve uma credencial para listar os modelos.")?;
+    let credential = if provider_id == "local" && !include_local_credential {
+        String::new()
+    } else {
+        match credential_entry(provider_id)?.get_password() {
+            Ok(value) => value,
+            Err(keyring::Error::NoEntry) if provider_id == "local" => String::new(),
+            _ => return Err("Salve uma credencial para listar os modelos.".into()),
+        }
+    };
     let base_path = if provider_id == "azure-openai" {
         url.path()
             .strip_suffix("/chat/completions")
             .unwrap_or(url.path())
             .trim_end_matches('/')
             .to_string()
+    } else if provider_id == "local" {
+        "/v1".to_string()
     } else if entry.base_url.is_empty() {
         url.path().trim_end_matches('/').to_string()
     } else {
@@ -220,7 +283,11 @@ async fn fetch_models(provider_id: &str, base_url: &str) -> Result<Vec<ModelOpti
             .unwrap_or_default()
     };
     url.set_path(&format!("{}{}", base_path, path));
-    let client = http_client(30)?;
+    let client = provider_client(
+        provider_id,
+        base_url,
+        if provider_id == "local" { 1 } else { 30 },
+    )?;
     let mut request = client.get(url).pipe_auth(provider_id, &credential)?;
     if provider_id == "anthropic" {
         request = request.header("anthropic-version", "2023-06-01");
@@ -236,7 +303,14 @@ async fn fetch_models(provider_id: &str, base_url: &str) -> Result<Vec<ModelOpti
         .json()
         .await
         .map_err(|_| "O provedor retornou uma lista inválida.".to_string())?;
-    let values = if entry.model_list_shape.as_deref() == Some("data") {
+    parse_model_options(payload, entry.model_list_shape.as_deref())
+}
+
+fn parse_model_options(
+    payload: Value,
+    model_list_shape: Option<&str>,
+) -> Result<Vec<ModelOption>, String> {
+    let values = if model_list_shape == Some("data") {
         payload.get("data").and_then(Value::as_array)
     } else {
         payload.as_array()
@@ -284,15 +358,27 @@ async fn test_provider_connection_inner(
     base_url: &str,
     model: &str,
 ) -> Result<ConnectionTest, String> {
-    credential_entry(provider_id)?
-        .get_password()
-        .map_err(|_| "Salve uma credencial para testar a conexão.")?;
+    let credential = match credential_entry(provider_id)?.get_password() {
+        Ok(value) => value,
+        Err(keyring::Error::NoEntry) if provider_id == "local" => String::new(),
+        _ => return Err("Salve uma credencial para testar a conexão.".into()),
+    };
     let endpoint = provider_endpoint(provider_id, base_url)?;
     let mut stages = vec![
         ConnectionStage {
             id: "credential".into(),
-            status: "passed".into(),
-            message: "Credencial encontrada no Gerenciador do Windows.".into(),
+            status: if provider_id == "local" && credential.is_empty() {
+                "not_checked"
+            } else {
+                "passed"
+            }
+            .into(),
+            message: if provider_id == "local" && credential.is_empty() {
+                "Credencial opcional para este servidor local."
+            } else {
+                "Credencial encontrada no Gerenciador do Windows."
+            }
+            .into(),
         },
         ConnectionStage {
             id: "host".into(),
@@ -308,12 +394,22 @@ async fn test_provider_connection_inner(
             stages.push(ConnectionStage {
                 id: "network".into(),
                 status: "passed".into(),
-                message: "Conexão HTTPS concluída.".into(),
+                message: if provider_id == "local" {
+                    "Conexão local concluída."
+                } else {
+                    "Conexão HTTPS concluída."
+                }
+                .into(),
             });
             stages.push(ConnectionStage {
                 id: "authentication".into(),
                 status: "passed".into(),
-                message: "A API aceitou a credencial.".into(),
+                message: if provider_id == "local" && credential.is_empty() {
+                    "O servidor local respondeu sem exigir credencial."
+                } else {
+                    "A API aceitou a credencial."
+                }
+                .into(),
             });
             let exists = models.iter().any(|item| item.id == model);
             stages.push(ConnectionStage {
@@ -393,10 +489,16 @@ async fn ping_provider_inner(provider_id: &str, base_url: &str, model: &str) -> 
     let endpoint = provider_endpoint(provider_id, base_url)?;
     let body = ping_body(provider_id, model)
         .ok_or("O ping opcional não está disponível para este adaptador.")?;
-    let credential = credential_entry(provider_id)?
-        .get_password()
-        .map_err(|_| "Salve uma credencial para testar a geração.")?;
-    let client = http_client(30)?;
+    let credential = match credential_entry(provider_id)?.get_password() {
+        Ok(value) => value,
+        Err(keyring::Error::NoEntry) if provider_id == "local" => String::new(),
+        _ => return Err("Salve uma credencial para testar a geração.".into()),
+    };
+    let client = provider_client(
+        provider_id,
+        base_url,
+        if provider_id == "local" { 1 } else { 30 },
+    )?;
     let mut request = client
         .post(endpoint)
         .pipe_auth(provider_id, &credential)?
@@ -739,12 +841,17 @@ async fn request_provider(
     let endpoint = provider_endpoint(provider_id, base_url)?;
     let entry = credential_entry(provider_id)?;
     let credential = entry.get_password().map_err(|error| match error {
+        keyring::Error::NoEntry if provider_id == "local" => String::new(),
         keyring::Error::NoEntry => {
             "Salve uma credencial para este provedor antes de conversar.".to_string()
         }
         _ => "Não foi possível recuperar a credencial do Gerenciador do Windows.".to_string(),
     })?;
-    let client = http_client(90)?;
+    let client = provider_client(
+        provider_id,
+        base_url,
+        if provider_id == "local" { 30 } else { 90 },
+    )?;
 
     let chat_capabilities = effective_capabilities(app, provider_id, &request_data.model)?;
     let protocol_capabilities = match provider_id {
@@ -1077,6 +1184,102 @@ mod tests {
     }
 
     #[test]
+    fn local_provider_accepts_only_loopback_http() {
+        assert_eq!(
+            provider_endpoint("local", "http://127.0.0.1:11434/v1")
+                .unwrap()
+                .path(),
+            "/v1/chat/completions"
+        );
+        assert_eq!(
+            provider_endpoint("local", "http://[::1]:8080/v1")
+                .unwrap()
+                .host_str(),
+            Some("[::1]")
+        );
+        assert!(provider_endpoint("local", "http://localhost:11434/v1").is_ok());
+        assert!(provider_endpoint("local", "http://192.168.1.2:11434/v1").is_err());
+        assert!(provider_endpoint("local", "https://127.0.0.1:11434/v1").is_err());
+        assert!(provider_endpoint("local", "http://example.com:11434/v1").is_err());
+    }
+
+    #[test]
+    fn local_model_listing_parses_openai_data_and_rejects_invalid_payloads() {
+        let models =
+            parse_model_options(json!({"data":[{"id":"qwen-local"}]}), Some("data")).unwrap();
+        assert_eq!(models[0].id, "qwen-local");
+        assert!(parse_model_options(json!({"models": []}), Some("data")).is_err());
+    }
+
+    #[tokio::test]
+    async fn local_server_absence_fails_without_network_access() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let client = provider_client("local", &format!("http://127.0.0.1:{port}/v1"), 1).unwrap();
+        let result = client
+            .get(format!("http://127.0.0.1:{port}/v1/models"))
+            .send()
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn local_mock_server_lists_models() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let payload = r#"{"data":[{"id":"qwen-mock"}]}"#.to_string();
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 1024];
+            let _ = socket.read(&mut request);
+            write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", payload.len(), payload).unwrap();
+        });
+        let client = provider_client(
+            "local",
+            &format!("http://127.0.0.1:{}/v1", address.port()),
+            2,
+        )
+        .unwrap();
+        let response = client
+            .get(format!("http://{address}/v1/models"))
+            .send()
+            .await
+            .unwrap();
+        let payload = response.json::<Value>().await.unwrap();
+        server.join().unwrap();
+        let models = parse_model_options(payload, Some("data")).unwrap();
+        assert_eq!(models[0].id, "qwen-mock");
+    }
+
+    #[tokio::test]
+    async fn local_mock_server_redirect_is_returned_without_following() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 1024];
+            let _ = socket.read(&mut request);
+            write!(socket, "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:{}/v1/models\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", address.port()).unwrap();
+        });
+        let client = provider_client(
+            "local",
+            &format!("http://127.0.0.1:{}/v1", address.port()),
+            2,
+        )
+        .unwrap();
+        let response = client
+            .get(format!("http://{address}/v1/models"))
+            .send()
+            .await
+            .unwrap();
+        server.join().unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::FOUND);
+    }
+
+    #[test]
     fn provider_catalog_deserializes_from_embedded_resource() {
         let anthropic = catalog_entry("anthropic").unwrap();
         assert_eq!(anthropic.auth_header.as_deref(), Some("x-api-key"));
@@ -1288,7 +1491,7 @@ mod tests {
         .unwrap()
         {
             let provider = entry.id.as_str();
-            if !supports_credentials(provider) {
+            if !supports_credentials(provider) || provider == "local" {
                 continue;
             }
             let base_url = match provider {
@@ -1445,11 +1648,16 @@ mod tests {
             )
             .unwrap();
         });
-        let response = Client::new()
-            .get(format!("http://{address}/stream"))
-            .send()
-            .await
-            .unwrap();
+        let response = provider_client(
+            "local",
+            &format!("http://127.0.0.1:{}/v1", address.port()),
+            3,
+        )
+        .unwrap()
+        .get(format!("http://{address}/stream"))
+        .send()
+        .await
+        .unwrap();
         let mut events = Vec::new();
         let reply = consume_stream_response("openai", response, |event| events.push(event))
             .await

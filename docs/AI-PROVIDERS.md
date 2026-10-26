@@ -7,6 +7,14 @@ Capacidades de tool calling conferidas em 25/10/2026: Groq, Cerebras e Mistral d
 Fontes: [Groq Tool Use](https://console.groq.com/docs/tool-use), [Cerebras Tool Calling](https://inference-docs.cerebras.ai/capabilities/tool-use), [Mistral Function Calling](https://docs.mistral.ai/studio/conversations/function-calling), [OpenRouter Tool Calling](https://openrouter.ai/docs/guides/features/tool-calling) e [compatibilidade OpenAI do Gemini](https://ai.google.dev/gemini-api/docs/openai).
 
 O transporte de tool calls está implementado para Anthropic Messages e OpenAI Chat Completions.
+
+## Servidor de IA local
+
+O conector **IA local** reutiliza Chat Completions e conecta um servidor OpenAI compatível já iniciado pelo usuário. Os presets são Ollama (`http://127.0.0.1:11434/v1`) e llama.cpp server (`http://127.0.0.1:8080/v1`); o endereço pode ser editado. A busca consulta `/v1/models` nas duas portas e a conversa usa `/v1/chat/completions`. A chave é opcional e, quando informada, fica no Gerenciador de Credenciais do Windows.
+
+HTTP é aceito apenas para `127.0.0.1`, `::1` ou `localhost` cuja resolução contenha exclusivamente IPs de loopback; os IPs aprovados são fixados no cliente da requisição. Outros hosts são rejeitados. Redirecionamentos são desativados, com timeout de conexão de 1 segundo e timeout total curto. Tools permanecem desativadas e não verificadas. O aplicativo não baixa modelos nem inicia processos de servidor.
+
+Documentação oficial dos caminhos usados: [compatibilidade OpenAI do Ollama](https://github.com/ollama/ollama/blob/main/docs/api/openai-compatibility.mdx) e [servidor OpenAI compatível do llama.cpp](https://github.com/ggml-org/llama.cpp/tree/master/tools/server).
 Os tipos neutros incluem blocos de texto, chamadas e resultados; os adaptadores serializam esses
 blocos, interpretam respostas completas e em streaming, validam argumentos JSON e expõem uso de
 tokens quando a API retorna esses dados. O chat ainda envia uma lista vazia de tools: não há
@@ -26,7 +34,7 @@ Referências oficiais conferidas em 25/10/2026: [Anthropic tool use](https://pla
 
 ## Adaptadores no código
 
-O catálogo tem 16 itens: 13 usam o formato Chat Completions; Anthropic usa Messages API; Perplexity usa Agent API; Vertex AI permanece sem autenticação ADC/OAuth e aparece como guia. A presença de um adaptador não comprova chave, modelo, conta ou serviço.
+O catálogo tem 17 itens: 13 APIs remotas e o conector local usam o formato Chat Completions; Anthropic usa Messages API; Perplexity usa Agent API; Vertex AI permanece sem autenticação ADC/OAuth e aparece como guia. A presença de um adaptador não comprova chave, modelo, conta ou serviço.
 
 | Provedor                                                                         | Adaptador                                 | Autenticação e limites conhecidos                                                                         |
 | -------------------------------------------------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------- |
@@ -37,9 +45,10 @@ O catálogo tem 16 itens: 13 usam o formato Chat Completions; Anthropic usa Mess
 | Perplexity                                                                       | Agent API `/v1/agent`                     | Bearer; resposta `output[].content[].output_text`; modelo manual; busca web não é habilitada pelo ODEKRAI |
 | Azure OpenAI                                                                     | Endpoint v1 `/openai/v1/chat/completions` | Cabeçalho `api-key`; nome do deployment enviado como modelo                                               |
 | AWS Bedrock                                                                      | Chat Completions regional                 | Chave de API Bedrock; IAM/SigV4 não implementado                                                          |
+| IA local                                                                         | Chat Completions em Ollama/llama.cpp      | HTTP somente em loopback; chave opcional; tools não verificadas                                           |
 | Vertex AI                                                                        | Guia                                      | ADC/OAuth ainda não integrado                                                                             |
 
-O processo Tauri valida HTTPS, host e caminho por provedor antes de enviar a chave, desativa redirecionamentos e não registra credenciais. Endpoint, modelo e região ficam separados por `providerId`; a migração v1 preserva a configuração existente. A listagem de modelos é habilitada apenas para endpoints cuja documentação foi verificada. Provedores sem endpoint de listagem são identificados no catálogo; seu teste de conexão fica parcial e não envia geração. O chat usa streaming para Anthropic e adaptadores Chat Completions; a Agent API da Perplexity ainda usa resposta completa. Não há failover nem medição de uso.
+O processo Tauri valida HTTPS, host e caminho por provedor remoto antes de enviar a chave; a exceção do servidor local verifica e fixa IPs de loopback. Redirecionamentos são desativados e credenciais não são registradas. Endpoint, modelo e região ficam separados por `providerId`; a migração v1 preserva a configuração existente. A listagem de modelos é habilitada apenas para endpoints cuja documentação foi verificada. Provedores sem endpoint de listagem são identificados no catálogo; seu teste de conexão fica parcial e não envia geração. O chat usa streaming para Anthropic e adaptadores Chat Completions, incluindo o servidor local; a Agent API da Perplexity ainda usa resposta completa. Não há failover nem medição de uso.
 
 Na tela de conectores, as abas filtram credenciais salvas, provedores com plano gratuito confirmado e o catálogo completo. Groq, Google Gemini, Mistral, Cerebras e OpenRouter mostram o selo de plano gratuito com links para as páginas oficiais de limites ou preços; no OpenRouter, o selo se refere aos modelos marcados com `:free`. As condições e os modelos podem variar por conta e mudar conforme o provedor. A interface não exibe limites numéricos fixos. Ao abrir os detalhes de um plano gratuito, o app avisa que alguns provedores podem usar os dados enviados nesses planos.
 

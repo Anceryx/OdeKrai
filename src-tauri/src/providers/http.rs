@@ -11,6 +11,26 @@ pub(super) fn http_client(timeout_seconds: u64) -> Result<Client, String> {
         .map_err(|_| "Não foi possível preparar uma conexão segura.".to_string())
 }
 
+pub(super) fn provider_client(
+    provider_id: &str,
+    base_url: &str,
+    timeout_seconds: u64,
+) -> Result<Client, String> {
+    if provider_id != "local" {
+        return http_client(timeout_seconds);
+    }
+    let url = reqwest::Url::parse(base_url.trim())
+        .map_err(|_| "Informe um endereço local válido.".to_string())?;
+    let addresses = super::endpoint::validate_local_url(&url)?;
+    Client::builder()
+        .redirect(Policy::none())
+        .connect_timeout(Duration::from_secs(1))
+        .timeout(Duration::from_secs(timeout_seconds.min(30)))
+        .resolve_to_addrs(url.host_str().unwrap_or_default(), &addresses)
+        .build()
+        .map_err(|_| "Não foi possível preparar a conexão local.".to_string())
+}
+
 pub(super) fn provider_http_error(status: u16) -> String {
     match status {
         400 => {
@@ -38,6 +58,9 @@ pub(super) trait AuthRequest {
 
 impl AuthRequest for reqwest::RequestBuilder {
     fn pipe_auth(self, provider_id: &str, credential: &str) -> Result<Self, String> {
+        if provider_id == "local" && credential.is_empty() {
+            return Ok(self);
+        }
         let entry = catalog_entry(provider_id)
             .ok_or("A autenticação deste provedor não está cadastrada.")?;
         match entry.auth_header.as_deref() {

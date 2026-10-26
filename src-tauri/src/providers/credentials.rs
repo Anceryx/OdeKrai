@@ -18,6 +18,7 @@ pub(super) fn supports_credentials(provider_id: &str) -> bool {
             | "together"
             | "openrouter"
             | "fireworks"
+            | "local"
             | "azure-openai"
             | "bedrock"
     )

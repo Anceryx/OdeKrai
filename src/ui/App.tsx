@@ -280,7 +280,9 @@ function MainApp() {
     const { connectedIds } = await loadConnectedProviderIds(candidates, (providerId) =>
       invoke<boolean>('has_provider_credential', { providerId }),
     );
-    const available = candidates.find((providerId) => connectedIds.has(providerId));
+    const available = candidates.find(
+      (providerId) => providerId === 'local' || connectedIds.has(providerId),
+    );
     if (available) setUsedProviderId(available);
     setKeySavedForSession(Boolean(available));
     return Boolean(available);

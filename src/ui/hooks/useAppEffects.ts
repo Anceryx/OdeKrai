@@ -130,7 +130,8 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
       if (permissions.status === 'fulfilled') setPermissionIndicator(permissions.value);
       if (savedProfile.status === 'fulfilled') setProfile(savedProfile.value);
       if (home.status === 'fulfilled') setIdentityConfigured(home.value.configured);
-      if (credential.status === 'fulfilled') setKeySavedForSession(credential.value);
+      if (credential.status === 'fulfilled')
+        setKeySavedForSession(credential.value || provider?.id === 'local');
       if (history.status === 'fulfilled') {
         setConversations(history.value);
         if (history.value[0]) {

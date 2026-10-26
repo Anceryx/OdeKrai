@@ -766,6 +766,7 @@ pub fn run() -> Result<(), tauri::Error> {
             providers::stream_provider_message,
             providers::validate_provider_endpoint,
             providers::list_provider_models,
+            providers::discover_local_models,
             providers::test_provider_connection,
             providers::ping_provider,
             providers::get_provider_capabilities,

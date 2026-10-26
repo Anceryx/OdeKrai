@@ -8,7 +8,7 @@ Aplicativo OdeKrai para Windows, desenvolvido com React, TypeScript e Tauri 2. O
 
 ## Recursos implementados
 
-- Aplicativo com visão geral, conversas, catálogo de 16 provedores e configurações do assistente.
+- Aplicativo com visão geral, conversas, catálogo de 17 provedores e configurações do assistente.
 - Uma janela nativa do Tauri para os modos Ilha e Livre do pet, com posição, tamanho e modo persistidos.
 - Preferências locais sem chaves de API.
 - Armazenamento de credenciais via Gerenciador de Credenciais do Windows e envio de mensagens pelo processo Rust.
@@ -17,7 +17,8 @@ Aplicativo OdeKrai para Windows, desenvolvido com React, TypeScript e Tauri 2. O
 - Perfil local em SQLite, com avatar reprocessado no Rust e nunca enviado aos provedores.
 - Instância única, CSP de produção restrita e permissões separadas para as janelas auxiliares.
 - Inicialização tolerante a falhas, modo seguro após interrupção e registro local de diagnóstico sem conteúdo de conversas.
-- Adaptadores para 12 APIs Chat Completions, Anthropic Messages e Perplexity Agent API. Vertex AI continua como guia pendente de ADC/OAuth.
+- Adaptadores para 13 APIs Chat Completions remotas, Anthropic Messages, Perplexity Agent API e conexão local OpenAI compatível. Vertex AI continua como guia pendente de ADC/OAuth.
+- Conector IA local para servidores Ollama ou llama.cpp já iniciados, com seleção de modelos e conversa por streaming; não baixa modelos nem inicia servidores.
 - Pet 2D com 12 personagens CC0 renderizados em 512×512, escolha persistida no SQLite e animações
   CSS.
 
