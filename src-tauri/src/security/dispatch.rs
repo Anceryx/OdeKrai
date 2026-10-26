@@ -80,24 +80,34 @@ pub(super) fn preview_for(
     app: &tauri::AppHandle,
     action: &SimulatedAction,
 ) -> Result<String, String> {
-    let workspace = if matches!(
+    let workspace_action = matches!(
         action,
         SimulatedAction::ReadFile { .. }
             | SimulatedAction::WriteFile { .. }
             | SimulatedAction::DeleteFile { .. }
-    ) {
-        agent_home::workspace_path(app)?
+    );
+    let (workspace, action) = if workspace_action {
+        let write = matches!(
+            action,
+            SimulatedAction::WriteFile { .. } | SimulatedAction::DeleteFile { .. }
+        );
+        super::skills::resolve_action_target(app, action, write)?
     } else {
-        PathBuf::new()
+        (PathBuf::new(), action.clone())
     };
     if matches!(action, SimulatedAction::WriteFile { .. }) {
+        let location = if agent_home::workspace_path(app).is_ok_and(|home| home == workspace) {
+            "pasta de trabalho"
+        } else {
+            "pasta permitida"
+        };
         return Ok(format!(
-            "Destino no workspace:\n{}\n\n{}",
-            preview_target(&workspace, action_path(action)?)?.display(),
-            tool_for(action).preview(action, &workspace)?
+            "Destino na {location}:\n{}\n\n{}",
+            preview_target(&workspace, action_path(&action)?)?.display(),
+            tool_for(&action).preview(&action, &workspace)?
         ));
     }
-    tool_for(action).preview(action, &workspace)
+    tool_for(&action).preview(&action, &workspace)
 }
 
 pub(super) fn append_audit(
@@ -212,14 +222,18 @@ pub(super) fn execute_action(
             | SimulatedAction::WriteFile { .. }
             | SimulatedAction::DeleteFile { .. }
     );
-    let workspace = if workspace_action {
-        agent_home::workspace_path(app)?
+    let (workspace, action) = if workspace_action {
+        let write = matches!(
+            action,
+            SimulatedAction::WriteFile { .. } | SimulatedAction::DeleteFile { .. }
+        );
+        super::skills::resolve_action_target(app, action, write)?
     } else {
-        PathBuf::new()
+        (PathBuf::new(), action.clone())
     };
-    let tool = tool_for(action);
+    let tool = tool_for(&action);
     let started = Instant::now();
-    let result = tool.execute(action, &workspace);
+    let result = tool.execute(&action, &workspace);
     if started.elapsed() > tool.timeout() {
         return Err("A ferramenta simulada excedeu o tempo limite.".into());
     }

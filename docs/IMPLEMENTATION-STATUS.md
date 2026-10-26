@@ -14,6 +14,9 @@ demais provedores permanecem `unverified` para tools.
 
 ## Implementado
 
+- Base de habilidades em Rust para as ferramentas já existentes: schemas fechados, risco calculado no backend, prévias, confiança do resultado e limites da ferramenta. A ativação começa desligada. A tela “Habilidades” configura capacidades e exceções de modo; “Pastas permitidas” salva níveis de acesso em SQLite, mantém o workspace sempre em leitura e escrita e valida caminhos locais contra redirecionamentos e áreas protegidas. O loop do modelo ainda não consome esse registro.
+- O prompt de sistema inclui em Rust a data, a hora, o fuso local do Windows e o idioma atual desta versão (`pt-BR`), além de instruções para não alegar ações sem resultado confirmado e não contornar uma negação.
+
 - UI-3: catálogo 2D Kenney CC0, seleção no Assistente persistida no SQLite, avatar e pet da Visão geral, estados CSS ligados à FSM e overlays Phosphor. Os doze PNGs renderizados medem 512×512; o renderer 3D foi removido do aplicativo. Three.js permanece somente como dependência de desenvolvimento do script de renderização.
 
 - Catálogo de 17 provedores (16 com adaptador ativo e Vertex AI como guia). O chat usa um provedor principal por vez, identificado por `providerId` persistido nas preferências. Preferências antigas são migradas pelo nome conhecido.

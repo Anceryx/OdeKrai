@@ -257,10 +257,10 @@ pub(super) fn action_path(action: &SimulatedAction) -> Result<&str, String> {
 pub(super) fn validate_action(action: &SimulatedAction) -> Result<(), String> {
     match action {
         SimulatedAction::ReadFile { path } | SimulatedAction::DeleteFile { path } => {
-            relative_path(path)?;
+            validate_tool_path(path)?;
         }
         SimulatedAction::WriteFile { path, content } => {
-            relative_path(path)?;
+            validate_tool_path(path)?;
             if content.len() > MAX_FILE_BYTES {
                 return Err("O arquivo excede o limite de 1 MB.".into());
             }
@@ -282,6 +282,14 @@ pub(super) fn validate_action(action: &SimulatedAction) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_tool_path(raw: &str) -> Result<(), String> {
+    if Path::new(raw).is_absolute() {
+        super::skills::validate_raw_folder_path(raw).map(|_| ())
+    } else {
+        relative_path(raw).map(|_| ())
+    }
+}
+
 pub(super) fn protected_path_block(raw: &str) -> Option<&'static str> {
     let parts: Vec<String> = raw
         .split(['/', '\\'])
@@ -289,6 +297,38 @@ pub(super) fn protected_path_block(raw: &str) -> Option<&'static str> {
         .collect();
     if parts.iter().any(|part| part == "odekrai.md") {
         return Some("fixed_block_core_identity");
+    }
+    if parts.iter().any(|part| {
+        matches!(
+            part.as_str(),
+            "windows"
+                | "program files"
+                | "program files (x86)"
+                | "programdata"
+                | "appdata"
+                | ".ssh"
+                | ".gnupg"
+                | ".aws"
+                | ".azure"
+                | "login data"
+                | "web data"
+                | "local state"
+                | "user data"
+                | "profiles"
+                | "firefox"
+                | "mozilla"
+                | "opera software"
+                | "bravesoftware"
+                | "vault"
+                | "credentials"
+                | "credential manager"
+                | "identitycache"
+        ) || raw.to_ascii_lowercase().contains("google\\chrome")
+            || raw.to_ascii_lowercase().contains("microsoft\\edge")
+            || raw.to_ascii_lowercase().contains("google/chrome")
+            || raw.to_ascii_lowercase().contains("microsoft/edge")
+    }) {
+        return Some("fixed_block_system_or_browser_data");
     }
     if parts.iter().any(|part| part == "logs") {
         return Some("fixed_block_audit_logs");
@@ -311,6 +351,8 @@ pub(super) fn protected_path_block(raw: &str) -> Option<&'static str> {
         name == ".env"
             || name.starts_with(".env.")
             || name.contains("credential")
+            || name.contains("password")
+            || name.contains("token")
             || name.contains("secret")
             || name.ends_with(".pem")
             || name.ends_with(".p12")
@@ -342,16 +384,22 @@ pub(super) fn contains_secret_marker(text: &str) -> bool {
 }
 
 pub(super) fn relative_path(raw: &str) -> Result<PathBuf, String> {
+    validate_path_syntax(raw, false)
+}
+
+pub(super) fn validate_path_syntax(raw: &str, absolute: bool) -> Result<PathBuf, String> {
+    let max_len = if absolute { 4096 } else { 512 };
     if raw.is_empty()
-        || raw.len() > 512
-        || raw.starts_with(['\\', '/'])
-        || raw.contains(':')
+        || raw.len() > max_len
+        || raw.starts_with("\\\\")
+        || raw.starts_with("//")
         || raw.contains('\0')
+        || (!absolute && (raw.starts_with(['\\', '/']) || raw.contains(':')))
     {
-        return Err("Informe um caminho relativo válido dentro do workspace.".into());
+        return Err("Informe um caminho local válido sem traversal.".into());
     }
     let path = PathBuf::from(raw);
-    if path.is_absolute()
+    if path.is_absolute() != absolute
         || path.components().any(|part| match part {
             Component::Normal(name) => {
                 let name = name.to_string_lossy();
@@ -364,10 +412,8 @@ pub(super) fn relative_path(raw: &str) -> Result<PathBuf, String> {
                         .chars()
                         .any(|c| c.is_control() || "<>\"|?*".contains(c))
             }
-            Component::CurDir
-            | Component::ParentDir
-            | Component::RootDir
-            | Component::Prefix(_) => true,
+            Component::CurDir | Component::ParentDir => true,
+            Component::RootDir | Component::Prefix(_) => !absolute,
         })
     {
         return Err(

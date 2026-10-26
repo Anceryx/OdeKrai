@@ -45,5 +45,5 @@ tauri-plugin-opener = "2.7.2"
 url = "2"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_SystemInformation", "Win32_System_Time"] }
 windows = { version = "0.62", features = ["Win32_Graphics_Dxgi", "Win32_System_SystemInformation"] }

@@ -23,6 +23,7 @@ mod approvals;
 mod audit;
 mod dispatch;
 mod kill_switch;
+pub mod skills;
 mod workspace;
 use approvals::*;
 use audit::verify_audit_path;
@@ -307,7 +308,7 @@ fn database(app: &tauri::AppHandle) -> Result<Connection, String> {
         .map_err(|_| "Não foi possível preparar os dados do aplicativo.".to_string())?;
     let db = Connection::open(dir.join("permissions.sqlite3"))
         .map_err(|_| "Não foi possível abrir as configurações de segurança.".to_string())?;
-    let schema = format!("PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS permission_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS tool_overrides (tool TEXT PRIMARY KEY, more_permissive INTEGER NOT NULL CHECK(more_permissive IN (0,1))); INSERT OR IGNORE INTO permission_settings(key,value) VALUES ('mode','sempre_perguntar'),('shortcut','Ctrl+Shift+F12'),('halted','false'),('approval_ttl_seconds','{DEFAULT_APPROVAL_TTL}');");
+    let schema = format!("PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS permission_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS tool_overrides (tool TEXT PRIMARY KEY, more_permissive INTEGER NOT NULL CHECK(more_permissive IN (0,1))); CREATE TABLE IF NOT EXISTS skill_settings (skill_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL CHECK(enabled IN (0,1))); CREATE TABLE IF NOT EXISTS allowed_folders (path TEXT PRIMARY KEY, access TEXT NOT NULL CHECK(access IN ('read_only','read_write'))); INSERT OR IGNORE INTO permission_settings(key,value) VALUES ('mode','sempre_perguntar'),('shortcut','Ctrl+Shift+F12'),('halted','false'),('approval_ttl_seconds','{DEFAULT_APPROVAL_TTL}');");
     db.execute_batch(&schema)
         .map_err(|_| "Não foi possível preparar as configurações de segurança.".to_string())?;
     Ok(db)
@@ -475,6 +476,7 @@ pub async fn set_tool_override(
 
 fn known_tool(tool: &str) -> bool {
     [
+        "workspace.read_file",
         "workspace.write_file",
         "workspace.delete_file",
         "simulated.send_message",
