@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { displayPath } from '../core/display-path';
 
 export type AgentActionCardData = {
   id: string;
@@ -60,7 +61,7 @@ export function AgentControls({
       )}
       {enabled && workspacePath && (
         <span className="agent-workspace" title={workspacePath}>
-          Pasta de trabalho: {workspacePath}
+          Pasta de trabalho: {displayPath(workspacePath)}
         </span>
       )}
       {awaitingApproval && (
