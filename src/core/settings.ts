@@ -25,6 +25,7 @@ export type AppSettings = {
   activeProviderId: string;
   fallbackProviderIds: string[];
   dailyTokenLimit: number;
+  trustedLinkDomains: string[];
   layout: {
     sidebarCollapsed: boolean;
     sidebarWidth: number;
@@ -81,6 +82,7 @@ export const defaultSettings: AppSettings = {
   activeProviderId: 'openai',
   fallbackProviderIds: [],
   dailyTokenLimit: 100_000,
+  trustedLinkDomains: [],
   layout: {
     sidebarCollapsed: false,
     sidebarWidth: 254,
@@ -225,6 +227,16 @@ export function loadSettingsWithWarnings(): { settings: AppSettings; warnings: s
       value.layout && typeof value.layout === 'object'
         ? (value.layout as Partial<AppSettings['layout']>)
         : {};
+    const trustedLinkDomains = Array.isArray(value.trustedLinkDomains)
+      ? [
+          ...new Set(
+            value.trustedLinkDomains.filter(
+              (domain): domain is string =>
+                typeof domain === 'string' && /^[a-z0-9.-]+$/.test(domain) && domain.length <= 253,
+            ),
+          ),
+        ].slice(0, 100)
+      : [];
     const migrated = { ...value } as Record<string, unknown>;
     delete migrated.provider;
     return {
@@ -239,6 +251,7 @@ export function loadSettingsWithWarnings(): { settings: AppSettings; warnings: s
         activeProviderId,
         fallbackProviderIds,
         dailyTokenLimit,
+        trustedLinkDomains,
         layout: {
           sidebarCollapsed:
             typeof layoutValue.sidebarCollapsed === 'boolean'

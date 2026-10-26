@@ -5,6 +5,7 @@ import { AI_PROVIDERS } from '../../core/providers';
 import { moveFallbackProvider, setFallbackProviderIds } from '../../core/provider-directory';
 import { PageHeader, Toggle } from '../DesignSystem';
 import { HistoryDeletionSettings } from '../HistoryDeletionSettings';
+import { normalizeTrustedLinkDomain } from '../../core/markdown';
 
 type BuildInfo = {
   version: string;
@@ -33,6 +34,7 @@ export function SettingsScreen({
   const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null);
   const [usage, setUsage] = useState<ProviderUsage[]>([]);
   const [fallbackToAdd, setFallbackToAdd] = useState('');
+  const [linkDomainDraft, setLinkDomainDraft] = useState('');
   const totalTokensToday = usage.reduce(
     (total, item) => total + item.todayInput + item.todayOutput,
     0,
@@ -129,6 +131,66 @@ export function SettingsScreen({
             }
           />
         </div>
+      </section>
+      <section className="settings-panel settings-section" aria-labelledby="trusted-links-heading">
+        <h2 id="trusted-links-heading">Links externos</h2>
+        <p className="settings-description">
+          Na primeira abertura de cada domínio, o OdeKrai pede sua confirmação. Os domínios
+          lembrados podem ser removidos nesta lista.
+        </p>
+        <form
+          className="fallback-provider-add"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const domain = normalizeTrustedLinkDomain(linkDomainDraft.trim());
+            if (!domain || settings.trustedLinkDomains.includes(domain)) return;
+            update({
+              ...settings,
+              trustedLinkDomains: [...settings.trustedLinkDomains, domain].slice(0, 100),
+            });
+            setLinkDomainDraft('');
+          }}
+        >
+          <label className="sr-only" htmlFor="trusted-link-domain">
+            Domínio confiável
+          </label>
+          <input
+            id="trusted-link-domain"
+            value={linkDomainDraft}
+            onChange={(event) => setLinkDomainDraft(event.target.value)}
+            placeholder="exemplo.com"
+            maxLength={253}
+          />
+          <button
+            className="secondary-button small-button"
+            type="submit"
+            disabled={!linkDomainDraft.trim()}
+          >
+            Adicionar
+          </button>
+        </form>
+        <ul className="trusted-link-domains">
+          {settings.trustedLinkDomains.map((domain) => (
+            <li key={domain}>
+              <span>{domain}</span>
+              <button
+                className="secondary-button small-button"
+                type="button"
+                aria-label={`Esquecer ${domain}`}
+                onClick={() =>
+                  update({
+                    ...settings,
+                    trustedLinkDomains: settings.trustedLinkDomains.filter(
+                      (item) => item !== domain,
+                    ),
+                  })
+                }
+              >
+                Esquecer
+              </button>
+            </li>
+          ))}
+        </ul>
       </section>
       <section
         className="settings-panel settings-section"

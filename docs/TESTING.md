@@ -47,6 +47,12 @@ island/mascote.
 - A barra lateral alterna com `Ctrl+B`; as alças dos painéis aceitam arraste e setas do teclado. As preferências ficam nas configurações locais da interface.
 - Validação visual pendente no executável Windows em 1000 × 600, incluindo foco, redimensionamento por ponteiro e legibilidade no modo compacto.
 
+### Links em respostas
+
+- `markdown.test.ts` cobre links Markdown e URLs soltas, esquemas proibidos, caracteres de controle e normalização de domínios; `MessageMarkdown.test.tsx` verifica o rótulo do domínio de destino.
+- `external_links.rs` valida HTTP, HTTPS e mailto antes de usar o navegador padrão. Os comandos Rust têm teste unitário com destinos maliciosos; não há chamadas de rede nos testes.
+- A confirmação de domínio e a abertura pelo navegador padrão ainda precisam de validação visual/nativa no Windows.
+
 ### UI-3 — pet 2D
 
 - `src/core/pets.test.ts`: rejeita catálogo ausente e nomes de arquivo inválidos, verifica mapeamento da FSM, fallback para PNG ausente e preferência de movimento reduzido.

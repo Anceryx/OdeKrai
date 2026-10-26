@@ -75,6 +75,7 @@ import {
 } from '../core/provider-directory';
 import { loadSettings } from '../core/settings';
 import { useAppEffects } from './hooks/useAppEffects';
+import { externalLinkDomain, safeMarkdownUrl } from '../core/markdown';
 
 import { useAppState } from './hooks/useAppState';
 import { ScreenErrorBoundary } from './ScreenErrorBoundary';
@@ -543,6 +544,28 @@ function MainApp() {
     }
   }
 
+  async function openResponseLink(rawUrl: string) {
+    const url = safeMarkdownUrl(rawUrl);
+    const domain = url ? externalLinkDomain(url) : null;
+    if (!url || !domain) return;
+    if (!settings.trustedLinkDomains.includes(domain)) {
+      const accepted = window.confirm(
+        `Este link abrirá ${domain} no navegador padrão.\n\n${url}\n\nAbrir e lembrar este domínio?`,
+      );
+      if (!accepted) return;
+      setSettings((current) => ({
+        ...current,
+        trustedLinkDomains: [...new Set([...current.trustedLinkDomains, domain])].slice(0, 100),
+      }));
+    }
+    try {
+      if (!isTauri()) throw new Error('Abra links nas respostas pelo aplicativo OdeKrai.');
+      await invoke('open_external_link', { url });
+    } catch (cause) {
+      setToast(cause instanceof Error ? cause.message : 'Não foi possível abrir este link.');
+    }
+  }
+
   return (
     <div
       className={`app-shell ${settings.reduceMotion ? 'reduce-motion' : ''} ${chatMode ? 'chat-mode' : ''}`}
@@ -730,6 +753,7 @@ function MainApp() {
                   layout: { ...current.layout, conversationSidebarWidth },
                 }))
               }
+              onOpenLink={(url) => void openResponseLink(url)}
               providerConfigured={keySavedForSession}
               assistantUsesMascot={settings.useMascotAsAssistantAvatar}
               onFixConfiguration={() => {

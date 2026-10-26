@@ -31,6 +31,7 @@ export function ConversationsScreen({
   conversationSidebarWidth,
   onToggleConversationSidebar,
   onResizeConversationSidebar,
+  onOpenLink,
   assistantUsesMascot,
   onFixConfiguration,
   onRetry,
@@ -58,6 +59,7 @@ export function ConversationsScreen({
   conversationSidebarWidth: number;
   onToggleConversationSidebar: () => void;
   onResizeConversationSidebar: (width: number) => void;
+  onOpenLink: (url: string) => void;
   assistantUsesMascot: boolean;
   onFixConfiguration: () => void;
   onRetry: () => void;
@@ -274,7 +276,7 @@ export function ConversationsScreen({
                       {message.role === 'user' ? profile.displayName || 'Você' : 'OdeKrai'}
                     </span>
                     {message.role === 'assistant' ? (
-                      <MessageMarkdown text={message.content} />
+                      <MessageMarkdown text={message.content} onOpenLink={onOpenLink} />
                     ) : (
                       <p className="message-plain">{message.content}</p>
                     )}
@@ -282,14 +284,16 @@ export function ConversationsScreen({
                       <div className="message-citations">
                         {message.citations.map((citation) =>
                           safeMarkdownUrl(citation.url) ? (
-                            <a
+                            <button
+                              type="button"
+                              role="link"
                               key={citation.url}
-                              href={safeMarkdownUrl(citation.url) ?? undefined}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                              className="message-link message-citation-link"
+                              title={safeMarkdownUrl(citation.url) ?? citation.url}
+                              onClick={() => onOpenLink(safeMarkdownUrl(citation.url) ?? '')}
                             >
                               {citation.title}
-                            </a>
+                            </button>
                           ) : (
                             <span key={citation.url}>{citation.title}</span>
                           ),

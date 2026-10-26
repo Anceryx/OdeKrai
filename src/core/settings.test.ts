@@ -78,8 +78,10 @@ describe('preferências persistidas', () => {
     settings.layout.sidebarWidth = 320;
     settings.layout.conversationSidebarCollapsed = true;
     settings.layout.conversationSidebarWidth = 280;
+    settings.trustedLinkDomains = ['example.com'];
     expect(saveSettings(settings)).toBe(true);
     expect(loadSettings().layout).toEqual(settings.layout);
+    expect(loadSettings().trustedLinkDomains).toEqual(['example.com']);
 
     storage.set(
       'odekrai.settings.v2',

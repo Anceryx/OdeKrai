@@ -18,6 +18,7 @@ describe('SettingsScreen', () => {
     expect(markup).toContain('Limite diário');
     expect(markup).toContain('Estado: Dentro do limite');
     expect(markup).toContain('Ao fechar a janela');
+    expect(markup).toContain('Links externos');
     expect(markup).toContain('Sobre');
     expect(markup).toContain('WebView2');
   });

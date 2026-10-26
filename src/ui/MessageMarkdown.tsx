@@ -1,18 +1,37 @@
 import { useState } from 'react';
-import { parseMarkdown, type MarkdownInline } from '../core/markdown';
+import { externalLinkDomain, parseMarkdown, type MarkdownInline } from '../core/markdown';
 
-function InlineContent({ nodes }: { nodes: MarkdownInline[] }) {
+function InlineContent({
+  nodes,
+  onOpenLink,
+}: {
+  nodes: MarkdownInline[];
+  onOpenLink: (url: string) => void;
+}) {
   return (
     <>
       {nodes.map((node, index) => {
         if (node.type === 'strong') return <strong key={index}>{node.text}</strong>;
         if (node.type === 'code') return <code key={index}>{node.text}</code>;
-        if (node.type === 'link')
+        if (node.type === 'link') {
+          const addressLabel =
+            node.text === node.href ||
+            node.text.replace(/\/$/, '') === node.href.replace(/\/$/, '');
+          const domain = addressLabel ? null : externalLinkDomain(node.href);
           return (
-            <a key={index} href={node.href} target="_blank" rel="noopener noreferrer">
+            <button
+              key={index}
+              type="button"
+              className="message-link"
+              role="link"
+              title={node.href}
+              onClick={() => onOpenLink(node.href)}
+            >
               {node.text}
-            </a>
+              {domain && <small className="message-link-domain"> ({domain})</small>}
+            </button>
           );
+        }
         return <span key={index}>{node.text}</span>;
       })}
     </>
@@ -40,7 +59,13 @@ function CodeBlock({ text }: { text: string }) {
   );
 }
 
-export function MessageMarkdown({ text }: { text: string }) {
+export function MessageMarkdown({
+  text,
+  onOpenLink,
+}: {
+  text: string;
+  onOpenLink: (url: string) => void;
+}) {
   return (
     <div className="message-markdown">
       {parseMarkdown(text).map((block, index) => {
@@ -50,7 +75,7 @@ export function MessageMarkdown({ text }: { text: string }) {
             <ul key={index}>
               {block.items.map((item, itemIndex) => (
                 <li key={itemIndex}>
-                  <InlineContent nodes={item} />
+                  <InlineContent nodes={item} onOpenLink={onOpenLink} />
                 </li>
               ))}
             </ul>
@@ -60,7 +85,7 @@ export function MessageMarkdown({ text }: { text: string }) {
             <ol key={index}>
               {block.items.map((item, itemIndex) => (
                 <li key={itemIndex}>
-                  <InlineContent nodes={item} />
+                  <InlineContent nodes={item} onOpenLink={onOpenLink} />
                 </li>
               ))}
             </ol>
@@ -70,7 +95,7 @@ export function MessageMarkdown({ text }: { text: string }) {
             {block.lines.map((line, lineIndex) => (
               <span key={lineIndex}>
                 {lineIndex > 0 && <br />}
-                <InlineContent nodes={line} />
+                <InlineContent nodes={line} onOpenLink={onOpenLink} />
               </span>
             ))}
           </p>

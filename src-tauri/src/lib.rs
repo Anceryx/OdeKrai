@@ -30,6 +30,7 @@ fn get_build_info(caller: tauri::WebviewWindow) -> Result<BuildInfo, String> {
 pub mod agent;
 mod agent_home;
 mod diagnostics;
+mod external_links;
 mod hardware;
 mod history;
 mod local_models;
@@ -753,6 +754,7 @@ pub fn run() -> Result<(), tauri::Error> {
         })
         .invoke_handler(tauri::generate_handler![
             get_build_info,
+            external_links::open_external_link,
             hardware::get_hardware_profile,
             local_models::download_local_model,
             local_models::cancel_local_model_download,

@@ -26,6 +26,7 @@ describe('ConversationsScreen', () => {
         conversationSidebarWidth={230}
         onToggleConversationSidebar={() => undefined}
         onResizeConversationSidebar={() => undefined}
+        onOpenLink={() => undefined}
         assistantUsesMascot={false}
         onFixConfiguration={() => undefined}
         onRetry={() => undefined}
@@ -63,6 +64,7 @@ describe('ConversationsScreen', () => {
         conversationSidebarWidth={230}
         onToggleConversationSidebar={() => undefined}
         onResizeConversationSidebar={() => undefined}
+        onOpenLink={() => undefined}
         assistantUsesMascot={false}
         onFixConfiguration={() => undefined}
         onRetry={() => undefined}
