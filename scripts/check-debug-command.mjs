@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 
 const commandName = 'submit_simulated_action';
 const declarationPattern = new RegExp(
-  String.raw`#\[tauri::command\]\s*pub\s+fn\s+${commandName}\s*\(`,
+  String.raw`#\[tauri::command\]\s*pub\s+(?:async\s+)?fn\s+${commandName}\s*\(`,
   'g',
 );
 const registrationPattern = new RegExp(String.raw`security::${commandName}\s*,`, 'g');
