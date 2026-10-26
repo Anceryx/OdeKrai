@@ -20,23 +20,30 @@ export function SidebarNavigation({
   onSelectSection,
   onSetChatMode,
   keySavedForSession,
+  compact = false,
 }: {
   section: Section;
   onSelectSection: (section: Section) => void;
   onSetChatMode: (enabled: boolean) => void;
   keySavedForSession: boolean;
+  compact?: boolean;
 }) {
   return (
-    <nav className="nav-list" aria-label="Navegação principal">
+    <nav
+      className={`nav-list ${compact ? 'nav-list-compact' : ''}`}
+      aria-label="Navegação principal"
+    >
       {navigationGroups.map((group) => (
         <div className="nav-group" key={group}>
-          <span className="nav-heading">{group}</span>
+          {!compact && <span className="nav-heading">{group}</span>}
           {navigationItems
             .filter((item) => item.group === group)
             .map((item) => (
               <button
                 className={`nav-item ${section === item.id ? 'active' : ''}`}
                 key={item.id}
+                title={compact ? item.label : undefined}
+                aria-label={compact ? item.label : undefined}
                 onClick={() => {
                   onSelectSection(item.id);
                   onSetChatMode(false);
@@ -45,7 +52,7 @@ export function SidebarNavigation({
                 <span className="nav-icon">
                   <Icon name={item.icon} size={20} />
                 </span>
-                {item.label}
+                {!compact && item.label}
                 {item.id === 'providers' && (
                   <span
                     className="nav-status"

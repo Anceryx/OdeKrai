@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import type { ChatMessage } from '../../core/provider-messages';
 import { filterConversations, presentMessages, type ConversationSummary } from '../../core/chat';
 import { safeMarkdownUrl } from '../../core/markdown';
@@ -8,6 +8,7 @@ import { PetSprite } from '../PetSprite';
 import { MessageMarkdown } from '../MessageMarkdown';
 import appIcon from '../../assets/odekrai-app-icon.png';
 import { initials, type ProfileData } from '../Profile';
+import { ResizeHandle } from '../ResizeHandle';
 
 export function ConversationsScreen({
   messages,
@@ -26,6 +27,10 @@ export function ConversationsScreen({
   providerName,
   providerModel,
   providerConfigured,
+  conversationSidebarCollapsed,
+  conversationSidebarWidth,
+  onToggleConversationSidebar,
+  onResizeConversationSidebar,
   assistantUsesMascot,
   onFixConfiguration,
   onRetry,
@@ -49,6 +54,10 @@ export function ConversationsScreen({
   providerName: string;
   providerModel: string;
   providerConfigured: boolean;
+  conversationSidebarCollapsed: boolean;
+  conversationSidebarWidth: number;
+  onToggleConversationSidebar: () => void;
+  onResizeConversationSidebar: (width: number) => void;
   assistantUsesMascot: boolean;
   onFixConfiguration: () => void;
   onRetry: () => void;
@@ -84,7 +93,14 @@ export function ConversationsScreen({
   }, [messages, busy]);
 
   return (
-    <div className="chat-view">
+    <div
+      className={`chat-view ${conversationSidebarCollapsed ? 'conversation-sidebar-collapsed' : ''}`}
+      style={
+        {
+          '--conversation-sidebar-width': `${conversationSidebarCollapsed ? 0 : conversationSidebarWidth}px`,
+        } as CSSProperties
+      }
+    >
       <aside className="conversation-sidebar" aria-label="Lista de conversas">
         <Button type="button" variant="primary" onClick={onNewConversation} disabled={busy}>
           Nova conversa
@@ -160,7 +176,29 @@ export function ConversationsScreen({
             </p>
           )}
         </div>
+        {!conversationSidebarCollapsed && (
+          <ResizeHandle
+            label="Redimensionar lista de conversas"
+            value={conversationSidebarWidth}
+            min={170}
+            max={360}
+            onResize={onResizeConversationSidebar}
+          />
+        )}
       </aside>
+      <button
+        type="button"
+        className="conversation-panel-toggle"
+        aria-label={
+          conversationSidebarCollapsed
+            ? 'Expandir lista de conversas'
+            : 'Recolher lista de conversas'
+        }
+        aria-expanded={!conversationSidebarCollapsed}
+        onClick={onToggleConversationSidebar}
+      >
+        {conversationSidebarCollapsed ? '›' : '‹'}
+      </button>
       <section className="chat-thread" aria-label="Conversa atual">
         <header className="chat-header">
           <div className="chat-title-wrap">

@@ -25,6 +25,12 @@ export type AppSettings = {
   activeProviderId: string;
   fallbackProviderIds: string[];
   dailyTokenLimit: number;
+  layout: {
+    sidebarCollapsed: boolean;
+    sidebarWidth: number;
+    conversationSidebarCollapsed: boolean;
+    conversationSidebarWidth: number;
+  };
   providers: Record<string, ProviderSettings>;
   companion: {
     enabled: boolean;
@@ -75,6 +81,12 @@ export const defaultSettings: AppSettings = {
   activeProviderId: 'openai',
   fallbackProviderIds: [],
   dailyTokenLimit: 100_000,
+  layout: {
+    sidebarCollapsed: false,
+    sidebarWidth: 254,
+    conversationSidebarCollapsed: false,
+    conversationSidebarWidth: 230,
+  },
   providers: {},
   companion: {
     enabled: false,
@@ -209,6 +221,10 @@ export function loadSettingsWithWarnings(): { settings: AppSettings; warnings: s
       value.dailyTokenLimit <= 100_000_000
         ? value.dailyTokenLimit
         : defaultSettings.dailyTokenLimit;
+    const layoutValue =
+      value.layout && typeof value.layout === 'object'
+        ? (value.layout as Partial<AppSettings['layout']>)
+        : {};
     const migrated = { ...value } as Record<string, unknown>;
     delete migrated.provider;
     return {
@@ -223,6 +239,26 @@ export function loadSettingsWithWarnings(): { settings: AppSettings; warnings: s
         activeProviderId,
         fallbackProviderIds,
         dailyTokenLimit,
+        layout: {
+          sidebarCollapsed:
+            typeof layoutValue.sidebarCollapsed === 'boolean'
+              ? layoutValue.sidebarCollapsed
+              : defaultSettings.layout.sidebarCollapsed,
+          sidebarWidth:
+            typeof layoutValue.sidebarWidth === 'number' &&
+            Number.isFinite(layoutValue.sidebarWidth)
+              ? Math.max(190, Math.min(340, layoutValue.sidebarWidth))
+              : defaultSettings.layout.sidebarWidth,
+          conversationSidebarCollapsed:
+            typeof layoutValue.conversationSidebarCollapsed === 'boolean'
+              ? layoutValue.conversationSidebarCollapsed
+              : defaultSettings.layout.conversationSidebarCollapsed,
+          conversationSidebarWidth:
+            typeof layoutValue.conversationSidebarWidth === 'number' &&
+            Number.isFinite(layoutValue.conversationSidebarWidth)
+              ? Math.max(170, Math.min(360, layoutValue.conversationSidebarWidth))
+              : defaultSettings.layout.conversationSidebarWidth,
+        },
         providers,
         companion: {
           ...defaultSettings.companion,

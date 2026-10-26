@@ -67,6 +67,30 @@ describe('preferências persistidas', () => {
     expect(loadSettings().companion.sounds.replacements.success).toBe('/sounds/error.ogg');
   });
 
+  it('persiste o estado e as larguras dos painéis, limitando valores inválidos', () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    });
+    const settings = loadSettings();
+    settings.layout.sidebarCollapsed = true;
+    settings.layout.sidebarWidth = 320;
+    settings.layout.conversationSidebarCollapsed = true;
+    settings.layout.conversationSidebarWidth = 280;
+    expect(saveSettings(settings)).toBe(true);
+    expect(loadSettings().layout).toEqual(settings.layout);
+
+    storage.set(
+      'odekrai.settings.v2',
+      JSON.stringify({ ...settings, layout: { sidebarWidth: 900, conversationSidebarWidth: 20 } }),
+    );
+    expect(loadSettings().layout).toMatchObject({
+      sidebarWidth: 340,
+      conversationSidebarWidth: 170,
+    });
+  });
+
   it('usa Encerrar por padrão e restaura valores inválidos de fechamento', () => {
     const storage = new Map<string, string>();
     vi.stubGlobal('localStorage', {

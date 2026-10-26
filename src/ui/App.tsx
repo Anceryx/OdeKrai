@@ -78,6 +78,7 @@ import { useAppEffects } from './hooks/useAppEffects';
 
 import { useAppState } from './hooks/useAppState';
 import { ScreenErrorBoundary } from './ScreenErrorBoundary';
+import { ResizeHandle } from './ResizeHandle';
 const screenLoading = (
   <div className="screen-loading" role="status">
     Carregando tela…
@@ -193,6 +194,25 @@ function MainApp() {
   const shownProviderSettings = usedProviderId ? settings.providers[usedProviderId] : undefined;
   const shownProviderName = usedProvider?.name ?? activeProvider.name;
   const shownProviderModel = shownProviderSettings?.model ?? activeProvider.model;
+
+  useEffect(() => {
+    const onShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'b') return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+      )
+        return;
+      event.preventDefault();
+      setSettings((current) => ({
+        ...current,
+        layout: { ...current.layout, sidebarCollapsed: !current.layout.sidebarCollapsed },
+      }));
+    };
+    window.addEventListener('keydown', onShortcut);
+    return () => window.removeEventListener('keydown', onShortcut);
+  }, [setSettings]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -527,7 +547,10 @@ function MainApp() {
     <div
       className={`app-shell ${settings.reduceMotion ? 'reduce-motion' : ''} ${chatMode ? 'chat-mode' : ''}`}
     >
-      <aside className="sidebar">
+      <aside
+        className={`sidebar ${settings.layout.sidebarCollapsed ? 'sidebar-collapsed' : ''}`}
+        style={{ width: settings.layout.sidebarCollapsed ? 72 : settings.layout.sidebarWidth }}
+      >
         <button
           className="profile-card"
           onClick={() => {
@@ -545,7 +568,10 @@ function MainApp() {
           </div>
           <div className="profile-copy">
             <strong>{profile.displayName || 'Seu perfil'}</strong>
-            <span>{profile.nickname || 'Local neste dispositivo'}</span>
+            <span>
+              {profile.nickname ||
+                (profile.displayName ? 'Editar perfil' : 'Local neste dispositivo')}
+            </span>
           </div>
         </button>
         <SidebarNavigation
@@ -553,11 +579,42 @@ function MainApp() {
           onSelectSection={setSection}
           onSetChatMode={setChatMode}
           keySavedForSession={keySavedForSession}
+          compact={settings.layout.sidebarCollapsed}
         />
+        {!settings.layout.sidebarCollapsed && (
+          <ResizeHandle
+            label="Redimensionar barra lateral"
+            value={settings.layout.sidebarWidth}
+            min={190}
+            max={340}
+            onResize={(sidebarWidth) =>
+              setSettings((current) => ({
+                ...current,
+                layout: { ...current.layout, sidebarWidth },
+              }))
+            }
+          />
+        )}
       </aside>
 
       <main className="main-area">
         <header className="topbar">
+          <button
+            type="button"
+            className="sidebar-toggle"
+            aria-label={
+              settings.layout.sidebarCollapsed ? 'Expandir barra lateral' : 'Recolher barra lateral'
+            }
+            title="Alternar barra lateral (Ctrl+B)"
+            onClick={() =>
+              setSettings((current) => ({
+                ...current,
+                layout: { ...current.layout, sidebarCollapsed: !current.layout.sidebarCollapsed },
+              }))
+            }
+          >
+            {settings.layout.sidebarCollapsed ? '»' : '«'}
+          </button>
           <div className="breadcrumbs">
             <span>OdeKrai</span>
             <b>/</b>
@@ -656,6 +713,23 @@ function MainApp() {
               cancel={cancelRequest}
               providerName={shownProviderName}
               providerModel={shownProviderModel}
+              conversationSidebarCollapsed={settings.layout.conversationSidebarCollapsed}
+              conversationSidebarWidth={settings.layout.conversationSidebarWidth}
+              onToggleConversationSidebar={() =>
+                setSettings((current) => ({
+                  ...current,
+                  layout: {
+                    ...current.layout,
+                    conversationSidebarCollapsed: !current.layout.conversationSidebarCollapsed,
+                  },
+                }))
+              }
+              onResizeConversationSidebar={(conversationSidebarWidth) =>
+                setSettings((current) => ({
+                  ...current,
+                  layout: { ...current.layout, conversationSidebarWidth },
+                }))
+              }
               providerConfigured={keySavedForSession}
               assistantUsesMascot={settings.useMascotAsAssistantAvatar}
               onFixConfiguration={() => {

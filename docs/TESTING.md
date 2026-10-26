@@ -41,6 +41,12 @@ island/mascote.
 - Validação visual pendente no Windows: Visão geral, Conversas, Identidade e memória, Conectores, Assistente, Configurações, Permissões, Atividade e Perfil em 1250 × 700 e 1000 × 600; conferir foco, contraste e escala de texto.
 - `assets-src/iconly/` contém SVGs locais ainda não rastreados, mas não há arquivo de licença nem atribuição informada. Os ícones não foram incorporados; a atribuição e o uso dependem de confirmar os direitos.
 
+### Painéis da tela Conversas
+
+- `Conversations.test.tsx` verifica os estados expandido e recolhido da lista; `settings.test.ts` verifica a persistência e os limites das larguras.
+- A barra lateral alterna com `Ctrl+B`; as alças dos painéis aceitam arraste e setas do teclado. As preferências ficam nas configurações locais da interface.
+- Validação visual pendente no executável Windows em 1000 × 600, incluindo foco, redimensionamento por ponteiro e legibilidade no modo compacto.
+
 ### UI-3 — pet 2D
 
 - `src/core/pets.test.ts`: rejeita catálogo ausente e nomes de arquivo inválidos, verifica mapeamento da FSM, fallback para PNG ausente e preferência de movimento reduzido.
