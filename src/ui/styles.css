@@ -4226,6 +4226,30 @@ html.island-window-html {
   font-size: 0.875rem;
 }
 
+.diagnostic-banner-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.diagnostic-banner-heading button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.diagnostic-item details {
+  margin: 6px 0;
+}
+
+.diagnostic-item details code {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
 .diagnostic-banner p {
   margin: 6px 0 0;
 }
