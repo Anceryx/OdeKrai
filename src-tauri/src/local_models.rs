@@ -290,7 +290,7 @@ fn manifest_model(id: &str) -> Result<Model, String> {
         .models
         .into_iter()
         .find(|model| model.id == id)
-        .ok_or_else(|| "Modelo não encontrado no catálogo.")?;
+        .ok_or("Modelo não encontrado no catálogo.")?;
     if Path::new(&model.file)
         .file_name()
         .and_then(|name| name.to_str())

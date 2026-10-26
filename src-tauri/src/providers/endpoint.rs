@@ -9,7 +9,7 @@ pub(super) fn provider_endpoint(provider_id: &str, base_url: &str) -> Result<Url
     if provider_id == "local" {
         validate_local_url(&url)?;
         let path = url.path().trim_end_matches('/');
-        if path != "" && path != "/v1" {
+        if !path.is_empty() && path != "/v1" {
             return Err("O endereço local deve terminar na raiz ou em /v1.".into());
         }
         url.set_path("/v1/chat/completions");
