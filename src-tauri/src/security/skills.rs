@@ -78,6 +78,7 @@ pub(crate) fn result_is_untrusted(
         SimulatedAction::FilesList { .. }
             | SimulatedAction::FilesSearch { .. }
             | SimulatedAction::FilesRead { .. }
+            | SimulatedAction::ReadFile { .. }
     ) {
         let (root, _) = resolve_action_target(app, &action, false)?;
         let workspace = crate::agent_home::workspace_path(app)?;
@@ -102,7 +103,7 @@ fn is_external_file_root(
     Ok(root != workspace)
 }
 
-fn action_id(action: &SimulatedAction) -> &'static str {
+fn action_id(action: &SimulatedAction) -> &str {
     match action {
         SimulatedAction::FilesList { .. } => "files.list",
         SimulatedAction::FilesSearch { .. } => "files.search",
@@ -113,6 +114,8 @@ fn action_id(action: &SimulatedAction) -> &'static str {
         SimulatedAction::SendMessage { .. } => "simulated.send_message",
         SimulatedAction::Payment { .. } => "simulated.payment",
         SimulatedAction::Productivity { skill_id, .. } => match skill_id.as_str() {
+            "files.write" | "files.append" | "files.mkdir" | "files.copy" | "files.move"
+            | "files.rename" | "files.delete" | "files.apply_plan" => skill_id,
             "calendar.create_event" => "calendar.create_event",
             "doc.create_markdown" => "doc.create_markdown",
             "doc.create_text" => "doc.create_text",
@@ -131,7 +134,15 @@ fn parse_action(id: &str, params: &Value) -> Result<SimulatedAction, String> {
         .ok_or("Os parâmetros da habilidade são inválidos.")?;
     let payload = if matches!(
         id,
-        "calendar.create_event"
+        "files.write"
+            | "files.append"
+            | "files.mkdir"
+            | "files.copy"
+            | "files.move"
+            | "files.rename"
+            | "files.delete"
+            | "files.apply_plan"
+            | "calendar.create_event"
             | "doc.create_markdown"
             | "doc.create_text"
             | "sheet.create_csv"
@@ -246,7 +257,9 @@ pub(super) fn resolve_action_target(
     if !relative.is_empty() {
         relative_path(&relative)?;
     }
-    if matches!(action, SimulatedAction::WriteFile { .. }) {
+    if matches!(action, SimulatedAction::WriteFile { .. })
+        || matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id.starts_with("files."))
+    {
         workspace::preview_target(&root, &relative)?;
     } else if !relative.is_empty() {
         workspace::safe_target(&root, &relative)?;
@@ -353,6 +366,14 @@ pub fn registry() -> Vec<Skill> {
         ("files.list", "Listar arquivos", "Lista arquivos e pastas em uma pasta permitida, com limites.", "Liste itens de uma pasta usando profundidade e limite explícitos.", json!({"type":"object","properties":{"path":{"type":"string"},"depth":{"type":"integer","minimum":1,"maximum":8},"limit":{"type":"integer","minimum":1,"maximum":500}},"required":["path","depth","limit"],"additionalProperties":false}), ResultTrust::Local),
         ("files.search", "Pesquisar arquivos", "Pesquisa nomes ou conteúdo textual com limites explícitos.", "Pesquise arquivos por nome ou trecho de texto. Informe pasta, modo, profundidade, tamanho máximo e limite de resultados.", json!({"type":"object","properties":{"path":{"type":"string"},"query":{"type":"string","minLength":1,"maxLength":256},"by":{"type":"string","enum":["name","text"]},"depth":{"type":"integer","minimum":1,"maximum":8},"max_file_bytes":{"type":"integer","minimum":1,"maximum":65536},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["path","query","by","depth","max_file_bytes","limit"],"additionalProperties":false}), ResultTrust::Local),
         ("files.read", "Ler arquivo de texto", "Lê texto UTF-8 ou Windows-1252 de até 64 KiB; recusa binários.", "Leia um arquivo textual de até 64 KiB em pasta permitida.", json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}), ResultTrust::Local),
+        ("files.write", "Gravar arquivo", "Cria ou substitui arquivo textual com backup em .history.", "Grave um arquivo de texto; substituições preservam a versão anterior.", json!({"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string","maxLength":1000000}},"required":["path","content"],"additionalProperties":false}), ResultTrust::Local),
+        ("files.append", "Acrescentar ao arquivo", "Acrescenta texto a arquivo existente.", "Acrescente texto a arquivo existente.", json!({"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string","maxLength":1000000}},"required":["path","content"],"additionalProperties":false}), ResultTrust::Local),
+        ("files.mkdir", "Criar pasta", "Cria uma pasta em local permitido.", "Crie uma pasta em local permitido.", json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}), ResultTrust::Local),
+        ("files.copy", "Copiar arquivo", "Copia um arquivo para outro caminho permitido.", "Copie um arquivo com destino relativo em destination.", json!({"type":"object","properties":{"path":{"type":"string"},"destination":{"type":"string"}},"required":["path","destination"],"additionalProperties":false}), ResultTrust::Local),
+        ("files.move", "Mover arquivo", "Move um arquivo para outro caminho permitido.", "Mova um arquivo com destino relativo em destination.", json!({"type":"object","properties":{"path":{"type":"string"},"destination":{"type":"string"}},"required":["path","destination"],"additionalProperties":false}), ResultTrust::Local),
+        ("files.rename", "Renomear arquivo", "Renomeia um arquivo sem abrir seu conteúdo.", "Renomeie um arquivo com destino relativo em destination.", json!({"type":"object","properties":{"path":{"type":"string"},"destination":{"type":"string"}},"required":["path","destination"],"additionalProperties":false}), ResultTrust::Local),
+        ("files.delete", "Enviar à Lixeira", "Envia arquivo comum à Lixeira do Windows.", "Envie um arquivo comum à Lixeira do Windows.", json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}), ResultTrust::Local),
+        ("files.apply_plan", "Aplicar lote de arquivos", "Move até 50 arquivos após prévia e aprovação do lote.", "Mova arquivos em lote com source e destination relativos à pasta path.", json!({"type":"object","properties":{"path":{"type":"string"},"items":{"type":"array","minItems":1,"maxItems":50,"items":{"type":"object","properties":{"source":{"type":"string"},"destination":{"type":"string"}},"required":["source","destination"],"additionalProperties":false}}},"required":["path","items"],"additionalProperties":false}), ResultTrust::Local),
         (
             "workspace.read_file",
             "Ler arquivo",
@@ -433,6 +454,20 @@ fn action_example(id: &str) -> SimulatedAction {
         },
         "files.read" => SimulatedAction::FilesRead {
             path: "sample.txt".into(),
+        },
+        id if id.starts_with("files.") => SimulatedAction::Productivity {
+            skill_id: id.into(),
+            params: match id {
+                "files.write" | "files.append" => json!({"path":"sample.txt","content":""}),
+                "files.mkdir" | "files.delete" => json!({"path":"sample"}),
+                "files.copy" | "files.move" | "files.rename" => {
+                    json!({"path":"sample.txt","destination":"copy.txt"})
+                }
+                "files.apply_plan" => {
+                    json!({"path":"","items":[{"source":"a.txt","destination":"b.txt"}]})
+                }
+                _ => json!({"path":"sample.txt"}),
+            },
         },
         "workspace.read_file" => SimulatedAction::ReadFile {
             path: "sample.txt".into(),
@@ -772,6 +807,12 @@ mod tests {
         std::fs::create_dir_all(&allowed).unwrap();
         assert!(!is_external_file_root(&workspace, &workspace).unwrap());
         assert!(is_external_file_root(&allowed, &workspace).unwrap());
+        assert!(
+            action_metadata(&SimulatedAction::FilesRead {
+                path: "a.txt".into()
+            })
+            .2
+        );
         let _ = std::fs::remove_dir_all(base);
     }
 

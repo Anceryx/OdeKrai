@@ -164,6 +164,11 @@ pub enum SimulatedAction {
     },
     #[serde(rename = "files.read")]
     FilesRead { path: String },
+    #[serde(rename = "productivity")]
+    Productivity {
+        skill_id: String,
+        params: serde_json::Value,
+    },
     #[serde(rename = "workspace.read_file")]
     ReadFile { path: String },
     #[serde(rename = "workspace.write_file")]
@@ -174,11 +179,6 @@ pub enum SimulatedAction {
     SendMessage { recipient: String, message: String },
     #[serde(rename = "simulated.payment")]
     Payment { amount_cents: u64, currency: String },
-    #[serde(rename = "productivity")]
-    Productivity {
-        skill_id: String,
-        params: serde_json::Value,
-    },
 }
 
 #[derive(Deserialize)]

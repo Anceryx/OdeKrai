@@ -343,6 +343,13 @@ fn validate_tool_call(call: &ToolCall, tools: &[ToolDef]) -> Result<(), String> 
         "files.list" => serde_json::from_value::<FilesListArgs>(call.args.clone()).is_ok(),
         "files.search" => serde_json::from_value::<FilesSearchArgs>(call.args.clone()).is_ok(),
         "files.read" => serde_json::from_value::<WorkspacePathArgs>(call.args.clone()).is_ok(),
+        "files.write" | "files.append" => {
+            serde_json::from_value::<WorkspaceWriteArgs>(call.args.clone()).is_ok()
+        }
+        "files.mkdir" | "files.delete" => {
+            serde_json::from_value::<WorkspacePathArgs>(call.args.clone()).is_ok()
+        }
+        "files.copy" | "files.move" | "files.rename" | "files.apply_plan" => true,
         "workspace.list" | "workspace.read_file" | "workspace.delete_file" => {
             serde_json::from_value::<WorkspacePathArgs>(call.args.clone()).is_ok()
         }

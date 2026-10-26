@@ -23,9 +23,9 @@ Revisão do código e dos testes em 26/10/2026. Os identificadores `H0`, `U1`, `
 
 ## Habilidades presentes no registro ativo
 
-O registro em `src-tauri/src/security/skills.rs::registry` contém `files.list`, `files.search`, `files.read`, `workspace.read_file`, `workspace.write_file`, `workspace.delete_file`, `simulated.send_message`, `simulated.payment`, `calendar.create_event`, `doc.create_markdown`, `doc.create_text`, `mail.draft`, `web.fetch` e `sheet.create_csv`. `simulated.payment` é um bloqueio permanente e `simulated.send_message` apenas simula; não são integrações externas.
+O registro em `src-tauri/src/security/skills.rs::registry` contém `files.list`, `files.search`, `files.read`, `files.write`, `files.append`, `files.mkdir`, `files.copy`, `files.move`, `files.rename`, `files.delete`, `files.apply_plan`, `workspace.read_file`, `workspace.write_file`, `workspace.delete_file`, `simulated.send_message`, `simulated.payment`, `calendar.create_event`, `doc.create_markdown`, `doc.create_text`, `mail.draft`, `web.fetch` e `sheet.create_csv`. `simulated.payment` é um bloqueio permanente e `simulated.send_message` apenas simula; não são integrações externas.
 
-Não há registro/executor para `files.write`, `files.append`, `files.mkdir`, `files.copy`, `files.move`, `files.rename`, `files.delete`, `files.apply_plan`; ferramentas de abrir, iniciar ou controle do sistema; lembretes; planilhas XLSX; operações de memória; nem Discord. Essas habilidades não foram criadas nesta tarefa.
+O registro e o executor de `files.write`, `files.append`, `files.mkdir`, `files.copy`, `files.move`, `files.rename`, `files.delete` e `files.apply_plan` foram adicionados em SK-2b. Ferramentas de abrir, iniciar ou controle do sistema; lembretes; planilhas XLSX; operações de memória; e Discord continuam fora do escopo e não foram implementados.
 
 ## Defeito de funcionamento corrigido
 

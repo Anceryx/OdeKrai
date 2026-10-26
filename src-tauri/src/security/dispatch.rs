@@ -2,12 +2,15 @@ use super::*;
 
 pub(super) fn action_metadata(
     action: &SimulatedAction,
-) -> (&'static str, Risk, bool, Option<&'static str>) {
+) -> (&str, Risk, bool, Option<&'static str>) {
     let tool = tool_for(action);
     let workspace_action = match action {
         SimulatedAction::ReadFile { .. }
         | SimulatedAction::WriteFile { .. }
         | SimulatedAction::DeleteFile { .. } => true,
+        SimulatedAction::FilesList { .. }
+        | SimulatedAction::FilesSearch { .. }
+        | SimulatedAction::FilesRead { .. } => true,
         SimulatedAction::Productivity { skill_id, .. } => skill_id != "web.fetch",
         _ => false,
     };
@@ -25,6 +28,19 @@ pub(super) fn action_metadata(
         SimulatedAction::SendMessage { message, .. } if contains_secret_marker(message) => {
             Some("fixed_block_secret_exfiltration")
         }
+        SimulatedAction::Productivity { skill_id, params } if skill_id.starts_with("files.") => {
+            let raw = params
+                .get("path")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            protected_path_block(raw).or_else(|| {
+                params
+                    .get("content")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(contains_secret_marker)
+                    .then_some("fixed_block_secret_storage")
+            })
+        }
         SimulatedAction::Productivity { skill_id, params } if skill_id == "mail.draft" => {
             let sensitive_text = ["to", "subject", "body"]
                 .iter()
@@ -37,6 +53,8 @@ pub(super) fn action_metadata(
     };
     let tool_name = match action {
         SimulatedAction::Productivity { skill_id, .. } => match skill_id.as_str() {
+            "files.write" | "files.append" | "files.mkdir" | "files.copy" | "files.move"
+            | "files.rename" | "files.delete" | "files.apply_plan" => skill_id,
             "calendar.create_event" => "calendar.create_event",
             "doc.create_markdown" => "doc.create_markdown",
             "doc.create_text" => "doc.create_text",
@@ -48,6 +66,16 @@ pub(super) fn action_metadata(
         _ => tool.name(),
     };
     (tool_name, tool.risk(action), workspace_action, fixed)
+}
+
+fn require_batch_approval(action: &SimulatedAction, decision: Decision) -> Decision {
+    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "files.apply_plan")
+        && matches!(decision, Decision::Allow(_))
+    {
+        Decision::AskUser("batch_requires_approval")
+    } else {
+        decision
+    }
 }
 
 pub(super) fn summary(action: &SimulatedAction) -> String {
@@ -402,14 +430,17 @@ pub(super) async fn submit_agent_action(
             });
         }
     };
-    let decision = policy::decide_with_taint(
-        effective_mode(app)?,
-        risk,
-        &origin,
-        inside,
-        fixed,
-        override_enabled(app, tool)?,
-        tainted,
+    let decision = require_batch_approval(
+        &action,
+        policy::decide_with_taint(
+            effective_mode(app)?,
+            risk,
+            &origin,
+            inside,
+            fixed,
+            override_enabled(app, tool)?,
+            tainted,
+        ),
     );
     let (decision_name, rule) = match decision {
         Decision::Allow(rule) => ("allow", rule),
@@ -928,5 +959,26 @@ pub(super) fn close_approval_if_empty(app: &tauri::AppHandle, state: &SecuritySt
         if let Some(window) = app.get_webview_window("approval") {
             let _ = window.close();
         }
+    }
+}
+
+#[cfg(test)]
+mod batch_approval_tests {
+    use super::*;
+
+    #[test]
+    fn apply_plan_always_requires_one_explicit_batch_approval() {
+        let action = SimulatedAction::Productivity {
+            skill_id: "files.apply_plan".into(),
+            params: serde_json::json!({"path":"","items":[]}),
+        };
+        assert_eq!(
+            require_batch_approval(&action, Decision::Allow("mode_total_workspace")),
+            Decision::AskUser("batch_requires_approval")
+        );
+        assert_eq!(
+            require_batch_approval(&action, Decision::AskUser("mode_always_ask")),
+            Decision::AskUser("mode_always_ask")
+        );
     }
 }
