@@ -24,7 +24,7 @@ mod audit;
 mod dispatch;
 mod kill_switch;
 pub mod skills;
-mod workspace;
+pub(crate) mod workspace;
 #[cfg(test)]
 pub(crate) use approvals::ApprovalBroker;
 pub(crate) use approvals::ApprovalDecision;
@@ -174,6 +174,11 @@ pub enum SimulatedAction {
     SendMessage { recipient: String, message: String },
     #[serde(rename = "simulated.payment")]
     Payment { amount_cents: u64, currency: String },
+    #[serde(rename = "productivity")]
+    Productivity {
+        skill_id: String,
+        params: serde_json::Value,
+    },
 }
 
 #[derive(Deserialize)]

@@ -2,6 +2,8 @@
 
 ## Não lançado
 
+- Adicionadas habilidades Rust para exportar eventos RFC 5545 `.ics`, documentos Markdown/texto e CSV. O evento é aberto no calendário padrão para confirmação; não foi adicionada integração por API ou OAuth.
+
 - Adicionadas a tela de recursos do computador, recomendações indicativas de perfis Qwen e catálogo de GGUF. Requisitos mínimos/contexto não verificados; a interface não baixa nem executa modelos.
 
 ### Áudio

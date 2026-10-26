@@ -51,6 +51,7 @@ island/mascote.
 
 - `markdown.test.ts` cobre links Markdown e URLs soltas, esquemas proibidos, caracteres de controle e normalização de domínios; `MessageMarkdown.test.tsx` verifica o rótulo do domínio de destino.
 - `external_links.rs` valida HTTP, HTTPS e mailto, recusa IPs privados/loopback/especiais e verifica destinos maliciosos antes de usar o navegador padrão; os testes não fazem chamadas de rede.
+- `productivity.rs` verifica CRLF, escape RFC 5545, UTC, dobra de linhas, datas com fuso, fim posterior ao início e CSV com acentos/delimitadores. A abertura do calendário padrão e a interoperabilidade do `.ics` precisam de validação nativa no Windows.
 - A confirmação de domínio e a abertura pelo navegador padrão ainda precisam de validação visual/nativa no Windows.
 
 ### UI-3 — pet 2D

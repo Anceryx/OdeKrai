@@ -8,12 +8,14 @@ Aplicativo OdeKrai para Windows, desenvolvido com React, TypeScript e Tauri 2. O
 
 ## Recursos implementados
 
+- Habilidades locais em Rust para ler arquivos e criar eventos `.ics`, documentos Markdown/texto e CSV em pastas permitidas. Eventos são abertos no calendário padrão para confirmação; não há integração com Google Calendar nem OAuth.
+
 - Aplicativo com visão geral, conversas, catálogo de 17 provedores e configurações do assistente.
 - Uma janela nativa do Tauri para os modos Ilha e Livre do pet, com posição, tamanho e modo persistidos.
 - Preferências locais sem chaves de API.
 - Armazenamento de credenciais via Gerenciador de Credenciais do Windows e envio de mensagens pelo processo Rust.
 - Histórico de conversas em SQLite local, com retomada da conversa e respostas incrementais para Anthropic e adaptadores Chat Completions. A Perplexity ainda retorna a resposta completa.
-- Pasta pessoal escolhida na primeira execução, identidade `ODEKRAI.md` e memória manual editáveis. O histórico pode ser apagado na interface. O motor de permissões em Rust inclui aprovação nativa, auditoria encadeada e kill switch; nesta fase, só há ferramentas simuladas.
+- Pasta pessoal escolhida na primeira execução, identidade `ODEKRAI.md` e memória manual editáveis. O histórico pode ser apagado na interface. O motor de permissões em Rust inclui aprovação nativa, auditoria encadeada, kill switch, habilidades de arquivos e exportação de calendário, documentos e CSV.
 - Perfil local em SQLite, com avatar reprocessado no Rust e nunca enviado aos provedores.
 - Instância única, CSP de produção restrita e permissões separadas para as janelas auxiliares.
 - Inicialização tolerante a falhas, modo seguro após interrupção e registro local de diagnóstico sem conteúdo de conversas.

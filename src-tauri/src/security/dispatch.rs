@@ -9,6 +9,7 @@ pub(super) fn action_metadata(
         SimulatedAction::ReadFile { .. }
             | SimulatedAction::WriteFile { .. }
             | SimulatedAction::DeleteFile { .. }
+            | SimulatedAction::Productivity { .. }
     );
     let fixed = match action {
         SimulatedAction::Payment { .. } => Some("fixed_block_payment"),
@@ -26,7 +27,17 @@ pub(super) fn action_metadata(
         }
         _ => None,
     };
-    (tool.name(), tool.risk(action), workspace_action, fixed)
+    let tool_name = match action {
+        SimulatedAction::Productivity { skill_id, .. } => match skill_id.as_str() {
+            "calendar.create_event" => "calendar.create_event",
+            "doc.create_markdown" => "doc.create_markdown",
+            "doc.create_text" => "doc.create_text",
+            "sheet.create_csv" => "sheet.create_csv",
+            _ => "productivity",
+        },
+        _ => tool.name(),
+    };
+    (tool_name, tool.risk(action), workspace_action, fixed)
 }
 
 pub(super) fn summary(action: &SimulatedAction) -> String {
@@ -53,6 +64,13 @@ pub(super) fn summary(action: &SimulatedAction) -> String {
             amount_cents,
             currency,
         } => format!("Pagamento bloqueado: {currency} {amount_cents}"),
+        SimulatedAction::Productivity { skill_id, params } => format!(
+            "{skill_id}: {}",
+            params
+                .get("path")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+        ),
     }
 }
 
@@ -96,6 +114,11 @@ pub(super) fn audit_params(action: &SimulatedAction) -> String {
             amount_cents,
             currency,
         } => format!("amount_cents={amount_cents}; currency={currency}"),
+        SimulatedAction::Productivity { skill_id, params } => format!(
+            "skill={skill_id}; params_sha256={}; bytes={}",
+            digest(params.to_string().as_bytes()),
+            params.to_string().len()
+        ),
     }
 }
 
@@ -111,11 +134,14 @@ pub(super) fn preview_for(
             | SimulatedAction::FilesList { .. }
             | SimulatedAction::FilesSearch { .. }
             | SimulatedAction::FilesRead { .. }
+            | SimulatedAction::Productivity { .. }
     );
     let (workspace, action) = if workspace_action {
         let write = matches!(
             action,
-            SimulatedAction::WriteFile { .. } | SimulatedAction::DeleteFile { .. }
+            SimulatedAction::WriteFile { .. }
+                | SimulatedAction::DeleteFile { .. }
+                | SimulatedAction::Productivity { .. }
         );
         super::skills::resolve_action_target(app, action, write)?
     } else {
@@ -260,11 +286,14 @@ fn execute_action_with_timeout(
             | SimulatedAction::FilesList { .. }
             | SimulatedAction::FilesSearch { .. }
             | SimulatedAction::FilesRead { .. }
+            | SimulatedAction::Productivity { .. }
     );
     let (workspace, action) = if workspace_action {
         let write = matches!(
             action,
-            SimulatedAction::WriteFile { .. } | SimulatedAction::DeleteFile { .. }
+            SimulatedAction::WriteFile { .. }
+                | SimulatedAction::DeleteFile { .. }
+                | SimulatedAction::Productivity { .. }
         );
         super::skills::resolve_action_target(app, action, write)?
     } else {
@@ -272,7 +301,7 @@ fn execute_action_with_timeout(
     };
     let tool = tool_for(&action);
     let started = Instant::now();
-    let result = tool.execute(&action, &workspace);
+    let result = tool.execute_with_app(&action, &workspace, app);
     if started.elapsed() > timeout {
         return Err("A ferramenta simulada excedeu o tempo limite.".into());
     }

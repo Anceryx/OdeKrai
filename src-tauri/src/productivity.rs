@@ -1,0 +1,540 @@
+use chrono::{DateTime, FixedOffset, Utc};
+use serde_json::Value;
+use sha2::Digest;
+use std::{
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
+use tauri_plugin_opener::OpenerExt;
+
+const MAX_TEXT_BYTES: usize = 1_000_000;
+
+pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
+    let object = params.as_object().ok_or("Parâmetros inválidos.")?;
+    let expected: &[&str] = match skill_id {
+        "calendar.create_event" => &[
+            "path",
+            "title",
+            "start",
+            "end",
+            "location",
+            "description",
+            "alert_minutes",
+        ],
+        "doc.create_markdown" | "doc.create_text" => &["path", "content"],
+        "sheet.create_csv" => &["path", "delimiter", "encoding", "headers", "rows"],
+        _ => return Err("Habilidade de produtividade desconhecida.".into()),
+    };
+    if object.len() != expected.len() || object.keys().any(|key| !expected.contains(&key.as_str()))
+    {
+        return Err("Os parâmetros da habilidade não correspondem ao esquema permitido.".into());
+    }
+    let path = object
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or("O caminho está ausente.")?;
+    if Path::new(path).is_absolute() {
+        crate::security::skills::validate_raw_folder_path(path)?;
+    } else {
+        crate::security::workspace::relative_path(path)?;
+    }
+    let content = object.get("content").and_then(Value::as_str);
+    match skill_id {
+        "calendar.create_event" => {
+            validate_extension(path, "ics")?;
+            let title = string_field(object, "title", 200)?;
+            let start = string_field(object, "start", 64)?;
+            let end = object.get("end").and_then(Value::as_str);
+            let location = string_field(object, "location", 500)?;
+            let description = string_field(object, "description", 4000)?;
+            if title.trim().is_empty()
+                || start.is_empty()
+                || location.contains('\0')
+                || description.contains('\0')
+            {
+                return Err("Os dados do evento são inválidos.".into());
+            }
+            let start = parse_datetime(start)?;
+            if let Some(end) = end {
+                if parse_datetime(end)? <= start {
+                    return Err("O fim do evento precisa ocorrer depois do início.".into());
+                }
+            }
+            if object
+                .get("alert_minutes")
+                .is_some_and(|v| !v.is_null() && v.as_u64().is_none_or(|n| n > 10080))
+            {
+                return Err("O alerta deve estar entre 0 e 10080 minutos.".into());
+            }
+        }
+        "doc.create_markdown" => {
+            validate_extension(path, "md")?;
+            validate_content(content)?;
+        }
+        "doc.create_text" => {
+            validate_extension(path, "txt")?;
+            validate_content(content)?;
+        }
+        "sheet.create_csv" => {
+            validate_extension(path, "csv")?;
+            let delimiter = object
+                .get("delimiter")
+                .and_then(Value::as_str)
+                .ok_or("Separador ausente.")?;
+            if !matches!(delimiter, "comma" | "semicolon" | "tab") {
+                return Err("Separador CSV inválido.".into());
+            }
+            let encoding = object
+                .get("encoding")
+                .and_then(Value::as_str)
+                .ok_or("Codificação ausente.")?;
+            if !matches!(encoding, "utf8_bom" | "windows_1252") {
+                return Err("Codificação CSV inválida.".into());
+            }
+            let headers = object
+                .get("headers")
+                .and_then(Value::as_array)
+                .ok_or("Cabeçalhos ausentes.")?;
+            let rows = object
+                .get("rows")
+                .and_then(Value::as_array)
+                .ok_or("Linhas ausentes.")?;
+            if headers.is_empty() || headers.len() > 100 || rows.len() > 10000 {
+                return Err("A planilha excede os limites permitidos.".into());
+            }
+            for row in rows {
+                let values = row.as_array().ok_or("Linha CSV inválida.")?;
+                if values.len() != headers.len()
+                    || values
+                        .iter()
+                        .any(|v| v.as_str().is_none_or(|s| s.len() > 4096))
+                {
+                    return Err("Todas as linhas devem ter a quantidade de colunas dos cabeçalhos e valores textuais curtos.".into());
+                }
+            }
+            if headers
+                .iter()
+                .any(|cell| cell.as_str().is_none_or(|value| value.len() > 256))
+            {
+                return Err("Os cabeçalhos devem conter textos de até 256 bytes.".into());
+            }
+        }
+        _ => unreachable!(),
+    }
+    Ok(())
+}
+
+pub(crate) fn preview(skill_id: &str, params: &Value, root: &Path) -> Result<String, String> {
+    validate(skill_id, params)?;
+    let path = resolve(root, params, false)?;
+    if skill_id == "calendar.create_event" {
+        let start = parse_datetime(params["start"].as_str().unwrap())?;
+        Ok(format!(
+            "Criar evento em {}\nTítulo: {}\nInício local: {}\nFim: {}\nLocal: {}\nDescrição: {}\nAlerta: {}\nSerá aberto no calendário padrão para confirmação; não envia para serviços de calendário e não usa OAuth.",
+            path.display(),
+            params["title"].as_str().unwrap(),
+            start.with_timezone(&Local).format("%d/%m/%Y %H:%M %Z"),
+            params["end"].as_str().and_then(|value| parse_datetime(value).ok()).map(|value| value.with_timezone(&Local).format("%d/%m/%Y %H:%M %Z").to_string()).unwrap_or_else(|| "não informado".into()),
+            params["location"].as_str().unwrap(),
+            params["description"].as_str().unwrap(),
+            params["alert_minutes"].as_u64().map(|minutes| format!("{minutes} min")).unwrap_or_else(|| "nenhum".into())
+        ))
+    } else if skill_id.starts_with("doc.") {
+        let content = params["content"].as_str().unwrap();
+        let excerpt: String = content.chars().take(4000).collect();
+        let omitted = content.chars().count().saturating_sub(4000);
+        Ok(format!(
+            "Criar arquivo em:\n{}\n\nConteúdo{}:\n{}",
+            path.display(),
+            if omitted > 0 {
+                format!(" ({} caracteres restantes fora deste resumo)", omitted)
+            } else {
+                String::new()
+            },
+            excerpt
+        ))
+    } else if skill_id == "sheet.create_csv" {
+        let headers = params["headers"].to_string();
+        let rows = params["rows"].as_array().unwrap();
+        let excerpt =
+            serde_json::to_string(&rows.iter().take(5).collect::<Vec<_>>()).unwrap_or_default();
+        Ok(format!("Criar CSV em {}\nSeparador: {}\nCodificação: {}\nCabeçalhos: {}\nLinhas: {}\nAmostra (até 5 linhas): {}", path.display(), params["delimiter"], params["encoding"], headers, rows.len(), excerpt))
+    } else {
+        Ok(format!("Criar arquivo em:\n{}", path.display()))
+    }
+}
+
+pub(crate) fn execute(
+    skill_id: &str,
+    params: &Value,
+    root: &Path,
+    app: Option<&tauri::AppHandle>,
+) -> Result<String, String> {
+    validate(skill_id, params)?;
+    let path = resolve(root, params, true)?;
+    let bytes = match skill_id {
+        "calendar.create_event" => create_ics(params)?.into_bytes(),
+        "doc.create_markdown" | "doc.create_text" => {
+            params["content"].as_str().unwrap().as_bytes().to_vec()
+        }
+        "sheet.create_csv" => create_csv(params)?,
+        _ => return Err("Habilidade de produtividade desconhecida.".into()),
+    };
+    if bytes.len() > MAX_TEXT_BYTES {
+        return Err("O arquivo excede 1 MB.".into());
+    }
+    if skill_id == "calendar.create_event" && app.is_none() {
+        return Err("O calendário padrão só pode ser aberto após aprovação no aplicativo.".into());
+    }
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .map_err(|_| "Não foi possível criar o arquivo; ele pode já existir.".to_string())?;
+    file.write_all(&bytes)
+        .and_then(|_| file.sync_data())
+        .map_err(|_| "Não foi possível gravar o arquivo.".to_string())?;
+    if skill_id == "calendar.create_event" {
+        let app = app.expect("checked before writing");
+        app.opener()
+            .open_path(path.to_string_lossy(), None::<&str>)
+            .map_err(|_| {
+                "O evento foi salvo, mas não foi possível abrir o calendário padrão.".to_string()
+            })?;
+        return Ok(format!("Arquivo .ics criado e aberto para confirmação: {}. Não há integração direta com Google Calendar nem OAuth nesta etapa.", path.display()));
+    }
+    Ok(format!("Arquivo criado: {}", path.display()))
+}
+
+use chrono::Local;
+
+fn resolve(root: &Path, params: &Value, create_parents: bool) -> Result<PathBuf, String> {
+    let raw = params["path"].as_str().ok_or("O caminho está ausente.")?;
+    let relative = Path::new(raw);
+    if relative.is_absolute()
+        || relative
+            .components()
+            .any(|part| !matches!(part, std::path::Component::Normal(_)))
+    {
+        return Err("Use um caminho relativo dentro da pasta permitida.".into());
+    }
+    let path = if create_parents {
+        crate::security::workspace::create_safe_target(root, raw)?
+    } else {
+        crate::security::workspace::preview_target(root, raw)?
+    };
+    if path.exists() || crate::security::workspace::has_reparse(&path) {
+        return Err("O destino já existe ou é um link; a criação foi recusada.".into());
+    }
+    Ok(path)
+}
+
+fn string_field<'a>(
+    object: &'a serde_json::Map<String, Value>,
+    name: &str,
+    max: usize,
+) -> Result<&'a str, String> {
+    let value = object
+        .get(name)
+        .and_then(Value::as_str)
+        .ok_or("Campo textual inválido.")?;
+    if value.len() > max {
+        return Err("Um campo de texto excede o limite permitido.".into());
+    }
+    Ok(value)
+}
+
+fn validate_content(content: Option<&str>) -> Result<(), String> {
+    if content.is_none_or(|text| text.len() > MAX_TEXT_BYTES) {
+        return Err("O conteúdo deve ser texto UTF-8 de até 1 MB.".into());
+    }
+    Ok(())
+}
+
+fn validate_extension(path: &str, extension: &str) -> Result<(), String> {
+    if Path::new(path)
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.eq_ignore_ascii_case(extension))
+    {
+        Ok(())
+    } else {
+        Err(format!("O arquivo precisa usar a extensão .{extension}."))
+    }
+}
+
+fn parse_datetime(value: &str) -> Result<DateTime<FixedOffset>, String> {
+    DateTime::parse_from_rfc3339(value).map_err(|_| {
+        "Use data e hora ISO 8601 com fuso, por exemplo 2030-06-10T14:30:00-03:00.".into()
+    })
+}
+
+fn escape_ical(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace(';', "\\;")
+        .replace(',', "\\,")
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .replace('\n', "\\n")
+}
+
+fn fold_ical(line: &str) -> String {
+    let mut out = String::new();
+    let mut count = 0;
+    for ch in line.chars() {
+        let size = ch.len_utf8();
+        if count + size > 75 {
+            out.push_str("\r\n ");
+            count = 1;
+        }
+        out.push(ch);
+        count += size;
+    }
+    out.push_str("\r\n");
+    out
+}
+
+fn create_ics(params: &Value) -> Result<String, String> {
+    validate("calendar.create_event", params)?;
+    let start = parse_datetime(params["start"].as_str().unwrap())?.with_timezone(&Utc);
+    let now = Utc::now();
+    let uid_hash = format!("{:x}", sha2::Sha256::digest(start.to_rfc3339().as_bytes()));
+    let uid = format!(
+        "{}-{}@odekrai.local",
+        now.timestamp_nanos_opt().unwrap_or_default(),
+        &uid_hash[..16]
+    );
+    let mut lines = vec![
+        "BEGIN:VCALENDAR".into(),
+        "VERSION:2.0".into(),
+        "PRODID:-//OdeKrai//Calendario 1.0//PT-BR".into(),
+        "CALSCALE:GREGORIAN".into(),
+        "BEGIN:VEVENT".into(),
+        format!("UID:{uid}"),
+        format!("DTSTAMP:{}", now.format("%Y%m%dT%H%M%SZ")),
+        format!("DTSTART:{}", start.format("%Y%m%dT%H%M%SZ")),
+        format!("SUMMARY:{}", escape_ical(params["title"].as_str().unwrap())),
+    ];
+    if let Some(end) = params["end"].as_str() {
+        lines.push(format!(
+            "DTEND:{}",
+            parse_datetime(end)?
+                .with_timezone(&Utc)
+                .format("%Y%m%dT%H%M%SZ")
+        ));
+    }
+    let location = params["location"].as_str().unwrap();
+    let description = params["description"].as_str().unwrap();
+    if !location.is_empty() {
+        lines.push(format!("LOCATION:{}", escape_ical(location)));
+    }
+    if !description.is_empty() {
+        lines.push(format!("DESCRIPTION:{}", escape_ical(description)));
+    }
+    if let Some(minutes) = params["alert_minutes"].as_u64() {
+        lines.extend([
+            "BEGIN:VALARM".into(),
+            "ACTION:DISPLAY".into(),
+            format!(
+                "DESCRIPTION:{}",
+                escape_ical(params["title"].as_str().unwrap())
+            ),
+            format!("TRIGGER:-PT{minutes}M"),
+            "END:VALARM".into(),
+        ]);
+    }
+    lines.extend(["END:VEVENT".into(), "END:VCALENDAR".into()]);
+    Ok(lines.iter().map(|line| fold_ical(line)).collect())
+}
+
+fn create_csv(params: &Value) -> Result<Vec<u8>, String> {
+    let delimiter = match params["delimiter"].as_str().unwrap() {
+        "comma" => ',',
+        "semicolon" => ';',
+        "tab" => '\t',
+        _ => unreachable!(),
+    };
+    let mut text = String::new();
+    let headers: Vec<&str> = params["headers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    append_csv_row(&mut text, &headers, delimiter)?;
+    for row in params["rows"].as_array().unwrap() {
+        let values: Vec<&str> = row
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        append_csv_row(&mut text, &values, delimiter)?;
+    }
+    if params["encoding"] == "utf8_bom" {
+        let mut bytes = vec![0xef, 0xbb, 0xbf];
+        bytes.extend_from_slice(text.as_bytes());
+        return Ok(bytes);
+    }
+    encode_windows_1252(&text)
+}
+
+fn encode_windows_1252(text: &str) -> Result<Vec<u8>, String> {
+    const EXTENDED: [Option<char>; 32] = [
+        Some('€'),
+        None,
+        Some('‚'),
+        Some('ƒ'),
+        Some('„'),
+        Some('…'),
+        Some('†'),
+        Some('‡'),
+        Some('ˆ'),
+        Some('‰'),
+        Some('Š'),
+        Some('‹'),
+        Some('Œ'),
+        None,
+        Some('Ž'),
+        None,
+        None,
+        Some('‘'),
+        Some('’'),
+        Some('“'),
+        Some('”'),
+        Some('•'),
+        Some('–'),
+        Some('—'),
+        Some('˜'),
+        Some('™'),
+        Some('š'),
+        Some('›'),
+        Some('œ'),
+        None,
+        Some('ž'),
+        Some('Ÿ'),
+    ];
+    text.chars()
+        .map(|ch| {
+            let code = ch as u32;
+            if code <= 0x7f || (0xa0..=0xff).contains(&code) {
+                return Ok(code as u8);
+            }
+            EXTENDED
+                .iter()
+                .position(|entry| *entry == Some(ch))
+                .map(|index| 0x80 + index as u8)
+                .ok_or_else(|| {
+                    "O conteúdo não pode ser representado em Windows-1252; escolha UTF-8 com BOM."
+                        .to_string()
+                })
+        })
+        .collect()
+}
+
+fn append_csv_row(out: &mut String, values: &[&str], delimiter: char) -> Result<(), String> {
+    for (index, value) in values.iter().enumerate() {
+        if index > 0 {
+            out.push(delimiter);
+        }
+        let value = if value
+            .trim_start()
+            .chars()
+            .next()
+            .is_some_and(|ch| matches!(ch, '=' | '+' | '-' | '@'))
+        {
+            format!("'{}", value)
+        } else {
+            value.to_string()
+        };
+        if value.contains(delimiter)
+            || value.contains('"')
+            || value.chars().any(|ch| matches!(ch, '\n' | '\r'))
+        {
+            out.push('"');
+            out.push_str(&value.replace('"', "\"\""));
+            out.push('"');
+        } else {
+            out.push_str(&value);
+        }
+    }
+    out.push_str("\r\n");
+    if out.len() > MAX_TEXT_BYTES {
+        return Err("O CSV excede 1 MB.".into());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn creates_rfc5545_utc_ics_with_crlf_escaping_and_folding() {
+        let params = json!({"path":"evento.ics","title":"Reunião, equipe; \"A\"","start":"2030-06-10T14:30:00-03:00","end":"2030-06-10T15:30:00-03:00","location":"São Paulo","description":"linha 1\nlinha 2 ".repeat(8),"alert_minutes":15});
+        let ics = create_ics(&params).unwrap();
+        assert!(ics.starts_with("BEGIN:VCALENDAR\r\n"));
+        assert!(ics.contains("DTSTART:20300610T173000Z\r\n"));
+        assert!(ics.contains("DTEND:20300610T183000Z\r\n"));
+        assert!(ics.contains("UID:"));
+        assert!(ics.contains("TRIGGER:-PT15M\r\n"));
+        assert!(ics.contains("LOCATION:São Paulo\r\n"));
+        assert!(ics.contains("SUMMARY:Reunião\\, equipe\\; \"A\"\r\n"));
+        assert!(ics.contains("\r\n "));
+        assert!(!ics.replace("\r\n", "").contains(['\r', '\n']));
+        assert!(ics.ends_with("END:VCALENDAR\r\n"));
+        assert!(ics.lines().all(|line| line.len() <= 75));
+    }
+
+    #[test]
+    fn rejects_events_without_timezone_or_with_non_increasing_end() {
+        let mut p = json!({"path":"event.ics","title":"x","start":"2030-01-01T10:00:00-03:00","end":"2030-01-01T09:00:00-03:00","location":"","description":"","alert_minutes":null});
+        assert!(validate("calendar.create_event", &p).is_err());
+        p["start"] = json!("2030-01-01T10:00:00");
+        p["end"] = Value::Null;
+        assert!(validate("calendar.create_event", &p).is_err());
+    }
+
+    #[test]
+    fn csv_preserves_portuguese_accents_and_escapes_delimiters_for_excel() {
+        let p = json!({"path":"x.csv","delimiter":"semicolon","encoding":"utf8_bom","headers":["nome","observação"],"rows":[["João","vírgula, e \"aspas\""]]});
+        let bytes = create_csv(&p).unwrap();
+        assert_eq!(&bytes[..3], &[0xef, 0xbb, 0xbf]);
+        let text = std::str::from_utf8(&bytes[3..]).unwrap();
+        assert!(text.contains("observação\r\nJoão;\"vírgula, e \"\"aspas\"\"\"\r\n"));
+        assert!(create_csv(&json!({"path":"x.csv","delimiter":"semicolon","encoding":"utf8_bom","headers":["formula"],"rows":[["=2+2"]]})).unwrap().windows(5).any(|part| part == b"'=2+2"));
+    }
+
+    #[test]
+    fn windows_1252_csv_rejects_unrepresentable_characters() {
+        assert_eq!(
+            encode_windows_1252("ação €").unwrap(),
+            vec![0x61, 0xe7, 0xe3, 0x6f, 0x20, 0x80]
+        );
+        assert!(encode_windows_1252("emoji 😀").is_err());
+    }
+
+    #[test]
+    fn productivity_tools_reject_unrecognized_fields_in_rust() {
+        let p = json!({"path":"x.txt","content":"ok","risk":"destructive"});
+        assert!(validate("doc.create_text", &p).is_err());
+    }
+
+    #[test]
+    fn csv_creation_is_new_only_and_writes_into_the_selected_root() {
+        let root = std::env::temp_dir().join(format!(
+            "odekrai-csv-{}",
+            Utc::now().timestamp_nanos_opt().unwrap()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let params = json!({"path":"report.csv","delimiter":"comma","encoding":"utf8_bom","headers":["name"],"rows":[["Ana"]]});
+        assert!(execute("sheet.create_csv", &params, &root, None).is_ok());
+        let bytes = fs::read(root.join("report.csv")).unwrap();
+        assert!(bytes.starts_with(&[0xef, 0xbb, 0xbf]));
+        assert!(execute("sheet.create_csv", &params, &root, None).is_err());
+        let _ = fs::remove_dir_all(root);
+    }
+}

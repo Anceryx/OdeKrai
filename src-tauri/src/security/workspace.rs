@@ -5,6 +5,14 @@ pub(super) trait Tool {
     fn risk(&self, action: &SimulatedAction) -> Risk;
     fn preview(&self, action: &SimulatedAction, workspace: &Path) -> Result<String, String>;
     fn execute(&self, action: &SimulatedAction, workspace: &Path) -> Result<String, String>;
+    fn execute_with_app(
+        &self,
+        action: &SimulatedAction,
+        workspace: &Path,
+        _app: &tauri::AppHandle,
+    ) -> Result<String, String> {
+        self.execute(action, workspace)
+    }
     fn timeout(&self) -> Duration {
         Duration::from_secs(5)
     }
@@ -21,6 +29,7 @@ pub(super) struct FilesList;
 pub(super) struct FilesSearch;
 pub(super) struct SimulatedSend;
 pub(super) struct SimulatedPayment;
+pub(super) struct Productivity;
 
 impl Tool for WorkspaceRead {
     fn name(&self) -> &'static str {
@@ -535,6 +544,45 @@ impl Tool for SimulatedPayment {
     }
 }
 
+impl Tool for Productivity {
+    fn name(&self) -> &'static str {
+        "productivity"
+    }
+    fn risk(&self, action: &SimulatedAction) -> Risk {
+        match action {
+            SimulatedAction::Productivity { skill_id, .. }
+                if skill_id == "calendar.create_event" =>
+            {
+                Risk::ComunicacaoExterna
+            }
+            _ => Risk::EscritaReversivel,
+        }
+    }
+    fn preview(&self, action: &SimulatedAction, root: &Path) -> Result<String, String> {
+        let SimulatedAction::Productivity { skill_id, params } = action else {
+            return Err("Parâmetros incompatíveis.".into());
+        };
+        crate::productivity::preview(skill_id, params, root)
+    }
+    fn execute(&self, action: &SimulatedAction, root: &Path) -> Result<String, String> {
+        let SimulatedAction::Productivity { skill_id, params } = action else {
+            return Err("Parâmetros incompatíveis.".into());
+        };
+        crate::productivity::execute(skill_id, params, root, None)
+    }
+    fn execute_with_app(
+        &self,
+        action: &SimulatedAction,
+        root: &Path,
+        app: &tauri::AppHandle,
+    ) -> Result<String, String> {
+        let SimulatedAction::Productivity { skill_id, params } = action else {
+            return Err("Parâmetros incompatíveis.".into());
+        };
+        crate::productivity::execute(skill_id, params, root, Some(app))
+    }
+}
+
 pub(super) fn tool_for(action: &SimulatedAction) -> &'static dyn Tool {
     match action {
         SimulatedAction::FilesList { .. } => &FilesList,
@@ -545,6 +593,7 @@ pub(super) fn tool_for(action: &SimulatedAction) -> &'static dyn Tool {
         SimulatedAction::DeleteFile { .. } => &WorkspaceDelete,
         SimulatedAction::SendMessage { .. } => &SimulatedSend,
         SimulatedAction::Payment { .. } => &SimulatedPayment,
+        SimulatedAction::Productivity { .. } => &Productivity,
     }
 }
 
@@ -556,6 +605,10 @@ pub(super) fn action_path(action: &SimulatedAction) -> Result<&str, String> {
         SimulatedAction::ReadFile { path }
         | SimulatedAction::WriteFile { path, .. }
         | SimulatedAction::DeleteFile { path } => Ok(path),
+        SimulatedAction::Productivity { params, .. } => params
+            .get("path")
+            .and_then(serde_json::Value::as_str)
+            .ok_or("O caminho da habilidade está ausente.".into()),
         _ => Err("Esta ferramenta não usa um caminho.".into()),
     }
 }
@@ -616,6 +669,9 @@ pub(super) fn validate_action(action: &SimulatedAction) -> Result<(), String> {
             if currency.len() > 10 || !currency.bytes().all(|b| b.is_ascii_alphabetic()) {
                 return Err("Moeda inválida.".into());
             }
+        }
+        SimulatedAction::Productivity { skill_id, params } => {
+            crate::productivity::validate(skill_id, params)?;
         }
     }
     Ok(())
@@ -722,7 +778,7 @@ pub(super) fn contains_secret_marker(text: &str) -> bool {
     .any(|marker| lower.contains(marker))
 }
 
-pub(super) fn relative_path(raw: &str) -> Result<PathBuf, String> {
+pub(crate) fn relative_path(raw: &str) -> Result<PathBuf, String> {
     validate_path_syntax(raw, false)
 }
 
@@ -817,7 +873,7 @@ pub(super) fn has_multiple_links(path: &Path) -> bool {
     }
 }
 
-pub(super) fn has_reparse(path: &Path) -> bool {
+pub(crate) fn has_reparse(path: &Path) -> bool {
     let mut current = PathBuf::new();
     for part in path.components() {
         current.push(part.as_os_str());
@@ -868,7 +924,7 @@ pub(super) fn safe_target(root: &Path, raw: &str) -> Result<PathBuf, String> {
     }
 }
 
-pub(super) fn preview_target(root: &Path, raw: &str) -> Result<PathBuf, String> {
+pub(crate) fn preview_target(root: &Path, raw: &str) -> Result<PathBuf, String> {
     let target = root.join(relative_path(raw)?);
     let mut ancestor = target.as_path();
     while !ancestor.exists() {
@@ -888,7 +944,7 @@ pub(super) fn preview_target(root: &Path, raw: &str) -> Result<PathBuf, String> 
     Ok(target)
 }
 
-pub(super) fn create_safe_target(root: &Path, raw: &str) -> Result<PathBuf, String> {
+pub(crate) fn create_safe_target(root: &Path, raw: &str) -> Result<PathBuf, String> {
     let relative = relative_path(raw)?;
     let mut parent = root.to_path_buf();
     for component in relative.parent().into_iter().flat_map(Path::components) {

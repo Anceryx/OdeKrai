@@ -111,6 +111,13 @@ fn action_id(action: &SimulatedAction) -> &'static str {
         SimulatedAction::DeleteFile { .. } => "workspace.delete_file",
         SimulatedAction::SendMessage { .. } => "simulated.send_message",
         SimulatedAction::Payment { .. } => "simulated.payment",
+        SimulatedAction::Productivity { skill_id, .. } => match skill_id.as_str() {
+            "calendar.create_event" => "calendar.create_event",
+            "doc.create_markdown" => "doc.create_markdown",
+            "doc.create_text" => "doc.create_text",
+            "sheet.create_csv" => "sheet.create_csv",
+            _ => "",
+        },
     }
 }
 
@@ -119,7 +126,15 @@ fn parse_action(id: &str, params: &Value) -> Result<SimulatedAction, String> {
     let object = payload
         .as_object_mut()
         .ok_or("Os parâmetros da habilidade são inválidos.")?;
-    object.insert("tool".into(), Value::String(id.into()));
+    let payload = if matches!(
+        id,
+        "calendar.create_event" | "doc.create_markdown" | "doc.create_text" | "sheet.create_csv"
+    ) {
+        json!({ "tool": "productivity", "skill_id": id, "params": payload })
+    } else {
+        object.insert("tool".into(), Value::String(id.into()));
+        payload
+    };
     let action: SimulatedAction = serde_json::from_value(payload)
         .map_err(|_| "Os parâmetros da habilidade são inválidos.".to_string())?;
     if action_id(&action) != id {
@@ -141,9 +156,18 @@ pub(super) fn resolve_action_target(
         SimulatedAction::ReadFile { path }
         | SimulatedAction::WriteFile { path, .. }
         | SimulatedAction::DeleteFile { path } => path,
+        SimulatedAction::Productivity { params, .. } => params
+            .get("path")
+            .and_then(Value::as_str)
+            .ok_or("Informe um caminho de destino.")?,
         _ => return Err("Esta habilidade não usa uma pasta permitida.".into()),
     };
     let workspace = crate::agent_home::workspace_path(app)?;
+    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "calendar.create_event")
+        && std::path::Path::new(raw).is_absolute()
+    {
+        return Err("Eventos de calendário só podem ser criados na pasta de trabalho.".into());
+    }
     if raw.is_empty()
         && matches!(
             action,
@@ -234,6 +258,16 @@ pub(super) fn resolve_action_target(
             content: content.clone(),
         },
         SimulatedAction::DeleteFile { .. } => SimulatedAction::DeleteFile { path: relative },
+        SimulatedAction::Productivity { skill_id, params } => {
+            let mut params = params.clone();
+            if let Some(object) = params.as_object_mut() {
+                object.insert("path".into(), Value::String(relative));
+            }
+            SimulatedAction::Productivity {
+                skill_id: skill_id.clone(),
+                params,
+            }
+        }
         _ => unreachable!(),
     };
     Ok((root, normalized))
@@ -338,6 +372,10 @@ pub fn registry() -> Vec<Skill> {
             json!({"type":"object","properties":{"amount_cents":{"type":"integer"},"currency":{"type":"string"}},"required":["amount_cents","currency"],"additionalProperties":false}),
             ResultTrust::Untrusted,
         ),
+        ("calendar.create_event", "Criar evento de calendário", "Gera um arquivo .ics na pasta de trabalho e abre o calendário padrão para confirmação.", "Crie um evento iCalendar com título, início ISO 8601 com fuso, fim opcional, local, descrição e alerta em minutos. Informe um caminho relativo .ics dentro da pasta de trabalho.", json!({"type":"object","properties":{"path":{"type":"string"},"title":{"type":"string","minLength":1,"maxLength":200},"start":{"type":"string","maxLength":64},"end":{"type":["string","null"],"maxLength":64},"location":{"type":"string","maxLength":500},"description":{"type":"string","maxLength":4000},"alert_minutes":{"type":["integer","null"],"minimum":0,"maximum":10080}},"required":["path","title","start","end","location","description","alert_minutes"],"additionalProperties":false}), ResultTrust::Local),
+        ("doc.create_markdown", "Criar documento Markdown", "Cria um arquivo Markdown em pasta permitida.", "Crie um documento Markdown no caminho relativo ou absoluto de uma pasta permitida.", json!({"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string","maxLength":1000000}},"required":["path","content"],"additionalProperties":false}), ResultTrust::Local),
+        ("doc.create_text", "Criar documento de texto", "Cria um arquivo de texto em pasta permitida.", "Crie um arquivo de texto UTF-8 no caminho relativo ou absoluto de uma pasta permitida.", json!({"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string","maxLength":1000000}},"required":["path","content"],"additionalProperties":false}), ResultTrust::Local),
+        ("sheet.create_csv", "Criar planilha CSV", "Cria um CSV delimitado por vírgula, ponto e vírgula ou tabulação com UTF-8 BOM ou Windows-1252.", "Crie um CSV com caminho, delimitador (comma, semicolon ou tab), codificação (utf8_bom ou windows_1252), cabeçalhos e linhas de valores textuais.", json!({"type":"object","properties":{"path":{"type":"string"},"delimiter":{"type":"string","enum":["comma","semicolon","tab"]},"encoding":{"type":"string","enum":["utf8_bom","windows_1252"]},"headers":{"type":"array","items":{"type":"string","maxLength":256},"minItems":1,"maxItems":100},"rows":{"type":"array","items":{"type":"array","items":{"type":"string","maxLength":4096},"maxItems":100},"maxItems":10000}},"required":["path","delimiter","encoding","headers","rows"],"additionalProperties":false}), ResultTrust::Local),
     ];
     rows.into_iter()
         .map(
@@ -382,6 +420,22 @@ fn action_example(id: &str) -> SimulatedAction {
         },
         "workspace.delete_file" => SimulatedAction::DeleteFile {
             path: "sample.txt".into(),
+        },
+        "calendar.create_event" => SimulatedAction::Productivity {
+            skill_id: id.into(),
+            params: json!({"path":"event.ics","title":"Evento","start":"2030-01-01T10:00:00-03:00","end":null,"location":"","description":"","alert_minutes":null}),
+        },
+        "doc.create_markdown" => SimulatedAction::Productivity {
+            skill_id: id.into(),
+            params: json!({"path":"documento.md","content":""}),
+        },
+        "doc.create_text" => SimulatedAction::Productivity {
+            skill_id: id.into(),
+            params: json!({"path":"documento.txt","content":""}),
+        },
+        "sheet.create_csv" => SimulatedAction::Productivity {
+            skill_id: id.into(),
+            params: json!({"path":"planilha.csv","delimiter":"semicolon","encoding":"utf8_bom","headers":["coluna"],"rows":[]}),
         },
         "simulated.send_message" => SimulatedAction::SendMessage {
             recipient: "sample".into(),
@@ -455,11 +509,17 @@ pub fn get_skills(
         .into_iter()
         .map(|skill| {
             let example = action_example(skill.id);
-            let mut params = serde_json::to_value(&example)
-                .map_err(|_| "Não foi possível preparar o catálogo de habilidades.".to_string())?;
-            if let Some(object) = params.as_object_mut() {
-                object.remove("tool");
-            }
+            let params = if let SimulatedAction::Productivity { params, .. } = &example {
+                params.clone()
+            } else {
+                let mut params = serde_json::to_value(&example).map_err(|_| {
+                    "Não foi possível preparar o catálogo de habilidades.".to_string()
+                })?;
+                if let Some(object) = params.as_object_mut() {
+                    object.remove("tool");
+                }
+                params
+            };
             Ok(SkillView {
                 id: skill.id.into(),
                 name: skill.name.into(),
@@ -616,7 +676,7 @@ fn validate_allowed_folder_path(
     Ok(canonical)
 }
 
-pub(super) fn validate_raw_folder_path(raw: &str) -> Result<std::path::PathBuf, String> {
+pub(crate) fn validate_raw_folder_path(raw: &str) -> Result<std::path::PathBuf, String> {
     workspace::validate_path_syntax(raw, true)
 }
 
@@ -696,6 +756,27 @@ mod tests {
             .is_err());
         assert!(parse_action(read.id, &json!({"path":"a.txt","extra":true})).is_err());
         assert_eq!(read.result_trust, ResultTrust::Local);
+    }
+
+    #[test]
+    fn productivity_skills_are_registered_with_rust_derived_risks_and_strict_schemas() {
+        let calendar = registry()
+            .into_iter()
+            .find(|skill| skill.id == "calendar.create_event")
+            .unwrap();
+        let params = json!({"path":"evento.ics","title":"Reunião","start":"2030-01-01T10:00:00-03:00","end":null,"location":"","description":"","alert_minutes":null});
+        assert_eq!(calendar.risk(&params).unwrap(), Risk::ComunicacaoExterna);
+        assert_eq!(
+            action_metadata(&parse_action(calendar.id, &params).unwrap()).0,
+            "calendar.create_event"
+        );
+        assert!(parse_action(calendar.id, &json!({"path":"../fora.ics","title":"x","start":"2030-01-01T10:00:00-03:00","end":null,"location":"","description":"","alert_minutes":null})).is_err());
+        assert!(parse_action(calendar.id, &json!({"path":"evento.ics","title":"x","start":"2030-01-01T10:00:00","end":null,"location":"","description":"","alert_minutes":null})).is_err());
+        assert!(parse_action(
+            "doc.create_text",
+            &json!({"path":"arquivo.exe","content":"x"})
+        )
+        .is_err());
     }
 
     #[test]

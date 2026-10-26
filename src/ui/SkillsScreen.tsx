@@ -125,6 +125,9 @@ export function SkillsScreen() {
     ({ id }) => id.startsWith('workspace.') || id.startsWith('files.'),
   );
   const simulatedSkills = skills.filter(({ id }) => id.startsWith('simulated.'));
+  const productivitySkills = skills.filter(({ id }) =>
+    ['calendar.', 'doc.', 'sheet.'].some((prefix) => id.startsWith(prefix)),
+  );
 
   return (
     <div className="page subpage skills-page">
@@ -141,6 +144,38 @@ export function SkillsScreen() {
       <section className="settings-section">
         <h2>Arquivos e pastas</h2>
         {workspaceSkills.map((skill) => (
+          <article className="skill-card" key={skill.id}>
+            <div>
+              <h3>{skill.name}</h3>
+              <p>{skill.description}</p>
+              <small>Risco: {riskLabels[skill.risk]}</small>
+            </div>
+            <div className="skill-switch">
+              <span>Ativar</span>
+              <Toggle
+                checked={skill.enabled}
+                label={`Ativar ${skill.name}`}
+                disabled={busy || !isTauri()}
+                onClick={() => void setEnabled(skill, !skill.enabled)}
+              />
+            </div>
+            {!skill.fixedBlocked && (
+              <div className="skill-switch">
+                <span>Usar modo mais permissivo</span>
+                <Toggle
+                  checked={skill.morePermissive}
+                  label={`Usar modo mais permissivo para ${skill.name}`}
+                  disabled={busy || !isTauri()}
+                  onClick={() => void setOverride(skill, !skill.morePermissive)}
+                />
+              </div>
+            )}
+          </article>
+        ))}
+      </section>
+      <section className="settings-section">
+        <h2>Calendário, documentos e planilhas</h2>
+        {productivitySkills.map((skill) => (
           <article className="skill-card" key={skill.id}>
             <div>
               <h3>{skill.name}</h3>
