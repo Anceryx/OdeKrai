@@ -422,13 +422,16 @@ pub(crate) fn external_domain_is_trusted(
     domain: &str,
 ) -> Result<bool, String> {
     let domain = normalize_external_domain(domain)?;
-    database(app)?
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM trusted_external_domains WHERE domain=?1)",
-            [&domain],
-            |row| row.get(0),
-        )
+    external_domain_is_trusted_in_database(&database(app)?, &domain)
         .map_err(|_| "Não foi possível verificar os domínios confiáveis.".into())
+}
+
+fn external_domain_is_trusted_in_database(db: &Connection, domain: &str) -> rusqlite::Result<bool> {
+    db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM trusted_external_domains WHERE domain=?1)",
+        [domain],
+        |row| row.get(0),
+    )
 }
 
 pub(crate) fn remember_fetch_domain(app: &tauri::AppHandle, domain: &str) -> Result<(), String> {
@@ -754,6 +757,25 @@ mod tests {
             .3,
             Some("fixed_block_payment")
         );
+    }
+
+    #[test]
+    fn external_domains_require_first_approval_and_trust_is_exact_per_domain() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute(
+            "CREATE TABLE trusted_external_domains(domain TEXT PRIMARY KEY)",
+            [],
+        )
+        .unwrap();
+        let first = normalize_external_domain("Example.com").unwrap();
+        assert!(!external_domain_is_trusted_in_database(&db, &first).unwrap());
+        db.execute(
+            "INSERT INTO trusted_external_domains(domain) VALUES (?1)",
+            [&first],
+        )
+        .unwrap();
+        assert!(external_domain_is_trusted_in_database(&db, &first).unwrap());
+        assert!(!external_domain_is_trusted_in_database(&db, "other.example").unwrap());
     }
 
     #[test]
