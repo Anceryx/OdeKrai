@@ -26,7 +26,7 @@ pub fn validate_webhook_url(raw: &str) -> Result<(), String> {
     }
     let parts: Vec<_> = url.path().split('/').collect();
     if parts.len() != 5
-        || parts[0] != ""
+        || !parts[0].is_empty()
         || parts[1] != "api"
         || parts[2] != "webhooks"
         || parts[3].is_empty()
@@ -203,11 +203,13 @@ pub async fn send(app: &tauri::AppHandle, id: &str, text: &str) -> Result<String
         })?;
     match response.status().as_u16() {
         200..=299 => Ok(format!("Mensagem enviada pelo webhook “{name}”.")),
-        400 => Err("Discord recusou a mensagem (400): confira o conteúdo enviado.".into()),
         401 | 403 | 404 => {
             Err("Discord recusou o webhook: credencial inválida ou webhook indisponível.".into())
         }
         429 => Err("Discord limitou a frequência (429). Aguarde antes de tentar novamente.".into()),
+        400..=499 if response.status().as_u16() == 400 => {
+            Err("Discord recusou a mensagem (400): confira o conteúdo enviado.".into())
+        }
         400..=499 => Err(format!(
             "Discord recusou o envio (HTTP {}).",
             response.status().as_u16()

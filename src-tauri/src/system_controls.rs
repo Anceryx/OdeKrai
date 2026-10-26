@@ -60,6 +60,7 @@ pub(crate) fn execute_with<A: SystemAdapter>(
     }
 }
 
+#[cfg(test)]
 #[derive(Default)]
 pub(crate) struct SimulatedAdapter {
     pub volume: u8,
@@ -67,6 +68,7 @@ pub(crate) struct SimulatedAdapter {
     pub media_commands: Vec<MediaKey>,
 }
 
+#[cfg(test)]
 impl SystemAdapter for SimulatedAdapter {
     fn volume(&mut self) -> Result<u8, String> {
         Ok(self.volume)
@@ -232,7 +234,7 @@ mod tests {
         assert_eq!(sim.volume, 100);
         execute_with(&mut sim, "media.next", &json!({})).unwrap();
         assert_eq!(sim.media_commands, vec![MediaKey::Next]);
-        assert_eq!(sim.muted, false);
+        assert!(!sim.muted);
     }
 
     #[test]
