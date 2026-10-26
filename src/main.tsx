@@ -7,6 +7,7 @@ import { IslandWindow } from './ui/IslandWindow';
 import '@fontsource-variable/inter';
 import './ui/design-tokens.css';
 import './ui/styles.css';
+import './ui/settings-controls.css';
 
 const label = isTauri() ? getCurrentWindow().label : 'main';
 const view = label === 'pet' ? <IslandWindow /> : <App />;
