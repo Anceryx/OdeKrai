@@ -1401,27 +1401,28 @@ mod tests {
             .send()
             .await
             .unwrap();
-        let (text_seen, text_received) = tokio::sync::oneshot::channel();
-        let mut text_seen = Some(text_seen);
-        let consume = consume_stream_response("openai", response, move |event| {
-            if matches!(event, ProviderEvent::TextDelta { .. }) {
-                if let Some(sender) = text_seen.take() {
-                    let _ = sender.send(());
+        {
+            let (text_seen, text_received) = tokio::sync::oneshot::channel();
+            let mut text_seen = Some(text_seen);
+            let consume = consume_stream_response("openai", response, move |event| {
+                if matches!(event, ProviderEvent::TextDelta { .. }) {
+                    if let Some(sender) = text_seen.take() {
+                        let _ = sender.send(());
+                    }
                 }
+            });
+            tokio::pin!(consume);
+            let cancellation = CancellationToken::new();
+            let cancel_after_first_delta = cancellation.clone();
+            tokio::select! {
+                result = &mut consume => panic!("stream terminou antes do cancelamento: {result:?}"),
+                _ = async move {
+                    let _ = text_received.await;
+                    cancel_after_first_delta.cancel();
+                    cancellation.cancelled().await;
+                } => {}
             }
-        });
-        tokio::pin!(consume);
-        let cancellation = CancellationToken::new();
-        let cancel_after_first_delta = cancellation.clone();
-        tokio::select! {
-            result = &mut consume => panic!("stream terminou antes do cancelamento: {result:?}"),
-            _ = async move {
-                let _ = text_received.await;
-                cancel_after_first_delta.cancel();
-                cancellation.cancelled().await;
-            } => {}
         }
-        drop(consume);
         server.join().unwrap();
     }
 }

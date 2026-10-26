@@ -71,7 +71,7 @@ jobs:
         working-directory: src-tauri
 
       - name: Executar Clippy
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets --features mock-window-tests -- -D warnings
         working-directory: src-tauri
 
       - name: Compilar a interface
