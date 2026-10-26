@@ -3,6 +3,8 @@ export type ConversationSummary = {
   title: string;
   preview: string;
   created_at: number;
+  provider_id?: string;
+  model?: string;
 };
 
 export function filterConversations<T extends ConversationSummary>(

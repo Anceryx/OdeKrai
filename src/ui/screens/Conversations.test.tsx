@@ -19,8 +19,8 @@ describe('ConversationsScreen', () => {
         error=""
         submit={(event) => event.preventDefault()}
         cancel={() => undefined}
-        providerName="OpenAI"
         providerModel=""
+        providerId="openai"
         providerConfigured={false}
         conversationSidebarCollapsed={false}
         conversationSidebarWidth={230}
@@ -39,6 +39,52 @@ describe('ConversationsScreen', () => {
     expect(markup).toContain('Lista de conversas');
     expect(markup).toContain('Recolher lista de conversas');
     expect(markup).toContain('Redimensionar lista de conversas');
+    expect(markup).not.toContain('chat-model-chip');
+  });
+
+  it('mostra o modelo no cabeçalho apenas quando difere do modelo atual', () => {
+    const markup = renderToStaticMarkup(
+      <ConversationsScreen
+        messages={[]}
+        conversations={[
+          {
+            id: 'one',
+            title: 'Conversa anterior',
+            preview: '',
+            created_at: 1,
+            provider_id: 'anthropic',
+            model: 'claude-test',
+          },
+        ]}
+        conversationId="one"
+        onConversation={() => undefined}
+        onNewConversation={() => undefined}
+        onDeleteConversation={() => undefined}
+        onRenameConversation={() => undefined}
+        busy={false}
+        draft=""
+        setDraft={() => undefined}
+        error=""
+        submit={(event) => event.preventDefault()}
+        cancel={() => undefined}
+        providerModel="gpt-test"
+        providerId="openai"
+        providerConfigured
+        conversationSidebarCollapsed={false}
+        conversationSidebarWidth={230}
+        onToggleConversationSidebar={() => undefined}
+        onResizeConversationSidebar={() => undefined}
+        onOpenLink={() => undefined}
+        assistantUsesMascot={false}
+        onFixConfiguration={() => undefined}
+        onRetry={() => undefined}
+        canRetry={false}
+        profile={{ displayName: 'Teste', nickname: '', avatarDataUrl: null }}
+        selectedPet="character-female-a"
+      />,
+    );
+    expect(markup).toContain('Modelo usado nesta conversa');
+    expect(markup).toContain('Anthropic · claude-test');
   });
 
   it('renderiza o painel de conversas recolhido com controle para expandir', () => {
@@ -57,8 +103,8 @@ describe('ConversationsScreen', () => {
         error=""
         submit={(event) => event.preventDefault()}
         cancel={() => undefined}
-        providerName="OpenAI"
         providerModel=""
+        providerId="openai"
         providerConfigured={false}
         conversationSidebarCollapsed
         conversationSidebarWidth={230}

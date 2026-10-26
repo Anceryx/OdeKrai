@@ -194,6 +194,7 @@ function MainApp() {
     : undefined;
   const shownProviderSettings = usedProviderId ? settings.providers[usedProviderId] : undefined;
   const shownProviderName = usedProvider?.name ?? activeProvider.name;
+  const shownProviderId = usedProviderId ?? settings.activeProviderId;
   const shownProviderModel = shownProviderSettings?.model ?? activeProvider.model;
 
   useEffect(() => {
@@ -365,6 +366,8 @@ function MainApp() {
           conversationId: activeId,
           role: 'user',
           content: text,
+          providerId: provider.id,
+          model: activeProvider.model,
         });
         setConversations((items) =>
           items.map((item) => (item.id === activeId ? { ...item, preview: text } : item)),
@@ -378,6 +381,8 @@ function MainApp() {
             title: text.slice(0, 80),
             preview: text,
             created_at: sentAt,
+            provider_id: provider.id,
+            model: activeProvider.model,
           },
           ...items,
         ]);
@@ -389,9 +394,11 @@ function MainApp() {
         | { type: 'done'; stopReason: string | null }
         | { type: 'error'; kind: string; status: number | null; message: string }
       >();
+      let responseProviderId = provider.id;
       let streamed = '';
       onChunk.onmessage = (event) => {
         if (event.type === 'providerSelected') {
+          responseProviderId = event.providerId;
           setUsedProviderId(event.providerId);
           return;
         }
@@ -428,9 +435,25 @@ function MainApp() {
         conversationId: activeId,
         role: 'assistant',
         content: answer.content,
+        providerId: responseProviderId,
+        model:
+          settings.providers[responseProviderId]?.model ??
+          (responseProviderId === provider.id ? activeProvider.model : ''),
       });
+      const responseModel =
+        settings.providers[responseProviderId]?.model ??
+        (responseProviderId === provider.id ? activeProvider.model : '');
       setConversations((items) =>
-        items.map((item) => (item.id === activeId ? { ...item, preview: answer.content } : item)),
+        items.map((item) =>
+          item.id === activeId
+            ? {
+                ...item,
+                preview: answer.content,
+                provider_id: responseProviderId,
+                model: responseModel,
+              }
+            : item,
+        ),
       );
       setMessages([
         ...next,
@@ -734,8 +757,8 @@ function MainApp() {
               error={error}
               submit={submitMessage}
               cancel={cancelRequest}
-              providerName={shownProviderName}
               providerModel={shownProviderModel}
+              providerId={shownProviderId}
               conversationSidebarCollapsed={settings.layout.conversationSidebarCollapsed}
               conversationSidebarWidth={settings.layout.conversationSidebarWidth}
               onToggleConversationSidebar={() =>

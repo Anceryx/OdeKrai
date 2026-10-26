@@ -11,6 +11,8 @@ pub struct Conversation {
     title: String,
     created_at: i64,
     preview: String,
+    provider_id: String,
+    model: String,
 }
 
 #[derive(Serialize)]
@@ -35,7 +37,7 @@ fn database(app: &tauri::AppHandle) -> Result<Connection, String> {
 
 fn init_schema(db: &Connection) -> Result<(), String> {
     db.execute_batch("PRAGMA foreign_keys = ON; PRAGMA secure_delete = ON;
-        CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
+        CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()), provider_id TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '');
         CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('user','assistant')), content TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
         CREATE INDEX IF NOT EXISTS messages_conversation ON messages(conversation_id, id);
         CREATE TABLE IF NOT EXISTS pet_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -53,6 +55,24 @@ fn init_schema(db: &Connection) -> Result<(), String> {
             PRIMARY KEY(provider_id, utc_day)
         );")
         .map_err(|_| "Não foi possível preparar o histórico local.".to_string())?;
+    for (column, definition) in [
+        ("provider_id", "TEXT NOT NULL DEFAULT ''"),
+        ("model", "TEXT NOT NULL DEFAULT ''"),
+    ] {
+        let exists: bool = db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_table_info('conversations') WHERE name = ?1)",
+                [column],
+                |row| row.get(0),
+            )
+            .map_err(|_| "Não foi possível verificar o histórico local.".to_string())?;
+        if !exists {
+            db.execute_batch(&format!(
+                "ALTER TABLE conversations ADD COLUMN {column} {definition}"
+            ))
+            .map_err(|_| "Não foi possível atualizar o histórico local.".to_string())?;
+        }
+    }
     Ok(())
 }
 
@@ -359,7 +379,7 @@ pub async fn list_conversations(
 fn read_conversations(db: &Connection) -> Result<Vec<Conversation>, String> {
     let mut stmt = db
         .prepare(
-            "SELECT c.id, c.title, c.created_at, COALESCE((SELECT substr(content, 1, 240) FROM messages WHERE conversation_id = c.id ORDER BY id DESC LIMIT 1), '') FROM conversations c ORDER BY c.created_at DESC, c.rowid DESC LIMIT 100",
+            "SELECT c.id, c.title, c.created_at, COALESCE((SELECT substr(content, 1, 240) FROM messages WHERE conversation_id = c.id ORDER BY id DESC LIMIT 1), ''), c.provider_id, c.model FROM conversations c ORDER BY c.created_at DESC, c.rowid DESC LIMIT 100",
         )
         .map_err(|_| "Não foi possível ler o histórico local.".to_string())?;
     let rows = stmt
@@ -369,6 +389,8 @@ fn read_conversations(db: &Connection) -> Result<Vec<Conversation>, String> {
                 title: row.get(1)?,
                 created_at: row.get(2)?,
                 preview: row.get(3)?,
+                provider_id: row.get(4)?,
+                model: row.get(5)?,
             })
         })
         .map_err(|_| "Não foi possível ler o histórico local.".to_string())?;
@@ -413,6 +435,8 @@ pub fn append_conversation_message(
     conversation_id: String,
     role: String,
     content: String,
+    provider_id: Option<String>,
+    model: Option<String>,
 ) -> Result<(), String> {
     super::require_main(&caller)?;
     if conversation_id.is_empty()
@@ -426,6 +450,15 @@ pub fn append_conversation_message(
     {
         return Err("Mensagem inválida para o histórico.".into());
     }
+    if provider_id
+        .as_ref()
+        .is_some_and(|id| id.is_empty() || id.len() > 80 || id.chars().any(char::is_control))
+        || model
+            .as_ref()
+            .is_some_and(|name| name.len() > 200 || name.chars().any(char::is_control))
+    {
+        return Err("O provedor ou modelo da conversa é inválido.".into());
+    }
     let mut db = database(&app)?;
     let tx = db
         .transaction()
@@ -437,6 +470,13 @@ pub fn append_conversation_message(
             params![conversation_id, title],
         )
         .map_err(|_| "Não foi possível salvar a conversa.".to_string())?;
+    }
+    if provider_id.is_some() || model.is_some() {
+        tx.execute(
+            "UPDATE conversations SET provider_id = COALESCE(?2, provider_id), model = COALESCE(?3, model) WHERE id = ?1",
+            params![conversation_id, provider_id, model],
+        )
+        .map_err(|_| "Não foi possível salvar o modelo da conversa.".to_string())?;
     }
     let changed = tx.execute("INSERT INTO messages (conversation_id, role, content) SELECT id, ?2, ?3 FROM conversations WHERE id = ?1", params![conversation_id, role, content])
         .map_err(|_| "Não foi possível salvar a conversa.".to_string())?;
@@ -630,6 +670,28 @@ mod tests {
         assert_eq!(items[0].title, "Teste");
         assert_eq!(items[0].created_at, 1798000000);
         assert_eq!(items[0].preview, "");
+        assert_eq!(items[0].provider_id, "");
+        assert_eq!(items[0].model, "");
+    }
+
+    #[test]
+    fn existing_conversation_schema_migrates_and_lists_provider_model() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "CREATE TABLE conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
+             INSERT INTO conversations(id, title) VALUES ('old', 'Anterior');",
+        )
+        .unwrap();
+        init_schema(&db).unwrap();
+        db.execute(
+            "UPDATE conversations SET provider_id = ?2, model = ?3 WHERE id = ?1",
+            params!["old", "openai", "gpt-test"],
+        )
+        .unwrap();
+
+        let items = read_conversations(&db).unwrap();
+        assert_eq!(items[0].provider_id, "openai");
+        assert_eq!(items[0].model, "gpt-test");
     }
 
     #[test]

@@ -162,6 +162,8 @@ O teste `window_sizing::tests` usa uma área útil sintética de 1.920 × 1.040 
 
 O estado inicial é a Visão geral; a falta de identidade é apresentada por um cartão dispensável nessa tela. O chip do cabeçalho abre Conectores e mostra o provedor/modelo quando há credencial disponível. A disposição precisa de conferência visual em Windows.
 
+O histórico local guarda o provedor e modelo da última resposta de cada conversa. `history.rs` testa a migração do esquema anterior e a leitura desses campos; `Conversations.test.tsx` verifica que o chip só aparece quando a conversa difere do modelo atual. A exibição ainda requer conferência visual em Windows.
+
 ## Fechamento e bandeja do Windows
 
 O padrão é Encerrar. Nessa opção, o X tenta cancelar solicitações registradas de provedor e fechar as janelas auxiliares; a saída tem limite de três segundos. Em Minimizar para a bandeja, o X oculta a janela principal e o menu nativo oferece Abrir e Sair; Sair também encerra o processo. Os testes unitários cobrem a escolha entre ocultar e encerrar e o limite da limpeza; a interação real com a bandeja, reabertura por segunda instância e encerramento de WebView2 ainda requer teste visual/nativo em Windows.

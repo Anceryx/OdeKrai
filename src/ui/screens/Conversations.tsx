@@ -9,6 +9,7 @@ import { MessageMarkdown } from '../MessageMarkdown';
 import appIcon from '../../assets/odekrai-app-icon.png';
 import { initials, type ProfileData } from '../Profile';
 import { ResizeHandle } from '../ResizeHandle';
+import { providerById } from '../../core/providers';
 
 export function ConversationsScreen({
   messages,
@@ -24,8 +25,8 @@ export function ConversationsScreen({
   error,
   submit,
   cancel,
-  providerName,
   providerModel,
+  providerId,
   providerConfigured,
   conversationSidebarCollapsed,
   conversationSidebarWidth,
@@ -52,8 +53,8 @@ export function ConversationsScreen({
   error: string;
   submit: (event: FormEvent) => void;
   cancel: () => void;
-  providerName: string;
   providerModel: string;
+  providerId: string;
   providerConfigured: boolean;
   conversationSidebarCollapsed: boolean;
   conversationSidebarWidth: number;
@@ -73,6 +74,10 @@ export function ConversationsScreen({
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const messagesAreaRef = useRef<HTMLDivElement>(null);
   const activeConversation = conversations.find((item) => item.id === conversationId);
+  const conversationModelDiffers = Boolean(
+    activeConversation?.model &&
+    (activeConversation.provider_id !== providerId || activeConversation.model !== providerModel),
+  );
   const filteredConversations = filterConversations(conversations, search);
   const presentedMessages = presentMessages(
     messages.filter((message) => message.role !== 'system'),
@@ -225,9 +230,14 @@ export function ConversationsScreen({
               <h2>Nova conversa</h2>
             )}
           </div>
-          <span className="chat-model-chip">
-            {providerConfigured ? providerModel || providerName : 'Sem provedor'}
-          </span>
+          {conversationModelDiffers && activeConversation && (
+            <span className="chat-model-chip" title="Modelo usado nesta conversa">
+              {activeConversation.provider_id !== providerId
+                ? `${providerById(activeConversation.provider_id ?? '')?.name ?? activeConversation.provider_id} · `
+                : ''}
+              {activeConversation.model}
+            </span>
+          )}
         </header>
         {!providerConfigured && (
           <div className="chat-provider-needed" role="status">
