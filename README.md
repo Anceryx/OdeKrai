@@ -19,6 +19,7 @@ Aplicativo OdeKrai para Windows, desenvolvido com React, TypeScript e Tauri 2. O
 - Inicialização tolerante a falhas, modo seguro após interrupção e registro local de diagnóstico sem conteúdo de conversas.
 - Adaptadores para 13 APIs Chat Completions remotas, Anthropic Messages, Perplexity Agent API e conexão local OpenAI compatível. Vertex AI continua como guia pendente de ADC/OAuth.
 - Conector IA local para servidores Ollama ou llama.cpp já iniciados, com seleção de modelos e conversa por streaming; não baixa modelos nem inicia servidores.
+- A tela “Seu computador” mostra RAM, espaço livre para modelos, CPU e adaptadores DXGI; a recomendação é indicativa. O catálogo Qwen registra metadados de arquivos GGUF consultados no Hugging Face, enquanto requisitos mínimos e contexto permanecem não verificados. A escolha não baixa nem executa modelos.
 - Pet 2D com 12 personagens CC0 renderizados em 512×512, escolha persistida no SQLite e animações
   CSS.
 

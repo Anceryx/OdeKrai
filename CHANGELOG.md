@@ -2,6 +2,8 @@
 
 ## Não lançado
 
+- Adicionadas a tela de recursos do computador, recomendações indicativas de perfis Qwen e catálogo de GGUF. Requisitos mínimos/contexto não verificados; a interface não baixa nem executa modelos.
+
 ### Áudio
 
 - O painel do Assistente lista os 16 eventos sonoros, permite ouvir prévias e escolher arquivos disponíveis; o carregamento automático tenta WAV, OGG e MP3, memorizando falhas.

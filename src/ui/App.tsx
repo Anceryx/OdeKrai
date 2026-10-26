@@ -44,6 +44,11 @@ const ProvidersScreen = lazy(() =>
     default: withScreenBoundary(module.ProvidersScreen),
   })),
 );
+const ComputerScreen = lazy(() =>
+  import('./screens/Computer').then((module) => ({
+    default: withScreenBoundary(module.ComputerScreen),
+  })),
+);
 const IdentityScreen = lazy(() =>
   import('./screens/Identity').then((module) => ({
     default: withScreenBoundary(module.IdentityScreen),
@@ -702,6 +707,7 @@ function MainApp() {
                   }}
                 />
               )}
+              {section === 'computer' && <ComputerScreen />}
               {section === 'companion' && (
                 <AssistantScreen
                   settings={settings}
