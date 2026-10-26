@@ -1,9 +1,9 @@
 # Arquitetura
 
-O Rust executa o loop de agente por `agent_run`; a interface atual não o dispara. As habilidades
-permanecem as registradas em Rust e ativadas pelo usuário. O modo por conversa é habilitado por
-padrão em conversas novas somente quando a pasta/identidade do agente e um provedor com tools
-verificadas estão disponíveis.
+O Rust executa o loop de agente por `agent_run`; a tela de Conversas oferece o modo agente por
+conversa, o botão Parar e os cartões persistentes de ações. Conversas novas iniciam com o modo
+ligado quando a pasta/identidade, uma habilidade ativa e um provedor com tool calling elegível
+estão disponíveis. As habilidades e decisões permanecem no registro e no motor Rust.
 
 O catálogo de provedores em `src-tauri/resources/provider-catalog.json` alimenta os metadados do frontend e do Rust. O Rust valida host e caminho, acessa credenciais e implementa listagem documentada de modelos. As preferências guardam configurações por `providerId`; perfil e histórico usam SQLite local. Avatar é processado no Rust e servido como data URL apenas para a interface principal.
 
@@ -38,10 +38,11 @@ são limitados pelo motor. O roteador só troca de provedor em falhas transitór
 saída. A tabela `agent_messages` registra tipo, habilidade, id de auditoria e hashes; argumentos e
 resultados brutos não são persistidos.
 
-`AgentEvent` é o contrato serializado do canal: `step`, `toolCall`, `awaitingApproval`, `toolResult`,
-`finalResponse`, `error` e `stopped`. `agent_cancel(conversation_id)` cancela uma execução; o kill
-switch para todas. `approval_respond` apenas resolve a decisão pendente; o loop retoma a ação após
-receber o canal.
+`AgentEvent` é o contrato serializado do canal: `step`, `toolCall`, `actionCard`, `awaitingApproval`,
+`toolResult`, `finalResponse`, `error` e `stopped`. Cartões guardam descrição, risco, decisão,
+status e um resumo sem parâmetros ou resultados brutos. `agent_cancel(conversation_id)` cancela uma
+execução; o kill switch para todas. `approval_respond` apenas resolve a decisão pendente; o loop
+retoma a ação após receber o canal.
 
 ## Aplicativo
 
@@ -63,9 +64,9 @@ O SQLite também soma tokens de entrada e saída por provedor e dia UTC. A inter
 
 `src/core/island.ts` implementa transições e prioridades. `src/core/sounds.ts` carrega sons sob demanda, mantém cache, limita repetições, aplica volume e ignora arquivos ausentes ou inválidos. Preferências não secretas ficam no armazenamento local do WebView; chaves de API não são salvas. O histórico de conversas fica em SQLite na pasta de dados do aplicativo, acessado somente pelos comandos Rust da janela principal.
 
-Conversas apresenta uma lista pesquisável com título, data e prévia; o SQLite armazena título e
-mensagens com horário. A tela permite selecionar, renomear e apagar uma conversa. O painel da
-conversa mostra mensagens do usuário à direita e respostas à esquerda; o avatar das respostas usa
+Conversas apresenta uma lista pesquisável com título, data e prévia; o SQLite armazena título,
+mensagens, modo agente e cartões de ação. A tela permite selecionar, renomear e apagar uma conversa.
+O painel da conversa mostra mensagens do usuário à direita e respostas à esquerda; o avatar das respostas usa
 o ícone do aplicativo por padrão, com uma preferência para usar o mascote. As respostas usam um
 renderizador Markdown que cria elementos React a partir de texto, sem interpretar HTML. Links só
 aceitam `http` e `https`.

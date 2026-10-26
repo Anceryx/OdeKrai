@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { resolveConversationSelection } from '../core/chat';
 import type { ChatMessage } from '../core/provider-messages';
+import type { AgentActionCardData } from './AgentControls';
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -145,6 +146,16 @@ function MainApp() {
 
   const appState = useAppState();
   const [usedProviderId, setUsedProviderId] = useState<string | null>(null);
+  const [agentAvailability, setAgentAvailability] = useState<{
+    available: boolean;
+    reason: string | null;
+    workspacePath: string | null;
+  }>({ available: false, reason: 'Verificando requisitos do agente…', workspacePath: null });
+  const [agentEnabled, setAgentEnabled] = useState(false);
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [agentAwaitingApproval, setAgentAwaitingApproval] = useState(false);
+  const [agentActionCards, setAgentActionCards] = useState<AgentActionCardData[]>([]);
+  const agentRunConversation = useRef<string | null>(null);
   const thinkingSoundGate = useRef(new SoundTriggerGate());
   const lastThinkingSoundKey = useRef<string | null>(null);
   const diagnosticsSoundPlayed = useRef(false);
@@ -197,6 +208,37 @@ function MainApp() {
   const shownProviderName = usedProvider?.name ?? activeProvider.name;
   const shownProviderId = usedProviderId ?? settings.activeProviderId;
   const shownProviderModel = shownProviderSettings?.model ?? activeProvider.model;
+
+  useEffect(() => {
+    if (!isTauri()) {
+      setAgentAvailability({
+        available: false,
+        reason: 'O modo agente está disponível somente no aplicativo do OdeKrai.',
+        workspacePath: null,
+      });
+      return;
+    }
+    void invoke<{ available: boolean; reason: string | null; workspacePath: string | null }>(
+      'agent_availability',
+      { providerId: activeProvider.providerId, model: activeProvider.model },
+    )
+      .then((availability) => {
+        setAgentAvailability(availability);
+        if (!conversationId) setAgentEnabled(availability.available);
+      })
+      .catch(() =>
+        setAgentAvailability({
+          available: false,
+          reason: 'Não foi possível verificar a pasta, o provedor e as habilidades do agente.',
+          workspacePath: null,
+        }),
+      );
+  }, [
+    activeProvider.providerId,
+    activeProvider.model,
+    conversationId,
+    permissionIndicator?.halted,
+  ]);
 
   useEffect(() => {
     const onShortcut = (event: KeyboardEvent) => {
@@ -300,6 +342,26 @@ function MainApp() {
     if (!enabled && settings.activeProviderId === providerId) setKeySavedForSession(false);
   }
 
+  async function setConversationAgentMode(enabled: boolean) {
+    if (enabled && !agentAvailability.available) return;
+    if (conversationId) {
+      try {
+        await invoke('set_conversation_agent_mode', { conversationId, enabled });
+        setConversations((items) =>
+          items.map((item) =>
+            item.id === conversationId ? { ...item, agent_enabled: enabled } : item,
+          ),
+        );
+      } catch (cause) {
+        setToast(
+          cause instanceof Error ? cause.message : 'Não foi possível alterar o modo agente.',
+        );
+        return;
+      }
+    }
+    setAgentEnabled(enabled);
+  }
+
   async function hasConfiguredChatProvider() {
     const candidates = [settings.activeProviderId, ...settings.fallbackProviderIds].filter(
       (providerId, index, all) =>
@@ -328,6 +390,13 @@ function MainApp() {
   async function sendMessage(rawText: string, reuseLastUserMessage = false) {
     const text = rawText.trim();
     if (!text || busy) return;
+    if (agentEnabled && !agentAvailability.available) {
+      setError(
+        `Modo agente indisponível: ${agentAvailability.reason ?? 'verifique as configurações do agente.'}`,
+      );
+      setLastFailedPrompt('');
+      return;
+    }
     if (!isTauri() || !(await hasConfiguredChatProvider())) {
       setError('Configure um provedor de IA em Conectores para enviar mensagens.');
       setLastFailedPrompt('');
@@ -380,6 +449,12 @@ function MainApp() {
           model: activeProvider.model,
           providerTargets: agentProviderTargets,
         });
+        if (!conversationId && !agentEnabled && agentAvailability.available) {
+          await invoke('set_conversation_agent_mode', {
+            conversationId: activeId,
+            enabled: false,
+          });
+        }
         setConversations((items) =>
           items.map((item) => (item.id === activeId ? { ...item, preview: text } : item)),
         );
@@ -394,9 +469,116 @@ function MainApp() {
             created_at: sentAt,
             provider_id: provider.id,
             model: activeProvider.model,
+            agent_enabled: agentEnabled && agentAvailability.available,
           },
           ...items,
         ]);
+      if (agentEnabled && agentAvailability.available) {
+        const onEvent = new Channel<{
+          type:
+            | 'step'
+            | 'toolCall'
+            | 'awaitingApproval'
+            | 'toolResult'
+            | 'finalResponse'
+            | 'error'
+            | 'stopped'
+            | 'actionCard';
+          turn?: number;
+          id?: string;
+          name?: string;
+          auditId?: string | null;
+          isError?: boolean;
+          content?: string;
+          kind?: string;
+          message?: string;
+          card?: AgentActionCardData & { createdAt: number };
+        }>();
+        agentRunConversation.current = activeId;
+        setAgentRunning(true);
+        setAgentAwaitingApproval(false);
+        onEvent.onmessage = (event) => {
+          if (event.type === 'actionCard' && event.card) {
+            setAgentActionCards((items) => {
+              const next = items.filter((item) => item.id !== event.card!.id);
+              return [...next, event.card!].slice(-100);
+            });
+            setAgentAwaitingApproval(event.card.status === 'Aguardando aprovação');
+          } else if (event.type === 'awaitingApproval') {
+            setAgentAwaitingApproval(true);
+            void playSound('approval_needed', normalizeSoundPreferences(settings.companion.sounds));
+            void emit('companion-state', {
+              type: 'activity',
+              state: 'awaiting_approval',
+              message: 'Aguardando aprovação na janela nativa',
+            });
+          } else if (event.type === 'toolCall' || event.type === 'step') {
+            setAgentAwaitingApproval(false);
+            void emit('companion-state', {
+              type: 'activity',
+              state: event.type === 'toolCall' ? 'task' : 'thinking',
+              message: event.type === 'toolCall' ? 'Executando habilidade' : 'Pensando',
+            });
+          } else if (event.type === 'toolResult') {
+            setAgentAwaitingApproval(false);
+            if (event.isError) {
+              void playSound('error', normalizeSoundPreferences(settings.companion.sounds));
+            } else {
+              void playSound('action_done', normalizeSoundPreferences(settings.companion.sounds));
+            }
+            void emit('companion-state', {
+              type: 'activity',
+              state: event.isError ? 'error' : 'task',
+              message: event.isError ? 'A ação não foi concluída' : 'Ação concluída',
+            });
+          } else if (event.type === 'finalResponse') {
+            const content = event.content ?? '';
+            setMessages([
+              ...next,
+              { role: 'assistant', content, created_at: Math.floor(Date.now() / 1000) },
+            ]);
+            void playSound('success', normalizeSoundPreferences(settings.companion.sounds));
+            void emit('companion-state', {
+              type: 'activity',
+              state: 'completed',
+              message: 'Resposta pronta',
+            });
+          } else if (event.type === 'error') {
+            setError(event.message ?? 'O agente não conseguiu concluir a execução.');
+            void playSound('error', normalizeSoundPreferences(settings.companion.sounds));
+            void emit('companion-state', {
+              type: 'activity',
+              state: 'error',
+              message: 'Falha no agente',
+            });
+          } else if (event.type === 'stopped') {
+            setAgentAwaitingApproval(false);
+            void playSound('halted', normalizeSoundPreferences(settings.companion.sounds));
+            void emit('companion-state', {
+              type: 'activity',
+              state: 'paused',
+              message: 'Agente parado',
+            });
+          }
+        };
+        const answer = await invoke<string>('agent_run', {
+          conversationId: activeId,
+          message: text,
+          onEvent,
+        });
+        setMessages([
+          ...next,
+          { role: 'assistant', content: answer, created_at: Math.floor(Date.now() / 1000) },
+        ]);
+        setConversations((items) =>
+          items.map((item) => (item.id === activeId ? { ...item, preview: answer } : item)),
+        );
+        const cards = await invoke<AgentActionCardData[]>('load_agent_action_cards', {
+          conversationId: activeId,
+        });
+        setAgentActionCards(cards);
+        return;
+      }
       const onChunk = new Channel<
         | { type: 'textDelta'; text: string }
         | { type: 'toolCallComplete'; id: string; name: string; args: unknown }
@@ -496,7 +678,11 @@ function MainApp() {
         );
       }
     } catch (cause) {
-      if (!(typeof cause === 'string' && cause.includes('cancelada'))) {
+      const stopped =
+        typeof cause === 'string' &&
+        (cause.toLocaleLowerCase('pt-BR').includes('parad') ||
+          cause.toLocaleLowerCase('pt-BR').includes('cancel'));
+      if (!stopped) {
         setMessages(next);
         setLastFailedPrompt(text);
         setError(
@@ -515,10 +701,14 @@ function MainApp() {
           });
       } else {
         setMessages(next);
+        setLastFailedPrompt('');
       }
     } finally {
       setBusy(false);
       request.current = null;
+      setAgentRunning(false);
+      setAgentAwaitingApproval(false);
+      agentRunConversation.current = null;
     }
   }
 
@@ -528,6 +718,12 @@ function MainApp() {
   }
 
   function cancelRequest() {
+    if (agentRunConversation.current) {
+      void invoke('agent_cancel', { conversationId: agentRunConversation.current }).catch(() =>
+        setError('Não foi possível parar a execução do agente.'),
+      );
+      return;
+    }
     if (request.current) void invoke('cancel_provider_request', { requestId: request.current });
   }
 
@@ -746,14 +942,26 @@ function MainApp() {
                 if (!selectedId) return;
                 setConversationId(selectedId);
                 setError('');
-                void invoke<ChatMessage[]>('load_conversation', { conversationId: selectedId })
-                  .then((loaded) => setMessages(loaded))
+                void Promise.all([
+                  invoke<ChatMessage[]>('load_conversation', { conversationId: selectedId }),
+                  invoke<boolean>('get_conversation_agent_mode', { conversationId: selectedId }),
+                  invoke<AgentActionCardData[]>('load_agent_action_cards', {
+                    conversationId: selectedId,
+                  }),
+                ])
+                  .then(([loaded, enabled, cards]) => {
+                    setMessages(loaded);
+                    setAgentEnabled(enabled);
+                    setAgentActionCards(cards);
+                  })
                   .catch(() => setError('Não foi possível abrir a conversa.'));
               }}
               onNewConversation={() => {
                 if (!busy) {
                   setConversationId(null);
                   setMessages([]);
+                  setAgentActionCards([]);
+                  setAgentEnabled(agentAvailability.available);
                   setError('');
                   setLastFailedPrompt('');
                 }
@@ -796,6 +1004,22 @@ function MainApp() {
               canRetry={Boolean(lastFailedPrompt)}
               profile={profile}
               selectedPet={selectedPet}
+              agentEnabled={agentEnabled}
+              agentUnavailableReason={agentAvailability.available ? null : agentAvailability.reason}
+              agentWorkspacePath={agentAvailability.workspacePath}
+              agentRunning={agentRunning}
+              agentAwaitingApproval={agentAwaitingApproval}
+              agentActionCards={agentActionCards}
+              onToggleAgent={(enabled) => void setConversationAgentMode(enabled)}
+              onStopAgent={cancelRequest}
+              onConfigureAgent={() => {
+                const reason = agentAvailability.reason ?? '';
+                setChatMode(false);
+                if (reason.includes('pasta') || reason.includes('identidade')) setSection('agent');
+                else if (reason.includes('habilidade')) setSection('skills');
+                else if (reason.includes('parada de emergência')) setSection('permissions');
+                else setSection('providers');
+              }}
             />
           ) : (
             <div className="content-scroll">
@@ -855,6 +1079,7 @@ function MainApp() {
                   settings={settings}
                   update={setSettings}
                   onDeleteAllHistory={deleteAllConversations}
+                  onOpenPermissions={() => setSection('permissions')}
                 />
               )}
               {section === 'permissions' && <PermissionsScreen />}

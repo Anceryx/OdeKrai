@@ -22,19 +22,35 @@ type ProviderUsage = {
   sevenDayOutput: number;
 };
 
+type AgentLimits = {
+  maxTurns: number;
+  maxDurationSeconds: number;
+  maxTokens: number;
+  maxExternalActions: number;
+};
+
 export function SettingsScreen({
   settings,
   update,
   onDeleteAllHistory,
+  onOpenPermissions,
 }: {
   settings: AppSettings;
   update: (next: AppSettings) => void;
   onDeleteAllHistory: () => Promise<boolean>;
+  onOpenPermissions: () => void;
 }) {
   const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null);
   const [usage, setUsage] = useState<ProviderUsage[]>([]);
   const [fallbackToAdd, setFallbackToAdd] = useState('');
   const [linkDomainDraft, setLinkDomainDraft] = useState('');
+  const [agentLimits, setAgentLimits] = useState<AgentLimits>({
+    maxTurns: 8,
+    maxDurationSeconds: 120,
+    maxTokens: 16_000,
+    maxExternalActions: 2,
+  });
+  const [agentLimitsError, setAgentLimitsError] = useState('');
   const totalTokensToday = usage.reduce(
     (total, item) => total + item.todayInput + item.todayOutput,
     0,
@@ -54,7 +70,27 @@ export function SettingsScreen({
     void invoke<ProviderUsage[]>('get_provider_usage')
       .then(setUsage)
       .catch(() => setUsage([]));
+    void invoke<AgentLimits>('get_agent_limits')
+      .then(setAgentLimits)
+      .catch(() => setAgentLimitsError('Não foi possível carregar os limites do agente.'));
   }, []);
+
+  function updateAgentLimit<K extends keyof AgentLimits>(key: K, value: AgentLimits[K]) {
+    const bounds: Record<keyof AgentLimits, [number, number]> = {
+      maxTurns: [1, 32],
+      maxDurationSeconds: [10, 600],
+      maxTokens: [128, 200_000],
+      maxExternalActions: [0, 20],
+    };
+    if (!Number.isSafeInteger(value) || value < bounds[key][0] || value > bounds[key][1]) return;
+    const next = { ...agentLimits, [key]: value };
+    setAgentLimits(next);
+    if (!isTauri()) return;
+    void invoke('set_agent_limits', { limits: next }).then(
+      () => setAgentLimitsError(''),
+      () => setAgentLimitsError('Não foi possível salvar os limites do agente.'),
+    );
+  }
 
   return (
     <div className="page subpage">
@@ -130,6 +166,90 @@ export function SettingsScreen({
               })
             }
           />
+        </div>
+      </section>
+      <section className="settings-panel settings-section" aria-labelledby="agent-settings-heading">
+        <h2 id="agent-settings-heading">Agente</h2>
+        <p className="settings-description">
+          Os limites são aplicados pelo Rust em cada execução e ficam salvos neste dispositivo.
+        </p>
+        {agentLimitsError && <p role="alert">{agentLimitsError}</p>}
+        <div className="preference-row">
+          <label htmlFor="agent-max-turns">
+            <strong>Voltas máximas</strong>
+          </label>
+          <input
+            id="agent-max-turns"
+            type="number"
+            min="1"
+            max="32"
+            value={agentLimits.maxTurns}
+            onChange={(event) => updateAgentLimit('maxTurns', Number(event.target.value))}
+          />
+        </div>
+        <div className="preference-row">
+          <label htmlFor="agent-max-duration">
+            <strong>Tempo máximo (segundos)</strong>
+          </label>
+          <input
+            id="agent-max-duration"
+            type="number"
+            min="10"
+            max="600"
+            step="10"
+            value={agentLimits.maxDurationSeconds}
+            onChange={(event) => updateAgentLimit('maxDurationSeconds', Number(event.target.value))}
+          />
+        </div>
+        <div className="preference-row">
+          <label htmlFor="agent-max-tokens">
+            <strong>Tokens máximos por execução</strong>
+          </label>
+          <input
+            id="agent-max-tokens"
+            type="number"
+            min="128"
+            max="200000"
+            step="128"
+            value={agentLimits.maxTokens}
+            onChange={(event) => updateAgentLimit('maxTokens', Number(event.target.value))}
+          />
+        </div>
+        <div className="preference-row">
+          <label htmlFor="agent-max-external">
+            <strong>Ações de comunicação externa</strong>
+          </label>
+          <input
+            id="agent-max-external"
+            type="number"
+            min="0"
+            max="20"
+            value={agentLimits.maxExternalActions}
+            onChange={(event) => updateAgentLimit('maxExternalActions', Number(event.target.value))}
+          />
+        </div>
+        <div className="agent-mode-help">
+          <h3>Modos de permissão</h3>
+          <ul>
+            <li>
+              <strong>Sempre perguntar:</strong> solicita aprovação antes de ações que alteram algo.
+            </li>
+            <li>
+              <strong>Aprovar por mim:</strong> permite alterações reversíveis na pasta de trabalho;
+              pergunta para as demais ações permitidas.
+            </li>
+            <li>
+              <strong>Controle total:</strong> permite mais ações sem perguntar, mantendo bloqueios
+              fixos e a confirmação nativa quando exigida.
+            </li>
+          </ul>
+          <button
+            type="button"
+            className="secondary-button small-button"
+            onClick={onOpenPermissions}
+          >
+            Abrir Permissões
+          </button>
         </div>
       </section>
       <section className="settings-panel settings-section" aria-labelledby="trusted-links-heading">

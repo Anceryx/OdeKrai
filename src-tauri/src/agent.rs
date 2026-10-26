@@ -88,6 +88,9 @@ pub enum AgentEvent {
         audit_id: Option<String>,
         is_error: bool,
     },
+    ActionCard {
+        card: crate::history::AgentActionCard,
+    },
     FinalResponse {
         content: String,
     },

@@ -2,11 +2,11 @@
 
 ## Loop de agente
 
-`agent_run` é um comando Rust para a janela principal e ainda não é chamado pelo chat. O loop usa as habilidades ativas do registro Rust, schemas fechados, limites por execução, truncamento e cancelamento. O modelo fornece somente nome e parâmetros; o Rust calcula risco, modo e decisão. A origem permanece `Model`; taint é estado separado mantido pelo Rust e força aprovação para efeitos colaterais após resultados de ferramentas.
+`agent_run` é chamado pela tela de Conversas através de um canal Tauri. O loop usa as habilidades ativas do registro Rust, schemas fechados, limites por execução, truncamento e cancelamento. O modelo fornece somente nome e parâmetros; o Rust calcula risco, modo e decisão. A origem permanece `Model`; taint é estado separado mantido pelo Rust e força aprovação para efeitos colaterais após resultados de ferramentas.
 
 O provedor principal e os fallbacks são armazenados com a conversa. O roteador exige credencial, adaptador compatível e tool calling verificado ou opt-in nativo. O failover só ocorre em falha transitória antes de qualquer saída observada; chamadas de ferramenta só são executadas após a resposta completa e não são repetidas pelo failover. O limite por execução inclui turnos, duração, tokens, quantidade de ferramentas e chamadas repetidas.
 
-Chamadas e resultados são persistidos em `agent_messages` com tipo, habilidade, id de auditoria e hashes de parâmetros/resultados. Argumentos e resultados brutos não são armazenados nessa tabela. O canal Tauri envia `AgentEvent`; `agent_cancel` cancela uma conversa e o kill switch cancela todas. A interface do agente e a integração com o chat continuam fora desta fase. Consulte [`TRACEABILITY.md`](TRACEABILITY.md).
+Chamadas e resultados técnicos são persistidos em `agent_messages` com tipo, habilidade, id de auditoria e hashes de parâmetros/resultados. Cartões separados persistem descrição segura, risco, decisão, status e resumo, sem argumentos ou resultados brutos. O canal Tauri envia `AgentEvent`; `agent_cancel` cancela uma conversa e o kill switch cancela todas. A interface apenas apresenta os dados do Rust e nunca decide permissões. Consulte [`TRACEABILITY.md`](TRACEABILITY.md).
 
 Conteúdo lido de arquivos locais pode conter instruções maliciosas. A validação de caminhos, `.history` e `.trash` não remove esse risco. Resultados de habilidades são delimitados e rotulados como dados não confiáveis; taint continua ativo nas chamadas seguintes e a política Rust exige aprovação para efeitos colaterais.
 

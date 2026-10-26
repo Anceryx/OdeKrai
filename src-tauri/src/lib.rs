@@ -760,6 +760,9 @@ pub fn run() -> Result<(), tauri::Error> {
         .invoke_handler(tauri::generate_handler![
             agent_runtime::agent_run,
             agent_runtime::agent_cancel,
+            agent_runtime::agent_availability,
+            agent_runtime::get_agent_limits,
+            agent_runtime::set_agent_limits,
             get_build_info,
             external_links::open_external_link,
             hardware::get_hardware_profile,
@@ -793,6 +796,7 @@ pub fn run() -> Result<(), tauri::Error> {
             profile::remove_profile_avatar,
             history::list_conversations,
             history::load_conversation,
+            history::load_agent_action_cards,
             history::append_conversation_message,
             history::get_conversation_agent_mode,
             history::set_conversation_agent_mode,

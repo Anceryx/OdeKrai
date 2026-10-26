@@ -10,6 +10,7 @@ import appIcon from '../../assets/odekrai-app-icon.png';
 import { initials, type ProfileData } from '../Profile';
 import { ResizeHandle } from '../ResizeHandle';
 import { providerById } from '../../core/providers';
+import { AgentActionCard, AgentControls, type AgentActionCardData } from '../AgentControls';
 
 export function ConversationsScreen({
   messages,
@@ -39,6 +40,15 @@ export function ConversationsScreen({
   canRetry,
   profile,
   selectedPet,
+  agentEnabled,
+  agentUnavailableReason,
+  agentWorkspacePath,
+  agentRunning,
+  agentAwaitingApproval,
+  agentActionCards,
+  onToggleAgent,
+  onStopAgent,
+  onConfigureAgent,
 }: {
   messages: ChatMessage[];
   conversations: ConversationSummary[];
@@ -67,6 +77,15 @@ export function ConversationsScreen({
   canRetry: boolean;
   profile: ProfileData;
   selectedPet: string;
+  agentEnabled: boolean;
+  agentUnavailableReason: string | null;
+  agentWorkspacePath: string | null;
+  agentRunning: boolean;
+  agentAwaitingApproval: boolean;
+  agentActionCards: AgentActionCardData[];
+  onToggleAgent: (enabled: boolean) => void;
+  onStopAgent: () => void;
+  onConfigureAgent: () => void;
 }) {
   const [search, setSearch] = useState('');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -238,6 +257,16 @@ export function ConversationsScreen({
               {activeConversation.model}
             </span>
           )}
+          <AgentControls
+            enabled={agentEnabled}
+            disabledReason={agentUnavailableReason}
+            workspacePath={agentWorkspacePath}
+            running={agentRunning}
+            awaitingApproval={agentAwaitingApproval}
+            onToggle={onToggleAgent}
+            onStop={onStopAgent}
+            onConfigure={onConfigureAgent}
+          />
         </header>
         {!providerConfigured && (
           <div className="chat-provider-needed" role="status">
@@ -248,7 +277,7 @@ export function ConversationsScreen({
           </div>
         )}
         <div className="messages-area" aria-live="polite" ref={messagesAreaRef}>
-          {messages.length === 0 ? (
+          {messages.length === 0 && agentActionCards.length === 0 ? (
             <div className="empty-chat">
               <img className="empty-chat-icon" src={appIcon} alt="" />
               <strong>O que você gostaria de explorar?</strong>
@@ -327,7 +356,10 @@ export function ConversationsScreen({
                   )}
                 </article>
               ))}
-              {busy && (
+              {agentActionCards.map((action) => (
+                <AgentActionCard action={action} key={action.id} />
+              ))}
+              {busy && !agentAwaitingApproval && (
                 <div className="thinking-row">
                   <span className="thinking-dots">
                     <i />

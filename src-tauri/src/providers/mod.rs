@@ -1081,6 +1081,22 @@ pub(crate) fn verified_tool_support(
         .is_ok_and(|capabilities| capabilities.tools && capabilities.verified)
 }
 
+pub(crate) fn agent_provider_ready(app: &tauri::AppHandle, provider_id: &str, model: &str) -> bool {
+    let Some(entry) = catalog_entry(provider_id) else {
+        return false;
+    };
+    eligible_provider_targets(
+        app,
+        vec![ProviderTarget {
+            provider_id: provider_id.to_string(),
+            base_url: entry.base_url,
+            model: model.to_string(),
+        }],
+        true,
+    )
+    .is_ok_and(|targets| !targets.is_empty())
+}
+
 fn looks_like_unsupported_tools(response_body: &str) -> bool {
     let body = response_body.to_ascii_lowercase();
     [

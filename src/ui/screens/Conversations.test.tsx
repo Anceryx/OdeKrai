@@ -33,6 +33,15 @@ describe('ConversationsScreen', () => {
         canRetry={false}
         profile={{ displayName: 'Oli', nickname: '', avatarDataUrl: null }}
         selectedPet="character-female-a"
+        agentEnabled={false}
+        agentUnavailableReason="Configure a pasta de trabalho do agente."
+        agentWorkspacePath={null}
+        agentRunning={false}
+        agentAwaitingApproval={false}
+        agentActionCards={[]}
+        onToggleAgent={() => undefined}
+        onStopAgent={() => undefined}
+        onConfigureAgent={() => undefined}
       />,
     );
     expect(markup).toContain('Nova conversa');
@@ -82,6 +91,15 @@ describe('ConversationsScreen', () => {
         canRetry={false}
         profile={{ displayName: 'Teste', nickname: '', avatarDataUrl: null }}
         selectedPet="character-female-a"
+        agentEnabled={true}
+        agentUnavailableReason={null}
+        agentWorkspacePath="D:\\OdeKrai"
+        agentRunning={false}
+        agentAwaitingApproval={false}
+        agentActionCards={[]}
+        onToggleAgent={() => undefined}
+        onStopAgent={() => undefined}
+        onConfigureAgent={() => undefined}
       />,
     );
     expect(markup).toContain('Modelo usado nesta conversa');
@@ -118,6 +136,15 @@ describe('ConversationsScreen', () => {
         canRetry={false}
         profile={{ displayName: 'Teste', nickname: '', avatarDataUrl: null }}
         selectedPet="character-female-a"
+        agentEnabled={false}
+        agentUnavailableReason="Configure a pasta de trabalho do agente."
+        agentWorkspacePath={null}
+        agentRunning={false}
+        agentAwaitingApproval={false}
+        agentActionCards={[]}
+        onToggleAgent={() => undefined}
+        onStopAgent={() => undefined}
+        onConfigureAgent={() => undefined}
       />,
     );
     expect(markup).toContain('conversation-sidebar-collapsed');

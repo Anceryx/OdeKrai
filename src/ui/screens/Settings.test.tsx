@@ -10,6 +10,7 @@ describe('SettingsScreen', () => {
         settings={defaultSettings}
         update={() => undefined}
         onDeleteAllHistory={async () => false}
+        onOpenPermissions={() => undefined}
       />,
     );
     expect(markup).toContain('Dados e privacidade');
@@ -18,6 +19,9 @@ describe('SettingsScreen', () => {
     expect(markup).toContain('Limite diário');
     expect(markup).toContain('Estado: Dentro do limite');
     expect(markup).toContain('Ao fechar a janela');
+    expect(markup).toContain('Voltas máximas');
+    expect(markup).toContain('Sempre perguntar');
+    expect(markup).toContain('Abrir Permissões');
     expect(markup).toContain('Links externos');
     expect(markup).toContain('Sobre');
     expect(markup).toContain('WebView2');

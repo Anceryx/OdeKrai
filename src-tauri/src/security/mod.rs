@@ -321,13 +321,13 @@ fn database(app: &tauri::AppHandle) -> Result<Connection, String> {
         .map_err(|_| "Não foi possível preparar os dados do aplicativo.".to_string())?;
     let db = Connection::open(dir.join("permissions.sqlite3"))
         .map_err(|_| "Não foi possível abrir as configurações de segurança.".to_string())?;
-    let schema = format!("PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS permission_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS tool_overrides (tool TEXT PRIMARY KEY, more_permissive INTEGER NOT NULL CHECK(more_permissive IN (0,1))); CREATE TABLE IF NOT EXISTS skill_settings (skill_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL CHECK(enabled IN (0,1))); CREATE TABLE IF NOT EXISTS allowed_folders (path TEXT PRIMARY KEY, access TEXT NOT NULL CHECK(access IN ('read_only','read_write'))); INSERT OR IGNORE INTO permission_settings(key,value) VALUES ('mode','sempre_perguntar'),('shortcut','Ctrl+Shift+F12'),('halted','false'),('approval_ttl_seconds','{DEFAULT_APPROVAL_TTL}');");
+    let schema = format!("PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS permission_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS tool_overrides (tool TEXT PRIMARY KEY, more_permissive INTEGER NOT NULL CHECK(more_permissive IN (0,1))); CREATE TABLE IF NOT EXISTS skill_settings (skill_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL CHECK(enabled IN (0,1))); CREATE TABLE IF NOT EXISTS allowed_folders (path TEXT PRIMARY KEY, access TEXT NOT NULL CHECK(access IN ('read_only','read_write'))); INSERT OR IGNORE INTO permission_settings(key,value) VALUES ('mode','sempre_perguntar'),('shortcut','Ctrl+Shift+F12'),('halted','false'),('approval_ttl_seconds','{DEFAULT_APPROVAL_TTL}'),('agent_max_turns','8'),('agent_max_duration_seconds','120'),('agent_max_tokens','16000'),('agent_max_external_actions','2');");
     db.execute_batch(&schema)
         .map_err(|_| "Não foi possível preparar as configurações de segurança.".to_string())?;
     Ok(db)
 }
 
-fn db_setting(app: &tauri::AppHandle, key: &str) -> Result<String, String> {
+pub(crate) fn db_setting(app: &tauri::AppHandle, key: &str) -> Result<String, String> {
     database(app)?
         .query_row(
             "SELECT value FROM permission_settings WHERE key=?1",
@@ -337,7 +337,7 @@ fn db_setting(app: &tauri::AppHandle, key: &str) -> Result<String, String> {
         .map_err(|_| "Não foi possível ler as configurações de segurança.".into())
 }
 
-fn set_db_setting(app: &tauri::AppHandle, key: &str, value: &str) -> Result<(), String> {
+pub(crate) fn set_db_setting(app: &tauri::AppHandle, key: &str, value: &str) -> Result<(), String> {
     database(app)?.execute("INSERT INTO permission_settings(key,value) VALUES (?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value", params![key,value]).map_err(|_| "Não foi possível salvar as configurações de segurança.".to_string())?;
     Ok(())
 }

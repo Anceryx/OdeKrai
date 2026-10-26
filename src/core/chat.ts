@@ -5,6 +5,7 @@ export type ConversationSummary = {
   created_at: number;
   provider_id?: string;
   model?: string;
+  agent_enabled?: boolean;
 };
 
 export function filterConversations<T extends ConversationSummary>(

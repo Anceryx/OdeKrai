@@ -21,6 +21,7 @@ pub struct Conversation {
     preview: String,
     provider_id: String,
     model: String,
+    agent_enabled: bool,
 }
 
 #[derive(Serialize)]
@@ -28,6 +29,99 @@ pub struct StoredMessage {
     role: String,
     content: String,
     created_at: i64,
+}
+
+#[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentActionCard {
+    pub id: String,
+    pub skill_id: String,
+    pub title: String,
+    pub risk: String,
+    pub decision: String,
+    pub status: String,
+    pub summary: String,
+    pub result_summary: String,
+    pub diff: Option<String>,
+    pub created_at: i64,
+}
+
+pub(crate) fn save_agent_action_card(
+    app: &tauri::AppHandle,
+    conversation_id: &str,
+    card: &AgentActionCard,
+) -> Result<(), String> {
+    if !valid_id(conversation_id)
+        || card.id.is_empty()
+        || card.id.len() > 128
+        || !card
+            .id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-_ .".contains(&byte))
+        || card.skill_id.len() > 64
+        || card.title.len() > 120
+        || card.risk.len() > 64
+        || card.decision.len() > 40
+        || card.status.len() > 80
+        || card.summary.len() > 500
+        || card.result_summary.len() > 500
+        || card.diff.as_ref().is_some_and(|diff| diff.len() > 16_000)
+        || [
+            &card.title,
+            &card.risk,
+            &card.decision,
+            &card.status,
+            &card.summary,
+            &card.result_summary,
+        ]
+        .iter()
+        .any(|value| value.chars().any(char::is_control))
+    {
+        return Err("Cartão de ação inválido.".into());
+    }
+    let changed = database(app)?.execute(
+        "INSERT INTO agent_action_cards(conversation_id,id,skill_id,title,risk,decision,status,summary,result_summary,diff) SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10 WHERE EXISTS(SELECT 1 FROM conversations WHERE id=?1) ON CONFLICT(conversation_id,id) DO UPDATE SET decision=excluded.decision,status=excluded.status,result_summary=excluded.result_summary,diff=excluded.diff",
+        params![conversation_id,card.id,card.skill_id,card.title,card.risk,card.decision,card.status,card.summary,card.result_summary,card.diff],
+    ).map_err(|_| "Não foi possível salvar o cartão da ação.".to_string())?;
+    if changed == 1 {
+        Ok(())
+    } else {
+        Err("A conversa do cartão não existe no histórico local.".into())
+    }
+}
+
+#[tauri::command]
+pub fn load_agent_action_cards(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    conversation_id: String,
+) -> Result<Vec<AgentActionCard>, String> {
+    super::require_main(&caller)?;
+    if !valid_id(&conversation_id) {
+        return Err("Conversa inválida.".into());
+    }
+    let db = database(&app)?;
+    let mut statement = db
+        .prepare("SELECT id,skill_id,title,risk,decision,status,summary,result_summary,diff,created_at FROM agent_action_cards WHERE conversation_id=?1 ORDER BY created_at,id LIMIT 200")
+        .map_err(|_| "Não foi possível ler as ações da conversa.".to_string())?;
+    let rows = statement
+        .query_map([conversation_id], |row| {
+            Ok(AgentActionCard {
+                id: row.get(0)?,
+                skill_id: row.get(1)?,
+                title: row.get(2)?,
+                risk: row.get(3)?,
+                decision: row.get(4)?,
+                status: row.get(5)?,
+                summary: row.get(6)?,
+                result_summary: row.get(7)?,
+                diff: row.get(8)?,
+                created_at: row.get(9)?,
+            })
+        })
+        .map_err(|_| "Não foi possível ler as ações da conversa.".to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|_| "Não foi possível ler as ações da conversa.".into())
 }
 
 fn database(app: &tauri::AppHandle) -> Result<Connection, String> {
@@ -48,6 +142,7 @@ fn init_schema(db: &Connection) -> Result<(), String> {
         CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()), provider_id TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '', agent_enabled INTEGER NOT NULL DEFAULT 0 CHECK(agent_enabled IN (0,1)), provider_targets TEXT NOT NULL DEFAULT '[]');
         CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('user','assistant')), content TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
         CREATE TABLE IF NOT EXISTS agent_messages (id INTEGER PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('tool_call','tool_result')), skill_id TEXT NOT NULL, audit_id TEXT, content TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
+        CREATE TABLE IF NOT EXISTS agent_action_cards (conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, id TEXT NOT NULL, skill_id TEXT NOT NULL, title TEXT NOT NULL, risk TEXT NOT NULL, decision TEXT NOT NULL, status TEXT NOT NULL, summary TEXT NOT NULL, result_summary TEXT NOT NULL DEFAULT '', diff TEXT, created_at INTEGER NOT NULL DEFAULT (unixepoch()), PRIMARY KEY(conversation_id,id));
         CREATE INDEX IF NOT EXISTS messages_conversation ON messages(conversation_id, id);
         CREATE TABLE IF NOT EXISTS pet_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS provider_tool_support (
@@ -263,11 +358,19 @@ pub fn set_conversation_agent_mode(
                     .into(),
             );
         }
-        if !crate::providers::verified_tool_support(&app, &provider_id, &model) {
+        if crate::security::load_halted(&app) {
+            return Err("Modo agente indisponível: a parada de emergência está ativa.".into());
+        }
+        if !crate::providers::agent_provider_ready(&app, &provider_id, &model) {
             return Err(
-                "Modo agente indisponível: o provedor e modelo não têm tool calling verificado."
-                    .into(),
+                "Modo agente indisponível: conecte um provedor com ferramentas verificadas.".into(),
             );
+        }
+        if !crate::security::skills::registry()
+            .iter()
+            .any(|skill| crate::security::skills::is_skill_enabled(&app, skill.id).unwrap_or(false))
+        {
+            return Err("Modo agente indisponível: ative uma habilidade.".into());
         }
     }
     set_agent_mode(&app, &conversation_id, enabled)
@@ -612,7 +715,7 @@ pub async fn list_conversations(
 fn read_conversations(db: &Connection) -> Result<Vec<Conversation>, String> {
     let mut stmt = db
         .prepare(
-            "SELECT c.id, c.title, c.created_at, COALESCE((SELECT substr(content, 1, 240) FROM messages WHERE conversation_id = c.id ORDER BY id DESC LIMIT 1), ''), c.provider_id, c.model FROM conversations c ORDER BY c.created_at DESC, c.rowid DESC LIMIT 100",
+            "SELECT c.id, c.title, c.created_at, COALESCE((SELECT substr(content, 1, 240) FROM messages WHERE conversation_id = c.id ORDER BY id DESC LIMIT 1), ''), c.provider_id, c.model, c.agent_enabled FROM conversations c ORDER BY c.created_at DESC, c.rowid DESC LIMIT 100",
         )
         .map_err(|_| "Não foi possível ler o histórico local.".to_string())?;
     let rows = stmt
@@ -624,6 +727,7 @@ fn read_conversations(db: &Connection) -> Result<Vec<Conversation>, String> {
                 preview: row.get(3)?,
                 provider_id: row.get(4)?,
                 model: row.get(5)?,
+                agent_enabled: row.get(6)?,
             })
         })
         .map_err(|_| "Não foi possível ler o histórico local.".to_string())?;
@@ -723,7 +827,12 @@ pub fn append_conversation_message(
                 .as_deref()
                 .zip(model.as_deref())
                 .is_some_and(|(provider, model)| {
-                    crate::providers::verified_tool_support(&app, provider, model)
+                    !crate::security::load_halted(&app)
+                        && crate::security::skills::registry().iter().any(|skill| {
+                            crate::security::skills::is_skill_enabled(&app, skill.id)
+                                .unwrap_or(false)
+                        })
+                        && crate::providers::verified_tool_support(&app, provider, model)
                         && crate::agent_home::system_prompt(&app)
                             .is_ok_and(|prompt| prompt.is_some())
                 })
@@ -856,6 +965,14 @@ mod tests {
             .unwrap();
         assert_eq!(legacy_message, "Olá");
         db.execute("INSERT INTO agent_messages(conversation_id,role,skill_id,content) VALUES ('existing','tool_call','workspace.read_file','requested')", []).unwrap();
+        let action_cards_exist: bool = db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_action_cards')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(action_cards_exist);
     }
 
     #[test]
