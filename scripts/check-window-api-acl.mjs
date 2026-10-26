@@ -32,8 +32,7 @@ export function findMissingWindowPermissions(calls, permissions) {
       calls
         .map((call) => permissionFor[call] ?? `window-api:unknown:${call}`)
         .filter(
-          (permission) =>
-            permission.startsWith('window-api:unknown:') || !allowed.has(permission),
+          (permission) => permission.startsWith('window-api:unknown:') || !allowed.has(permission),
         ),
     ),
   ];
