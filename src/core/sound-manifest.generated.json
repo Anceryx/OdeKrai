@@ -1,12 +1,19 @@
 [
+  "/sounds/action_done.ogg",
+  "/sounds/approval_needed.ogg",
+  "/sounds/click.ogg",
   "/sounds/drag_end.ogg",
   "/sounds/drag_start.ogg",
   "/sounds/error.ogg",
+  "/sounds/halted.ogg",
+  "/sounds/happy.ogg",
   "/sounds/hover.ogg",
   "/sounds/island_close.ogg",
   "/sounds/island_open.ogg",
+  "/sounds/notification.ogg",
   "/sounds/return_home.ogg",
   "/sounds/sleep.ogg",
   "/sounds/success.ogg",
+  "/sounds/thinking.ogg",
   "/sounds/wake.ogg"
 ]
