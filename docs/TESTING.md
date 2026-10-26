@@ -56,9 +56,11 @@ island/mascote.
 ### UI-3 — pet 2D
 
 - `src/core/pets.test.ts`: rejeita catálogo ausente e nomes de arquivo inválidos, verifica mapeamento da FSM, fallback para PNG ausente e preferência de movimento reduzido.
+- `src/core/pet-layout.test.ts`: verifica dimensões da janela compacta/expandida e escala do mascote no modo Livre; `pet_position.rs` verifica o ajuste do painel expandido à área útil.
+- A animação CSS do sprite pausa quando o documento fica oculto ou recebe o evento nativo de visibilidade da janela do pet. Isso cobre a regra de estado; a animação renderizada e o consumo em idle ainda dependem de observação no Windows.
 - `history.rs`: `pet_catalog_rejects_missing_json_and_unsafe_paths` valida o manifesto e bloqueia caminhos inseguros; `selected_pet_defaults_and_persists_in_sqlite` confere o padrão e persistência local.
 - `npm run build`, `npm test`, `npm run format:check`, `cargo fmt --check`, `cargo test --offline --lib` e `git diff --check` devem ser executados para validar o código.
-- Validação visual nativa pendente no Windows: seleção, animações, avatar, pet da Visão geral, transparência dos cantos, foco, arrasto, topmost, escala/DPI e limites da área útil em vários monitores; não validar click-through, pois a janela recebe cliques normalmente.
+- Validação visual nativa pendente no Windows: cápsula expandida/recolhida, ajuste em monitores pequenos, transparência real sem borda/sombra, animações nos dois modos, avatar, foco, arrasto, topmost, escala/DPI e limites da área útil em vários monitores. Medição de CPU idle não disponível nesta sessão; não validar click-through, pois a janela recebe cliques normalmente.
 - Há SVGs locais em `assets-src/iconly/`, sem arquivo de licença e ainda não rastreados pelo Git; não são incorporados nesta fase.
 
 ### Fase 3 — permissões

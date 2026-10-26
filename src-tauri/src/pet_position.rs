@@ -42,6 +42,13 @@ pub(crate) struct WindowSize {
     pub(crate) height: f64,
 }
 
+pub(crate) fn fit_size(size: WindowSize, work_area: WorkArea) -> WindowSize {
+    WindowSize {
+        width: size.width.clamp(1.0, work_area.width.max(1.0)),
+        height: size.height.clamp(1.0, work_area.height.max(1.0)),
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct WindowPosition {
     pub(crate) x: f64,
@@ -146,7 +153,7 @@ pub(crate) fn saved_for_monitor<'a>(
 #[cfg(test)]
 mod tests {
     use super::{
-        clamp_position, matching_monitor_index, monitor_matches, position_from_relative,
+        clamp_position, fit_size, matching_monitor_index, monitor_matches, position_from_relative,
         relative_position, saved_for_monitor, selected_monitor_index, MonitorId, MonitorPosition,
         PersistedPetPosition, RelativePosition, WindowPosition, WindowSize, WorkArea,
     };
@@ -247,6 +254,34 @@ mod tests {
                 },
             ),
             WindowPosition { x: -300.0, y: 40.0 }
+        );
+    }
+
+    #[test]
+    fn expanded_pet_fits_small_work_area_before_position_is_clamped() {
+        let work = WorkArea {
+            left: 0.0,
+            top: 0.0,
+            width: 320.0,
+            height: 180.0,
+        };
+        let size = fit_size(
+            WindowSize {
+                width: 420.0,
+                height: 220.0,
+            },
+            work,
+        );
+        assert_eq!(
+            size,
+            WindowSize {
+                width: 320.0,
+                height: 180.0
+            }
+        );
+        assert_eq!(
+            clamp_position(WindowPosition { x: 5.0, y: 7.0 }, work, size),
+            WindowPosition { x: 0.0, y: 0.0 }
         );
     }
 }

@@ -25,6 +25,7 @@ import {
   Pulse,
   Question,
   ShieldCheck,
+  SpeakerSlash,
   Stop,
   Trash,
   User,
@@ -66,6 +67,7 @@ const icons: Record<string, PhosphorIcon> = {
   pending: Clock,
   blocked: Prohibit,
   stop: Stop,
+  mute: SpeakerSlash,
   close: X,
 };
 

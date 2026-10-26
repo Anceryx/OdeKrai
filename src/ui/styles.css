@@ -1673,38 +1673,41 @@ body.island-window-body {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background: transparent;
+  background: transparent !important;
+  user-select: none;
+  -webkit-user-select: none;
 }
 body.island-window-body #root {
   width: 100%;
   height: 100%;
 }
 html.island-window-html {
-  background: transparent;
+  background: transparent !important;
 }
 .floating-island {
+  container-type: inline-size;
   width: 100%;
   height: 100%;
-  padding: 5px;
+  padding: 3px;
   color: #fff;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .island-shell {
   position: relative;
   height: 100%;
-  min-height: 96px;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   align-items: center;
-  gap: 13px;
-  padding: 17px 18px;
+  gap: 10px;
+  padding: 10px 14px;
   border: 1px solid #fb923c55;
   border-radius: 31px;
   background:
     radial-gradient(ellipse at 12% 0%, #fb923c18, transparent 40%),
     linear-gradient(145deg, #18181d 5%, #0a0a0b 90%);
-  box-shadow:
-    0 14px 42px #0009,
-    0 0 24px #f9731622;
+  box-shadow: 0 6px 22px #0008;
   transition:
     height 0.24s ease,
     border-color 0.2s ease,
@@ -1728,7 +1731,6 @@ html.island-window-html {
   box-shadow: none;
 }
 .free-mode .island-shell:before,
-.free-mode .island-orbit,
 .free-mode .island-drag-handle,
 .free-mode .island-copy,
 .free-mode .island-action {
@@ -1739,14 +1741,14 @@ html.island-window-html {
   height: 100%;
 }
 .free-mode .island-expanded {
-  left: 0;
-  right: auto;
-  bottom: auto;
-  top: 0;
-  width: max-content;
-  max-width: 360px;
-  flex-wrap: wrap;
-  padding: 10px;
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
+  top: auto;
+  width: auto;
+  max-width: none;
+  flex-wrap: nowrap;
+  padding: 8px;
   border: 1px solid #ffffff20;
   border-radius: 12px;
   background: #111116f5;
@@ -1755,25 +1757,16 @@ html.island-window-html {
 .island-shell:before {
   content: '';
   position: absolute;
-  inset: 6px;
+  inset: 4px;
   border: 1px solid #ffffff0b;
   border-radius: 25px;
   pointer-events: none;
 }
-.island-orbit {
-  position: absolute;
-  width: 64px;
-  height: 64px;
-  right: 34px;
-  border: 1px solid #fb923c20;
-  border-radius: 50%;
-  box-shadow: 0 0 23px #f9731617;
-}
 .island-mascot {
   position: relative;
   z-index: 1;
-  width: 66px;
-  height: 70px;
+  width: 62px;
+  height: 68px;
   flex: none;
   padding: 0;
   border: 0;
@@ -1809,42 +1802,70 @@ html.island-window-html {
   z-index: 1;
   display: grid;
   place-items: center;
-  width: 27px;
-  height: 27px;
-  border: 1px solid #ffffff20;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #fb923c66;
   border-radius: 50%;
-  background: #ffffff09;
+  background: #fb923c16;
 }
 .island-expanded {
   z-index: 1;
   position: absolute;
-  left: 18px;
-  right: 18px;
-  bottom: 12px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.island-status {
-  flex: 1;
-  color: #aaa;
-  font-size: 11px;
-}
-.island-status i {
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  margin-right: 6px;
-  border-radius: 50%;
-  background: #fb923c;
-  box-shadow: 0 0 8px #fb923c;
+  left: 12px;
+  right: 12px;
+  bottom: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .island-expanded button {
-  padding: 6px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 34px;
+  padding: 5px 6px;
   border: 1px solid #ffffff18;
   border-radius: 7px;
   background: #ffffff08;
   font-size: 11px;
+  white-space: nowrap;
+}
+.island-expanded button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.island-expanded button svg {
+  flex: none;
+}
+.floating-island.state-expanded .island-shell {
+  align-items: flex-start;
+  padding-top: 8px;
+}
+@container (max-width: 360px) {
+  .island-expanded {
+    left: 8px;
+    right: 8px;
+    bottom: 7px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+  }
+  .island-expanded button {
+    min-height: 27px;
+    padding: 3px 4px;
+    font-size: 10px;
+  }
+  .island-mascot {
+    width: 54px;
+    height: 58px;
+  }
+  .island-action {
+    width: 40px;
+    height: 40px;
+  }
 }
 .state-thinking .island-mascot,
 .state-listening .island-mascot {
@@ -1864,6 +1885,18 @@ html.island-window-html {
   top: 5px;
   height: 9px;
   cursor: move;
+}
+.island-drag-handle:before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 3px;
+  width: 24px;
+  height: 2px;
+  transform: translateX(-50%);
+  border-radius: 2px;
+  background: #ffffff40;
+  pointer-events: none;
 }
 .reduce-motion .island-mascot {
   animation: none !important;

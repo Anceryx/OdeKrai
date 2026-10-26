@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   DEFAULT_PET_ID,
   petAnimationSheet,
@@ -51,6 +52,16 @@ export function PetSprite({
     const updateVisibility = () => setDocumentVisible(document.visibilityState === 'visible');
     document.addEventListener('visibilitychange', updateVisibility);
     return () => document.removeEventListener('visibilitychange', updateVisibility);
+  }, []);
+  useEffect(() => {
+    if (!isTauri() || getCurrentWindow().label !== 'pet') return;
+    let unlisten: (() => void) | undefined;
+    void listen<boolean>('pet-window-visibility', ({ payload }) =>
+      setDocumentVisible(payload),
+    ).then((off) => {
+      unlisten = off;
+    });
+    return () => unlisten?.();
   }, []);
   useEffect(() => {
     if (!isTauri() || petId) return;

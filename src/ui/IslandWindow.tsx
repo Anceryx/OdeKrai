@@ -13,12 +13,18 @@ import { normalizeSoundPreferences, playSound } from '../core/sounds';
 import { petAnimationForIslandState } from '../core/pets';
 import { PetSprite } from './PetSprite';
 import { Icon } from './Icon';
+import { petWindowLayout } from '../core/pet-layout';
 
 export function IslandWindow() {
   const [snapshot, setSnapshot] = useState<IslandSnapshot>(initialIslandSnapshot);
   const [settings, setSettings] = useState(loadSettings);
   const moveTimer = useRef<number | undefined>(undefined);
-  const heightRef = useRef((settings.companion.freeMode ? 176 : 150) * settings.companion.size);
+  const initialLayout = petWindowLayout(
+    settings.companion.freeMode,
+    false,
+    settings.companion.size,
+  );
+  const layoutRef = useRef(initialLayout);
   useEffect(() => {
     document.body.classList.add('island-window-body');
     document.documentElement.classList.add('island-window-html');
@@ -50,19 +56,17 @@ export function IslandWindow() {
   useEffect(() => {
     let active = true;
     const scale = settings.companion.size;
-    const start = heightRef.current;
-    const baseHeight = settings.companion.freeMode ? 176 : 150;
-    const end = (snapshot.state === 'expanded' ? 280 : baseHeight) * scale;
+    const start = layoutRef.current;
+    const end = petWindowLayout(settings.companion.freeMode, snapshot.state === 'expanded', scale);
     void (async () => {
       for (let step = 1; step <= 8 && active; step++) {
-        const height = start + ((end - start) * step) / 8;
+        const width = start.width + ((end.width - start.width) * step) / 8;
+        const height = start.height + ((end.height - start.height) * step) / 8;
         await invoke('set_pet_size', {
-          width:
-            (settings.companion.freeMode ? (snapshot.state === 'expanded' ? 360 : 176) : 280) *
-            scale,
+          width,
           height,
         });
-        heightRef.current = height;
+        layoutRef.current = { width, height };
         await new Promise((resolve) => window.setTimeout(resolve, 18));
       }
     })();
@@ -99,7 +103,6 @@ export function IslandWindow() {
         }}
       >
         <div className="island-drag-handle" data-tauri-drag-region aria-hidden="true" />
-        <div className="island-orbit" aria-hidden="true" />
         <button
           className="island-mascot"
           data-tauri-drag-region={settings.companion.freeMode ? '' : undefined}
@@ -145,11 +148,8 @@ export function IslandWindow() {
         )}
         {state === 'expanded' && (
           <div className="island-expanded">
-            <span className="island-status">
-              <i />
-              {islandLabels[state]}
-            </span>
             <button
+              className="island-action-open"
               onClick={() => {
                 void playSound('click', normalizeSoundPreferences(settings.companion.sounds), {
                   petVisible: true,
@@ -157,9 +157,11 @@ export function IslandWindow() {
                 void emit('pet-action', 'open');
               }}
             >
-              Abrir o OdeKrai
+              <Icon name="home" />
+              <span>Abrir o OdeKrai</span>
             </button>
             <button
+              className="island-action-chat"
               onClick={() => {
                 void playSound('click', normalizeSoundPreferences(settings.companion.sounds), {
                   petVisible: true,
@@ -167,9 +169,11 @@ export function IslandWindow() {
                 void emit('pet-action', 'new-chat');
               }}
             >
-              Nova conversa
+              <Icon name="chat" />
+              <span>Nova conversa</span>
             </button>
             <button
+              className="island-action-stop"
               onClick={() => {
                 void playSound('click', normalizeSoundPreferences(settings.companion.sounds), {
                   petVisible: true,
@@ -177,9 +181,11 @@ export function IslandWindow() {
                 void emit('pet-action', 'stop');
               }}
             >
-              Parar tudo
+              <Icon name="stop" />
+              <span>Parar tudo</span>
             </button>
             <button
+              className="island-action-mute"
               onClick={() => {
                 void playSound('click', normalizeSoundPreferences(settings.companion.sounds), {
                   petVisible: true,
@@ -187,9 +193,11 @@ export function IslandWindow() {
                 void emit('pet-action', 'mute');
               }}
             >
-              Silenciar
+              <Icon name="mute" />
+              <span>Silenciar</span>
             </button>
             <button
+              className="island-action-hide"
               onClick={async () => {
                 const current = loadSettings();
                 void playSound('click', normalizeSoundPreferences(settings.companion.sounds), {
@@ -204,7 +212,8 @@ export function IslandWindow() {
                 await emit('pet-visibility-changed', false);
               }}
             >
-              Ocultar
+              <Icon name="close" />
+              <span>Ocultar</span>
             </button>
           </div>
         )}

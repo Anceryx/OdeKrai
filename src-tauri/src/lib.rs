@@ -1,4 +1,4 @@
-use pet_position::{WindowPosition, WindowSize};
+use pet_position::{fit_size, WindowPosition, WindowSize};
 use std::{
     fs,
     sync::Mutex,
@@ -488,9 +488,10 @@ async fn ensure_pet_window(app: &tauri::AppHandle) -> Result<WebviewWindow, Stri
     }
     let window = WebviewWindowBuilder::new(app, "pet", WebviewUrl::App("index.html".into()))
         .title("Pet do OdeKrai")
-        .inner_size(280.0, 150.0)
+        .inner_size(280.0, 104.0)
         .decorations(false)
         .transparent(true)
+        .shadow(false)
         .always_on_top(true)
         .focusable(true)
         .resizable(false)
@@ -549,11 +550,14 @@ pub(crate) async fn toggle_pet_from_tray(app: &tauri::AppHandle) {
                 let _ = record_window_position(app, &window, position, true);
             }
             let _ = window.hide();
+            let _ = app.emit("pet-window-visibility", false);
         }
         _ => {
             if let Ok(window) = ensure_pet_window(app).await {
                 let _ = restore_pet_position(app, &window);
-                let _ = window.show();
+                if window.show().is_ok() {
+                    let _ = app.emit("pet-window-visibility", true);
+                }
             }
         }
     }
@@ -585,7 +589,9 @@ async fn set_pet_visible(
         }
         VisibilityAction::Noop => Ok(()),
     }
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string())?;
+    let _ = app.emit("pet-window-visibility", visible);
+    Ok(())
 }
 
 #[tauri::command]
@@ -669,17 +675,14 @@ async fn set_pet_size(
     require_caller(&caller, &["main", "pet"])?;
     if !width.is_finite()
         || !height.is_finite()
-        || !(100.0..=420.0).contains(&width)
-        || !(100.0..=360.0).contains(&height)
+        || !(80.0..=420.0).contains(&width)
+        || !(80.0..=360.0).contains(&height)
     {
         return Err("Dimensão inválida".into());
     }
     let window = app
         .get_webview_window("pet")
         .ok_or("Janela do pet indisponível")?;
-    window
-        .set_size(LogicalSize::new(width, height))
-        .map_err(|error| error.to_string())?;
     let monitor = window
         .current_monitor()
         .map_err(|error| error.to_string())?
@@ -687,23 +690,24 @@ async fn set_pet_size(
         .ok_or("Não foi possível localizar o monitor do pet.")?;
     let scale = window.scale_factor().map_err(|error| error.to_string())?;
     let position = window.outer_position().map_err(|error| error.to_string())?;
-    let actual_size = window.inner_size().map_err(|error| error.to_string())?;
     let work = monitor.work_area();
+    let work_area = pet_position::WorkArea {
+        left: work.position.x as f64 / scale,
+        top: work.position.y as f64 / scale,
+        width: work.size.width as f64 / scale,
+        height: work.size.height as f64 / scale,
+    };
+    let size = fit_size(WindowSize { width, height }, work_area);
+    window
+        .set_size(LogicalSize::new(size.width, size.height))
+        .map_err(|error| error.to_string())?;
     let position = pet_position::clamp_position(
         WindowPosition {
             x: position.x as f64 / scale,
             y: position.y as f64 / scale,
         },
-        pet_position::WorkArea {
-            left: work.position.x as f64 / scale,
-            top: work.position.y as f64 / scale,
-            width: work.size.width as f64 / scale,
-            height: work.size.height as f64 / scale,
-        },
-        WindowSize {
-            width: actual_size.width as f64 / scale,
-            height: actual_size.height as f64 / scale,
-        },
+        work_area,
+        size,
     );
     set_position_expected(&window, &app, position)
 }
