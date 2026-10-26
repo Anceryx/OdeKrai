@@ -1001,6 +1001,7 @@ pub(crate) async fn agent_model_turn(
     configured_targets: Vec<crate::history::ConversationProviderTarget>,
     messages: &[Message],
     tools: &[ToolDef],
+    daily_token_limit: u64,
 ) -> Result<ProviderReply, String> {
     let targets = configured_targets
         .into_iter()
@@ -1018,6 +1019,17 @@ pub(crate) async fn agent_model_turn(
     let targets = eligible_provider_targets(app, targets, true)?;
     if targets.is_empty() {
         return Err("Modo agente indisponível: nenhum provedor configurado tem ferramentas verificadas e credencial válida.".into());
+    }
+    let used_today = crate::history::provider_usage_total_today(app)?;
+    if crate::history::daily_token_limit_exceeded(used_today, daily_token_limit) {
+        crate::security::audit_provider_usage_limit(
+            app,
+            security,
+            &targets[0].provider_id,
+            used_today,
+            daily_token_limit,
+        )?;
+        return Err("O limite diário de tokens já foi ultrapassado. Tente novamente amanhã ou ajuste o limite em Configurações.".into());
     }
     let app_handle = app.clone();
     let observed = Arc::new(AtomicBool::new(false));
@@ -1062,12 +1074,22 @@ pub(crate) async fn agent_model_turn(
     .await?;
     let (index, reply) = result;
     if let Some(usage) = reply.usage.as_ref() {
-        crate::history::record_provider_usage(
+        let total = crate::history::record_provider_usage(
             app,
             &targets[index].provider_id,
             usage.input,
             usage.output,
         )?;
+        if crate::history::daily_token_limit_exceeded(total, daily_token_limit) {
+            crate::security::audit_provider_usage_limit(
+                app,
+                security,
+                &targets[index].provider_id,
+                total,
+                daily_token_limit,
+            )?;
+            return Err("O limite diário de tokens foi atingido. A resposta foi interrompida; ajuste o limite ou tente novamente amanhã.".into());
+        }
     }
     Ok(reply)
 }
@@ -1079,6 +1101,40 @@ pub(crate) fn verified_tool_support(
 ) -> bool {
     effective_capabilities(app, provider_id, model)
         .is_ok_and(|capabilities| capabilities.tools && capabilities.verified)
+}
+
+pub(crate) fn agent_provider_unavailable_reason(
+    app: &tauri::AppHandle,
+    provider_id: &str,
+    model: &str,
+) -> Option<&'static str> {
+    let Some(entry) = catalog_entry(provider_id) else {
+        return Some("Este provedor não está disponível no OdeKrai.");
+    };
+    if !entry.capabilities.tools {
+        return Some("Este provedor não oferece suporte a ferramentas.");
+    }
+    if provider_id != "local" {
+        let credential = match credential_entry(provider_id) {
+            Ok(credential) => credential,
+            Err(_) => {
+                return Some("Não foi possível consultar a credencial no Gerenciador do Windows.")
+            }
+        };
+        match credential.get_password() {
+            Ok(_) => {}
+            Err(keyring::Error::NoEntry) => {
+                return Some("Salve uma credencial para este provedor em Conectores de IA.")
+            }
+            Err(_) => {
+                return Some("Não foi possível consultar a credencial no Gerenciador do Windows.")
+            }
+        }
+    }
+    match effective_capabilities(app, provider_id, model) {
+        Ok(capabilities) if capabilities.tools && capabilities.verified => None,
+        _ => Some("Este modelo não tem suporte verificado a ferramentas. Escolha outro modelo em Conectores de IA."),
+    }
 }
 
 pub(crate) fn agent_provider_ready(app: &tauri::AppHandle, provider_id: &str, model: &str) -> bool {

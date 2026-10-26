@@ -118,6 +118,7 @@ pub enum AgentEvent {
     Error {
         kind: String,
         message: String,
+        technical_details: Option<String>,
     },
     Stopped,
 }
@@ -186,7 +187,10 @@ pub async fn run_agent<B: AgentBackend>(
             result = tokio::time::timeout(remaining, backend.model_turn(messages, tools, cancel)) => {
                 match result {
                     Ok(Ok(reply)) => reply,
-                    Ok(Err(_)) => return fail(&mut emit, "provider", "N\u{00e3}o foi poss\u{00ed}vel obter a pr\u{00f3}xima resposta."),
+                    Ok(Err(error)) => {
+                        let (kind, message, details) = classify_provider_error(&error);
+                        return fail_with_details(&mut emit, kind, message, Some(details.into()));
+                    }
                     Err(_) => return fail(&mut emit, "timeout", "O tempo limite da execu\u{00e7}\u{00e3}o foi atingido."),
                 }
             }
@@ -376,8 +380,101 @@ fn fail(emit: &mut impl FnMut(AgentEvent), kind: &str, message: &str) -> Result<
     emit(AgentEvent::Error {
         kind: kind.into(),
         message: message.into(),
+        technical_details: None,
     });
     Err(message.into())
+}
+
+fn fail_with_details(
+    emit: &mut impl FnMut(AgentEvent),
+    kind: &str,
+    message: &str,
+    technical_details: Option<String>,
+) -> Result<String, String> {
+    emit(AgentEvent::Error {
+        kind: kind.into(),
+        message: message.into(),
+        technical_details,
+    });
+    Err(message.into())
+}
+
+pub(crate) fn classify_provider_error(error: &str) -> (&'static str, &'static str, &'static str) {
+    let normalized = error.to_ascii_lowercase();
+    if normalized.contains("limite diário") || normalized.contains("daily token limit") {
+        return (
+            "daily_token_limit",
+            "O limite diário de tokens foi atingido. Ajuste o limite nas configurações ou tente novamente amanhã.",
+            "Bloqueio local: limite diário de tokens.",
+        );
+    }
+    if normalized.contains("salve uma credencial") {
+        return (
+            "credential_missing",
+            "Conecte o provedor salvando sua credencial em Conectores de IA.",
+            "Nenhuma credencial foi encontrada no Gerenciador do Windows.",
+        );
+    }
+    if normalized.contains("não foi possível consultar a credencial")
+        || normalized.contains("não foi possível consultar as credenciais")
+    {
+        return (
+            "credential_store",
+            "Não foi possível acessar a credencial do provedor. Confira o Gerenciador de Credenciais do Windows.",
+            "A consulta ao Gerenciador do Windows falhou.",
+        );
+    }
+    if normalized.contains("http 401")
+        || normalized.contains("http 403")
+        || normalized.contains("credencial")
+    {
+        return (
+            "invalid_credential",
+            "O provedor recusou a credencial. Confira a chave em Conectores de IA.",
+            "Resposta HTTP 401/403 ou credencial indisponível.",
+        );
+    }
+    if normalized.contains("http 429") {
+        return (
+            "rate_limit",
+            "O provedor limitou as solicitações. Aguarde ou escolha outro provedor conectado.",
+            "Resposta HTTP 429 após as alternativas configuradas.",
+        );
+    }
+    if normalized.contains("ferramentas verificadas")
+        || normalized.contains("recusou o uso de ferramentas")
+        || normalized.contains("não está verificado para este provedor")
+        || normalized.contains("não tem suporte verificado a ferramentas")
+    {
+        return (
+            "unsupported_tools",
+            "Este modelo não oferece suporte verificado a ferramentas. Escolha outro modelo em Conectores de IA.",
+            "O modelo não aceitou a chamada de ferramentas.",
+        );
+    }
+    if normalized.contains("não foi possível conectar")
+        || normalized.contains("comunicação segura")
+        || normalized.contains("demorou para responder")
+        || normalized.contains("http 408")
+    {
+        return (
+            "network",
+            "Não foi possível alcançar o provedor. Verifique a conexão e tente novamente.",
+            "Falha de rede ou tempo limite na solicitação ao provedor.",
+        );
+    }
+    if (500..=599).any(|status| normalized.contains(&format!("http {status}"))) {
+        return (
+            "provider_unavailable",
+            "O serviço do provedor está indisponível. Tente novamente ou use outro provedor conectado.",
+            "Resposta HTTP 5xx após as alternativas configuradas.",
+        );
+    }
+    (
+        "provider",
+        "O provedor não conseguiu responder. Confira o modelo e a configuração e tente novamente.",
+        "Falha do provedor sem uma categoria mais específica.",
+    )
 }
 
 fn assistant_blocks(content: &str, calls: &[ToolCall]) -> Vec<crate::providers::Block> {
@@ -441,6 +538,107 @@ mod tests {
     use super::*;
     use crate::providers::{Block, ProviderCitation};
     use serde_json::json;
+
+    #[test]
+    fn provider_errors_are_classified_into_safe_actionable_messages() {
+        let cases = [
+            (
+                "A credencial é inválida (HTTP 401).",
+                "invalid_credential",
+                "Conectores de IA",
+            ),
+            (
+                "O limite de uso atingiu HTTP 429",
+                "rate_limit",
+                "limitou as solicitações",
+            ),
+            (
+                "O limite diário de tokens foi atingido.",
+                "daily_token_limit",
+                "limite diário",
+            ),
+            (
+                "O modelo recusou o uso de ferramentas.",
+                "unsupported_tools",
+                "suporte verificado",
+            ),
+            (
+                "Não foi possível conectar ao provedor.",
+                "network",
+                "Verifique a conexão",
+            ),
+        ];
+        for (technical, expected_kind, expected_message) in cases {
+            let (kind, message, details) = classify_provider_error(technical);
+            assert_eq!(kind, expected_kind);
+            assert!(message.contains(expected_message), "{message}");
+            assert!(
+                !details.contains(technical),
+                "details must not echo raw provider text"
+            );
+        }
+    }
+
+    struct FailingModelBackend;
+
+    impl AgentBackend for FailingModelBackend {
+        fn model_turn<'a>(
+            &'a mut self,
+            _: &'a [Message],
+            _: &'a [ToolDef],
+            _: &'a CancellationToken,
+        ) -> Pin<Box<dyn Future<Output = Result<ProviderReply, String>> + Send + 'a>> {
+            Box::pin(async {
+                Err("O limite de uso deste provedor foi atingido (HTTP 429).".into())
+            })
+        }
+
+        fn execute_tool<'a>(
+            &'a mut self,
+            _: &'a ToolCall,
+            _: bool,
+            _: &'a CancellationToken,
+        ) -> Pin<Box<dyn Future<Output = Result<ToolExecution, String>> + Send + 'a>> {
+            Box::pin(async { Err("não esperado".into()) })
+        }
+    }
+
+    #[tokio::test]
+    async fn provider_failure_reaches_the_event_as_specific_safe_error() {
+        let mut backend = FailingModelBackend;
+        let mut messages = vec![Message {
+            role: "user".into(),
+            blocks: vec![Block::Text {
+                text: "pedido privado".into(),
+            }],
+        }];
+        let mut events = Vec::new();
+        let result = run_agent(
+            &mut backend,
+            &mut messages,
+            &tool_definitions(),
+            AgentLimits::default(),
+            &CancellationToken::new(),
+            |event| events.push(event),
+        )
+        .await;
+        assert!(result.unwrap_err().contains("limitou as solicitações"));
+        let Some(AgentEvent::Error {
+            kind,
+            message,
+            technical_details,
+        }) = events.last()
+        else {
+            panic!("expected a typed provider error event");
+        };
+        assert_eq!(kind, "rate_limit");
+        assert!(message.contains("limitou as solicitações"));
+        assert!(technical_details.as_deref().unwrap().contains("HTTP 429"));
+        assert!(!technical_details
+            .as_deref()
+            .unwrap()
+            .contains("pedido privado"));
+    }
 
     struct MockBackend {
         turns: Vec<ProviderReply>,

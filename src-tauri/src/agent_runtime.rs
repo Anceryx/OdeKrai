@@ -148,10 +148,12 @@ pub fn agent_availability(
             workspace_path: None,
         });
     }
-    if !crate::providers::agent_provider_ready(&app, &provider_id, &model) {
+    if let Some(reason) =
+        crate::providers::agent_provider_unavailable_reason(&app, &provider_id, &model)
+    {
         return Ok(AgentAvailability {
             available: false,
-            reason: Some("Conecte um provedor com ferramentas verificadas.".into()),
+            reason: Some(reason.into()),
             workspace_path: Some(workspace.to_string_lossy().into_owned()),
         });
     }
@@ -179,6 +181,7 @@ struct RuntimeBackend<'a> {
     targets: Vec<crate::history::ConversationProviderTarget>,
     active_skills: Vec<Skill>,
     events: Channel<AgentEvent>,
+    daily_token_limit: u64,
 }
 
 impl AgentBackend for RuntimeBackend<'_> {
@@ -195,6 +198,7 @@ impl AgentBackend for RuntimeBackend<'_> {
                 self.targets.clone(),
                 messages,
                 tools,
+                self.daily_token_limit,
             )
             .await
         })
@@ -355,17 +359,32 @@ pub async fn agent_run(
     state: State<'_, SecurityState>,
     conversation_id: String,
     message: String,
+    daily_token_limit: u64,
     on_event: Channel<AgentEvent>,
 ) -> Result<String, String> {
     crate::require_main(&caller)?;
-    let result = agent_run_inner(app, &state, conversation_id, message, on_event.clone()).await;
-    if let Err(message) = &result {
-        let _ = on_event.send(AgentEvent::Error {
-            kind: "agent".into(),
-            message: message.clone(),
-        });
+    let result = agent_run_inner(
+        app.clone(),
+        &state,
+        conversation_id,
+        message,
+        daily_token_limit,
+        on_event.clone(),
+    )
+    .await;
+    match result {
+        Ok(answer) => Ok(answer),
+        Err(error) => {
+            let (kind, message, technical_details) = classify_agent_error(&error);
+            crate::diagnostics::log_agent_error(&app, kind, technical_details);
+            let _ = on_event.send(AgentEvent::Error {
+                kind: kind.into(),
+                message: message.into(),
+                technical_details: Some(technical_details.into()),
+            });
+            Err(message.into())
+        }
     }
-    result
 }
 
 async fn agent_run_inner(
@@ -373,6 +392,7 @@ async fn agent_run_inner(
     state: &SecurityState,
     conversation_id: String,
     message: String,
+    daily_token_limit: u64,
     on_event: Channel<AgentEvent>,
 ) -> Result<String, String> {
     if message.trim().is_empty() || message.len() > 1_000_000 {
@@ -404,8 +424,10 @@ async fn agent_run_inner(
             "Modo agente indisponível: ative ao menos uma habilidade em Habilidades.".into(),
         );
     }
-    if !crate::providers::agent_provider_ready(&app, &provider_id, &model) {
-        return Err("Modo agente indisponível: conecte um provedor com ferramentas verificadas em Conectores de IA.".into());
+    if let Some(reason) =
+        crate::providers::agent_provider_unavailable_reason(&app, &provider_id, &model)
+    {
+        return Err(reason.into());
     }
     let prompt = crate::agent_home::system_prompt(&app)?
         .ok_or("Configure a pasta e a identidade aprovada do agente.")?;
@@ -441,6 +463,7 @@ async fn agent_run_inner(
         targets,
         active_skills,
         events: on_event.clone(),
+        daily_token_limit,
     };
     let result = agent::run_agent(
         &mut backend,
@@ -463,6 +486,42 @@ async fn agent_run_inner(
         }
         Err(error) => Err(error),
     }
+}
+
+fn classify_agent_error(error: &str) -> (&'static str, &'static str, &'static str) {
+    let normalized = error.to_ascii_lowercase();
+    if normalized.contains("pasta configurada foi movida")
+        || normalized.contains("configure a pasta")
+        || normalized.contains("pasta e a identidade")
+    {
+        return (
+            "agent_home",
+            "A pasta do OdeKrai está ausente ou incompleta. Resolva o caminho em Identidade e memória.",
+            "Verificação local da pasta pessoal ou da identidade falhou.",
+        );
+    }
+    if normalized.contains("habilidade") && normalized.contains("ative") {
+        return (
+            "skills_disabled",
+            "Ative ao menos uma habilidade em Configurações → Habilidades.",
+            "Nenhuma habilidade elegível está ativa.",
+        );
+    }
+    if normalized.contains("tempo limite") {
+        return (
+            "timeout",
+            "O provedor demorou para responder. Tente novamente ou use outro provedor conectado.",
+            "A solicitação excedeu o tempo limite configurado.",
+        );
+    }
+    if normalized.contains("limite de tokens desta execução") {
+        return (
+            "execution_token_limit",
+            "A execução atingiu o limite de tokens configurado. Reduza o pedido ou ajuste os limites do agente.",
+            "Bloqueio local: limite de tokens por execução.",
+        );
+    }
+    crate::agent::classify_provider_error(error)
 }
 
 #[cfg(test)]
@@ -497,6 +556,20 @@ mod limits_tests {
         }
         .validate()
         .is_err());
+    }
+}
+
+#[cfg(test)]
+mod agent_error_tests {
+    use super::classify_agent_error;
+
+    #[test]
+    fn missing_agent_home_points_to_identity_recovery() {
+        let (kind, message, details) =
+            classify_agent_error("A pasta configurada foi movida ou alterada.");
+        assert_eq!(kind, "agent_home");
+        assert!(message.contains("Identidade e memória"));
+        assert!(details.contains("Verificação local"));
     }
 }
 

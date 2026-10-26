@@ -113,6 +113,7 @@ function MainApp() {
   }>({ available: false, reason: 'Verificando requisitos do agente…', workspacePath: null });
   const [agentEnabled, setAgentEnabled] = useState(false);
   const [agentRunning, setAgentRunning] = useState(false);
+  const [agentErrorDetails, setAgentErrorDetails] = useState('');
   const [agentAwaitingApproval, setAgentAwaitingApproval] = useState(false);
   const [agentActionCards, setAgentActionCards] = useState<AgentActionCardData[]>([]);
   const agentRunConversation = useRef<string | null>(null);
@@ -392,6 +393,7 @@ function MainApp() {
     setMessages(next);
     setDraft('');
     setError('');
+    setAgentErrorDetails('');
     setLastFailedPrompt('');
     setBusy(true);
     const thinkingSoundKey = reuseLastUserMessage
@@ -474,6 +476,7 @@ function MainApp() {
           content?: string;
           kind?: string;
           message?: string;
+          technicalDetails?: string | null;
           card?: AgentActionCardData & { createdAt: number };
         }>();
         agentRunConversation.current = activeId;
@@ -527,6 +530,7 @@ function MainApp() {
             });
           } else if (event.type === 'error') {
             setError(event.message ?? 'O agente não conseguiu concluir a execução.');
+            setAgentErrorDetails(event.technicalDetails ?? '');
             void playSound('error', normalizeSoundPreferences(settings.companion.sounds));
             void emit('companion-state', {
               type: 'activity',
@@ -546,6 +550,7 @@ function MainApp() {
         const answer = await invoke<string>('agent_run', {
           conversationId: activeId,
           message: text,
+          dailyTokenLimit: settings.dailyTokenLimit,
           onEvent,
         });
         setMessages([
@@ -984,6 +989,12 @@ function MainApp() {
               draft={draft}
               setDraft={setDraft}
               error={error}
+              errorDetails={agentErrorDetails}
+              canFixConfiguration={
+                !/rede|conexão|limitou as solicitações|tempo limite|demorou para responder|serviço do provedor está indisponível/i.test(
+                  error,
+                )
+              }
               submit={submitMessage}
               cancel={cancelRequest}
               providerModel={shownProviderModel}
@@ -1009,11 +1020,26 @@ function MainApp() {
               providerConfigured={keySavedForSession}
               assistantUsesMascot={settings.useMascotAsAssistantAvatar}
               onFixConfiguration={() => {
-                setSection('providers');
+                const normalizedError = error.toLocaleLowerCase('pt-BR');
+                setSection(
+                  normalizedError.includes('identidade') ||
+                    normalizedError.includes('pasta do odekrai')
+                    ? 'agent'
+                    : normalizedError.includes('habilidade')
+                      ? 'skills'
+                      : normalizedError.includes('limite diário')
+                        ? 'settings'
+                        : 'providers',
+                );
                 setChatMode(false);
               }}
               onRetry={() => void sendMessage(lastFailedPrompt, true)}
-              canRetry={Boolean(lastFailedPrompt)}
+              canRetry={
+                Boolean(lastFailedPrompt) &&
+                /rede|conexão|limitou as solicitações|tempo limite|demorou para responder|serviço do provedor está indisponível/i.test(
+                  error,
+                )
+              }
               profile={profile}
               selectedPet={selectedPet}
               agentEnabled={agentEnabled}

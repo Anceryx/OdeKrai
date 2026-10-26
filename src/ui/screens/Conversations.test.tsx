@@ -16,7 +16,9 @@ describe('ConversationsScreen', () => {
         busy={false}
         draft=""
         setDraft={() => undefined}
-        error=""
+        error="A pasta do OdeKrai está ausente ou incompleta."
+        errorDetails="Verificação local da pasta pessoal falhou."
+        canFixConfiguration
         submit={(event) => event.preventDefault()}
         cancel={() => undefined}
         providerModel=""
@@ -50,6 +52,8 @@ describe('ConversationsScreen', () => {
     expect(markup).toContain('Redimensionar lista de conversas');
     expect(markup).not.toContain('chat-model-chip');
     expect(markup).toContain('message-role">Oli</span>');
+    expect(markup).toContain('Detalhes técnicos');
+    expect(markup).toContain('Resolver pasta');
   });
 
   it('mostra o modelo no cabeçalho apenas quando difere do modelo atual', () => {
@@ -75,6 +79,8 @@ describe('ConversationsScreen', () => {
         draft=""
         setDraft={() => undefined}
         error=""
+        errorDetails=""
+        canFixConfiguration={false}
         submit={(event) => event.preventDefault()}
         cancel={() => undefined}
         providerModel="gpt-test"
@@ -120,6 +126,8 @@ describe('ConversationsScreen', () => {
         draft=""
         setDraft={() => undefined}
         error=""
+        errorDetails=""
+        canFixConfiguration={false}
         submit={(event) => event.preventDefault()}
         cancel={() => undefined}
         providerModel=""

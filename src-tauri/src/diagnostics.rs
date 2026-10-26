@@ -68,6 +68,14 @@ pub fn log_event(app: &AppHandle, event: &str, command: &str, outcome: &str, dur
     let _ = write_log(&logs.join("diagnostic.log"), "frontend_event", &fields);
 }
 
+pub fn log_agent_error(app: &AppHandle, kind: &str, technical_details: &str) {
+    let Ok(logs) = app.path().app_data_dir().map(|path| path.join("logs")) else {
+        return;
+    };
+    let fields = format!("kind={} details={technical_details}", safe_token(kind),);
+    let _ = write_log(&logs.join("diagnostic.log"), "agent_error", &fields);
+}
+
 pub fn log_setup_complete(app: &AppHandle) {
     let duration_ms = app
         .try_state::<StartupState>()

@@ -24,6 +24,8 @@ export function ConversationsScreen({
   draft,
   setDraft,
   error,
+  errorDetails,
+  canFixConfiguration,
   submit,
   cancel,
   providerModel,
@@ -61,6 +63,8 @@ export function ConversationsScreen({
   draft: string;
   setDraft: (value: string) => void;
   error: string;
+  errorDetails: string;
+  canFixConfiguration: boolean;
   submit: (event: FormEvent) => void;
   cancel: () => void;
   providerModel: string;
@@ -375,15 +379,29 @@ export function ConversationsScreen({
         {error && (
           <div className="chat-error" role="alert">
             <p>{error}</p>
+            {errorDetails && (
+              <details>
+                <summary>Detalhes técnicos</summary>
+                <p>{errorDetails}</p>
+              </details>
+            )}
             <div>
               {canRetry && (
                 <Button type="button" variant="secondary" onClick={onRetry} disabled={busy}>
                   Tentar novamente
                 </Button>
               )}
-              <Button type="button" variant="ghost" onClick={onFixConfiguration}>
-                Corrigir configuração
-              </Button>
+              {canFixConfiguration && (
+                <Button type="button" variant="ghost" onClick={onFixConfiguration}>
+                  {error.toLocaleLowerCase('pt-BR').includes('pasta do odekrai')
+                    ? 'Resolver pasta'
+                    : error.toLocaleLowerCase('pt-BR').includes('habilidade')
+                      ? 'Ativar habilidade'
+                      : error.toLocaleLowerCase('pt-BR').includes('limite diário')
+                        ? 'Ver limites'
+                        : 'Corrigir configuração'}
+                </Button>
+              )}
             </div>
           </div>
         )}
