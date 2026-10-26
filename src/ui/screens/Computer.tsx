@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { ask, open } from '@tauri-apps/plugin-dialog';
 import {
   LOCAL_MODELS,
   formatBytes,
@@ -19,6 +21,22 @@ export function ComputerScreen() {
   const [hardware, setHardware] = useState<HardwareProfile | null>(null);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState('');
+  const [modelFolder, setModelFolder] = useState(localStorage.getItem('odekrai.modelFolder') ?? '');
+  const [download, setDownload] = useState<{
+    modelId: string;
+    receivedBytes: number;
+    totalBytes: number;
+  } | null>(null);
+  const [downloadError, setDownloadError] = useState('');
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: (() => void) | undefined;
+    void listen<{ modelId: string; receivedBytes: number; totalBytes: number }>(
+      'local-model-download-progress',
+      (event) => setDownload(event.payload),
+    ).then((dispose) => (unlisten = dispose));
+    return () => unlisten?.();
+  }, []);
   useEffect(() => {
     if (!isTauri()) return;
     void invoke<HardwareProfile>('get_hardware_profile')
@@ -26,6 +44,57 @@ export function ComputerScreen() {
       .catch(() => setError('Não foi possível consultar o hardware deste computador.'));
   }, []);
   const recommendation = hardware ? recommendLocalModel(hardware) : null;
+  async function chooseModelFolder() {
+    const folder = await open({
+      directory: true,
+      multiple: false,
+      title: 'Escolha a pasta dos modelos',
+    });
+    if (typeof folder !== 'string') return;
+    setModelFolder(folder);
+    localStorage.setItem('odekrai.modelFolder', folder);
+  }
+  async function downloadModel(model: (typeof LOCAL_MODELS)[number]) {
+    if (!modelFolder) {
+      setDownloadError('Escolha a pasta de destino antes de baixar.');
+      return;
+    }
+    const accepted = await ask(
+      `Modelo: ${model.name}\nTamanho: ${formatBytes(model.sizeBytes)}\nLicença: ${model.license ?? 'não verificada'}\nDestino: ${modelFolder}\n\nO arquivo será baixado por HTTPS e validado por SHA-256. Deseja continuar?`,
+      {
+        title: 'Confirmar download do modelo',
+        kind: 'warning',
+        okLabel: 'Baixar',
+        cancelLabel: 'Cancelar',
+      },
+    );
+    if (!accepted) return;
+    setDownloadError('');
+    setDownload({ modelId: model.id, receivedBytes: 0, totalBytes: model.sizeBytes ?? 0 });
+    try {
+      await invoke('download_local_model', {
+        modelId: model.id,
+        destination: modelFolder,
+        confirmed: true,
+      });
+      setDownload(null);
+    } catch (error) {
+      setDownloadError(String(error));
+      setDownload(null);
+    }
+  }
+  async function deleteModel(model: (typeof LOCAL_MODELS)[number]) {
+    if (!modelFolder) return;
+    const accepted = await ask(`Apagar ${model.name} de ${modelFolder}?`, {
+      title: 'Apagar modelo local',
+      kind: 'warning',
+      okLabel: 'Apagar',
+      cancelLabel: 'Cancelar',
+    });
+    if (accepted) {
+      await invoke('delete_local_model', { modelId: model.id, destination: modelFolder });
+    }
+  }
 
   return (
     <div className="page subpage local-model-page">
@@ -85,6 +154,40 @@ export function ComputerScreen() {
       ) : null}
       <section className="model-choice-section">
         <h2>Escolher modelo</h2>
+        <div className="ui-actions">
+          <Button variant="secondary" onClick={() => void chooseModelFolder()}>
+            Escolher pasta dos modelos
+          </Button>
+          {modelFolder && (
+            <span>
+              Destino: {modelFolder}
+              {/OneDrive/i.test(modelFolder)
+                ? ' · Esta pasta parece sincronizada pelo OneDrive.'
+                : ''}
+            </span>
+          )}
+        </div>
+        {download && (
+          <p role="status">
+            Baixando:{' '}
+            {((download.receivedBytes / Math.max(download.totalBytes, 1)) * 100).toFixed(1)}%
+          </p>
+        )}
+        {download && (
+          <Button
+            variant="secondary"
+            onClick={() =>
+              void invoke('cancel_local_model_download', { modelId: download.modelId })
+            }
+          >
+            Cancelar download
+          </Button>
+        )}
+        {downloadError && (
+          <div className="ui-banner ui-banner--warning" role="alert">
+            {downloadError}
+          </div>
+        )}
         <div className="local-model-cards">
           {groups.map((group) => {
             const entries = LOCAL_MODELS.filter((model) => group.accepts.includes(model.profile));
@@ -109,6 +212,20 @@ export function ComputerScreen() {
                       onClick={() => setSelected(model.id)}
                     >
                       {selected === model.id ? 'Selecionado' : 'Escolher este modelo'}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() => void downloadModel(model)}
+                      disabled={!isTauri() || !model.sizeBytes || !model.sha256 || !model.license}
+                    >
+                      Baixar modelo
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() => void deleteModel(model)}
+                      disabled={!isTauri() || !modelFolder}
+                    >
+                      Apagar modelo
                     </Button>
                   </div>
                 ))}

@@ -32,6 +32,7 @@ mod agent_home;
 mod diagnostics;
 mod hardware;
 mod history;
+mod local_models;
 mod pet_position;
 mod policy;
 mod profile;
@@ -726,6 +727,7 @@ pub fn run() -> Result<(), tauri::Error> {
                 .build(),
         )
         .manage(providers::ProviderRequests::default())
+        .manage(local_models::Downloads::default())
         .manage(PetPositionStore::default())
         .manage(security::SecurityState::new(true))
         .manage(tray::CloseBehaviorState::default())
@@ -752,6 +754,9 @@ pub fn run() -> Result<(), tauri::Error> {
         .invoke_handler(tauri::generate_handler![
             get_build_info,
             hardware::get_hardware_profile,
+            local_models::download_local_model,
+            local_models::cancel_local_model_download,
+            local_models::delete_local_model,
             diagnostics::get_startup_state,
             diagnostics::complete_startup,
             diagnostics::record_diagnostic_event,

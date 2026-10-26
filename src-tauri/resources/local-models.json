@@ -22,7 +22,8 @@
       "defaultContext": null,
       "thinkingNotes": "Não verificado; confira a documentação do modelo e do servidor.",
       "verifiedAt": "2026-10-26",
-      "verification": "verified"
+      "verification": "verified",
+      "downloadHosts": ["huggingface.co", "us.aws.cdn.hf.co", "cas-bridge.xethub.hf.co"]
     },
     {
       "id": "qwen35-4b-q4km",
@@ -43,7 +44,8 @@
       "defaultContext": null,
       "thinkingNotes": "Não verificado; confira a documentação do modelo e do servidor.",
       "verifiedAt": "2026-10-26",
-      "verification": "verified"
+      "verification": "verified",
+      "downloadHosts": ["huggingface.co", "us.aws.cdn.hf.co", "cas-bridge.xethub.hf.co"]
     },
     {
       "id": "qwen35-9b-q4km",
@@ -64,7 +66,8 @@
       "defaultContext": null,
       "thinkingNotes": "Não verificado; confira a documentação do modelo e do servidor.",
       "verifiedAt": "2026-10-26",
-      "verification": "verified"
+      "verification": "verified",
+      "downloadHosts": ["huggingface.co", "us.aws.cdn.hf.co", "cas-bridge.xethub.hf.co"]
     },
     {
       "id": "qwen38-27b-q4km",
@@ -85,7 +88,8 @@
       "defaultContext": null,
       "thinkingNotes": "Não verificado; confira a documentação do modelo e do servidor.",
       "verifiedAt": "2026-10-26",
-      "verification": "verified"
+      "verification": "verified",
+      "downloadHosts": ["huggingface.co", "us.aws.cdn.hf.co", "cas-bridge.xethub.hf.co"]
     },
     {
       "id": "qwen36-35b-a3b-q4km",
@@ -106,7 +110,8 @@
       "defaultContext": null,
       "thinkingNotes": "Não verificado; confira a documentação do modelo e do servidor.",
       "verifiedAt": "2026-10-26",
-      "verification": "verified"
+      "verification": "verified",
+      "downloadHosts": ["huggingface.co", "us.aws.cdn.hf.co", "cas-bridge.xethub.hf.co"]
     }
   ]
 }

@@ -57,6 +57,7 @@ export async function createManifest(fetcher = fetch) {
         name,
         repository,
         file,
+        downloadHosts: ['huggingface.co', 'us.aws.cdn.hf.co', 'cas-bridge.xethub.hf.co'],
         sourceRepository: sourceRepo,
         sizeBytes: null,
         sha256: null,
@@ -126,6 +127,11 @@ export function validateManifest(manifest) {
       typeof item.name !== 'string' ||
       typeof item.repository !== 'string' ||
       typeof item.file !== 'string' ||
+      !Array.isArray(item.downloadHosts) ||
+      item.downloadHosts.length === 0 ||
+      item.downloadHosts.some(
+        (host) => !['huggingface.co', 'us.aws.cdn.hf.co', 'cas-bridge.xethub.hf.co'].includes(host),
+      ) ||
       !item.minimum ||
       item.minimum.verification !== 'unverified'
     )
