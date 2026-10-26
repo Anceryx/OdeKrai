@@ -9,6 +9,7 @@ import {
   type HardwareProfile,
 } from '../../core/local-models';
 import { Badge, Button, Card, PageHeader } from '../DesignSystem';
+import { Icon } from '../Icon';
 
 const gib = (bytes: number) => `${(bytes / 1_073_741_824).toFixed(1)} GB`;
 const groups = [
@@ -91,7 +92,9 @@ export function ComputerScreen() {
       )}
       {hardware ? (
         <Card className="hardware-summary">
-          <h2>Recursos do computador</h2>
+          <h2 className="hardware-summary-heading">
+            <Icon name="harddrives" size={21} /> IA local · Recursos do computador
+          </h2>
           <dl>
             <div>
               <dt>Memória RAM</dt>

@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { SidebarNavigation } from './SidebarNavigation';
+import { navigationItems, SidebarNavigation } from './SidebarNavigation';
 
 describe('SidebarNavigation', () => {
   it('renderiza os rótulos do menu com acentuação correta', () => {
@@ -22,5 +22,10 @@ describe('SidebarNavigation', () => {
     ]) {
       expect(markup).toContain(label);
     }
+  });
+
+  it('usa um ícone diferente para cada item de navegação', () => {
+    const names = new Set(navigationItems.map((item) => item.icon));
+    expect(names.size).toBe(navigationItems.length);
   });
 });

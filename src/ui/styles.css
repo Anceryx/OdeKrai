@@ -4319,6 +4319,11 @@ html.island-window-html {
 .model-choice-section h2 {
   margin-top: 0;
 }
+.hardware-summary-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
 .hardware-summary dl {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
