@@ -86,6 +86,7 @@ fn open_logs_folder(app: tauri::AppHandle, caller: tauri::WebviewWindow) -> Resu
 pub mod agent;
 mod agent_home;
 mod agent_runtime;
+mod calendar;
 mod diagnostics;
 mod discord;
 mod external_links;
@@ -898,6 +899,9 @@ pub fn run() -> Result<(), tauri::Error> {
             history::get_pet_mode,
             history::set_pet_mode,
             history::set_selected_pet,
+            calendar::calendar_list_events,
+            calendar::calendar_save_event,
+            calendar::calendar_delete_event,
             security::get_permission_settings,
             security::get_trusted_external_domains,
             security::trust_external_domain,
