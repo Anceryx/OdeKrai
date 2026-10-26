@@ -83,6 +83,12 @@ pub fn open_external_link(
 ) -> Result<(), String> {
     crate::require_main(&caller)?;
     let validated = validate_external_url(&url).map_err(str::to_string)?;
+    let parsed = Url::parse(&validated).map_err(|_| "O endereço do link é inválido.")?;
+    if let Some(host) = parsed.host_str() {
+        if !crate::security::external_domain_is_trusted(&app, host)? {
+            return Err("Confirme este domínio em Links externos antes de abrir o link.".into());
+        }
+    }
     app.opener()
         .open_url(validated, None::<&str>)
         .map_err(|_| "Não foi possível abrir o navegador padrão.".to_string())

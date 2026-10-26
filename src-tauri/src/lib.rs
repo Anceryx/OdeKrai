@@ -42,6 +42,7 @@ mod profile;
 mod providers;
 mod security;
 mod tray;
+mod web_fetch;
 mod window_sizing;
 
 fn require_main(window: &tauri::WebviewWindow) -> Result<(), String> {
@@ -810,6 +811,9 @@ pub fn run() -> Result<(), tauri::Error> {
             history::set_pet_mode,
             history::set_selected_pet,
             security::get_permission_settings,
+            security::get_trusted_external_domains,
+            security::trust_external_domain,
+            security::forget_external_domain,
             security::set_permission_mode,
             security::set_tool_override,
             security::skills::get_skills,

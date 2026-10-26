@@ -343,7 +343,7 @@ fn database(app: &tauri::AppHandle) -> Result<Connection, String> {
         .map_err(|_| "Não foi possível preparar os dados do aplicativo.".to_string())?;
     let db = Connection::open(dir.join("permissions.sqlite3"))
         .map_err(|_| "Não foi possível abrir as configurações de segurança.".to_string())?;
-    let schema = format!("PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS permission_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS tool_overrides (tool TEXT PRIMARY KEY, more_permissive INTEGER NOT NULL CHECK(more_permissive IN (0,1))); CREATE TABLE IF NOT EXISTS skill_settings (skill_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL CHECK(enabled IN (0,1))); CREATE TABLE IF NOT EXISTS allowed_folders (path TEXT PRIMARY KEY, access TEXT NOT NULL CHECK(access IN ('read_only','read_write'))); INSERT OR IGNORE INTO permission_settings(key,value) VALUES ('mode','sempre_perguntar'),('shortcut','Ctrl+Shift+F12'),('halted','false'),('approval_ttl_seconds','{DEFAULT_APPROVAL_TTL}'),('agent_max_turns','8'),('agent_max_duration_seconds','120'),('agent_max_tokens','16000'),('agent_max_external_actions','2');");
+    let schema = format!("PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS permission_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS tool_overrides (tool TEXT PRIMARY KEY, more_permissive INTEGER NOT NULL CHECK(more_permissive IN (0,1))); CREATE TABLE IF NOT EXISTS skill_settings (skill_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL CHECK(enabled IN (0,1))); CREATE TABLE IF NOT EXISTS allowed_folders (path TEXT PRIMARY KEY, access TEXT NOT NULL CHECK(access IN ('read_only','read_write'))); CREATE TABLE IF NOT EXISTS trusted_external_domains (domain TEXT PRIMARY KEY); INSERT OR IGNORE INTO permission_settings(key,value) VALUES ('mode','sempre_perguntar'),('shortcut','Ctrl+Shift+F12'),('halted','false'),('approval_ttl_seconds','{DEFAULT_APPROVAL_TTL}'),('agent_max_turns','8'),('agent_max_duration_seconds','120'),('agent_max_tokens','16000'),('agent_max_external_actions','2');");
     db.execute_batch(&schema)
         .map_err(|_| "Não foi possível preparar as configurações de segurança.".to_string())?;
     Ok(db)
@@ -361,6 +361,122 @@ pub(crate) fn db_setting(app: &tauri::AppHandle, key: &str) -> Result<String, St
 
 pub(crate) fn set_db_setting(app: &tauri::AppHandle, key: &str, value: &str) -> Result<(), String> {
     database(app)?.execute("INSERT INTO permission_settings(key,value) VALUES (?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value", params![key,value]).map_err(|_| "Não foi possível salvar as configurações de segurança.".to_string())?;
+    Ok(())
+}
+
+fn normalize_external_domain(raw: &str) -> Result<String, String> {
+    if raw.is_empty()
+        || raw.len() > 253
+        || raw.trim() != raw
+        || raw.chars().any(char::is_control)
+        || raw.contains(['/', '\\', '@', '?', '#'])
+        || (raw.contains(':') && !(raw.starts_with('[') && raw.ends_with(']')))
+    {
+        return Err("Informe somente um domínio, sem esquema, porta ou caminho.".into());
+    }
+    let url = url::Url::parse(&format!("https://{raw}"))
+        .map_err(|_| "O domínio informado é inválido.")?;
+    if !url.username().is_empty()
+        || url.password().is_some()
+        || url.port().is_some()
+        || url.path() != "/"
+    {
+        return Err("Informe somente um domínio, sem esquema, porta ou caminho.".into());
+    }
+    url.host_str()
+        .map(|host| host.trim_end_matches('.').to_ascii_lowercase())
+        .filter(|host| !host.is_empty())
+        .ok_or_else(|| "O domínio informado é inválido.".into())
+}
+
+fn insert_external_domain(app: &tauri::AppHandle, domain: &str) -> Result<(), String> {
+    let domain = normalize_external_domain(domain)?;
+    let db = database(app)?;
+    let exists: bool = db
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM trusted_external_domains WHERE domain=?1)",
+            [&domain],
+            |row| row.get(0),
+        )
+        .map_err(|_| "Não foi possível ler os domínios confiáveis.".to_string())?;
+    if !exists {
+        let count: i64 = db
+            .query_row("SELECT COUNT(*) FROM trusted_external_domains", [], |row| {
+                row.get(0)
+            })
+            .map_err(|_| "Não foi possível ler os domínios confiáveis.".to_string())?;
+        if count >= 100 {
+            return Err("A lista já contém 100 domínios confiáveis.".into());
+        }
+    }
+    db.execute(
+        "INSERT OR IGNORE INTO trusted_external_domains(domain) VALUES (?1)",
+        [&domain],
+    )
+    .map_err(|_| "Não foi possível salvar o domínio confiável.".to_string())?;
+    Ok(())
+}
+
+pub(crate) fn external_domain_is_trusted(
+    app: &tauri::AppHandle,
+    domain: &str,
+) -> Result<bool, String> {
+    let domain = normalize_external_domain(domain)?;
+    database(app)?
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM trusted_external_domains WHERE domain=?1)",
+            [&domain],
+            |row| row.get(0),
+        )
+        .map_err(|_| "Não foi possível verificar os domínios confiáveis.".into())
+}
+
+pub(crate) fn remember_fetch_domain(app: &tauri::AppHandle, domain: &str) -> Result<(), String> {
+    insert_external_domain(app, domain)
+}
+
+#[tauri::command]
+pub fn get_trusted_external_domains(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+) -> Result<Vec<String>, String> {
+    super::require_main(&caller)?;
+    let db = database(&app)?;
+    let mut statement = db
+        .prepare("SELECT domain FROM trusted_external_domains ORDER BY domain")
+        .map_err(|_| "Não foi possível listar os domínios confiáveis.".to_string())?;
+    let domains = statement
+        .query_map([], |row| row.get(0))
+        .map_err(|_| "Não foi possível listar os domínios confiáveis.".to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| "Não foi possível listar os domínios confiáveis.".into());
+    domains
+}
+
+#[tauri::command]
+pub fn trust_external_domain(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    domain: String,
+) -> Result<(), String> {
+    super::require_main(&caller)?;
+    insert_external_domain(&app, &domain)
+}
+
+#[tauri::command]
+pub fn forget_external_domain(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    domain: String,
+) -> Result<(), String> {
+    super::require_main(&caller)?;
+    let domain = normalize_external_domain(&domain)?;
+    database(&app)?
+        .execute(
+            "DELETE FROM trusted_external_domains WHERE domain=?1",
+            [&domain],
+        )
+        .map_err(|_| "Não foi possível remover o domínio confiável.".to_string())?;
     Ok(())
 }
 

@@ -4,13 +4,13 @@ pub(super) fn action_metadata(
     action: &SimulatedAction,
 ) -> (&'static str, Risk, bool, Option<&'static str>) {
     let tool = tool_for(action);
-    let workspace_action = matches!(
-        action,
+    let workspace_action = match action {
         SimulatedAction::ReadFile { .. }
-            | SimulatedAction::WriteFile { .. }
-            | SimulatedAction::DeleteFile { .. }
-            | SimulatedAction::Productivity { .. }
-    );
+        | SimulatedAction::WriteFile { .. }
+        | SimulatedAction::DeleteFile { .. } => true,
+        SimulatedAction::Productivity { skill_id, .. } => skill_id != "web.fetch",
+        _ => false,
+    };
     let fixed = match action {
         SimulatedAction::Payment { .. } => Some("fixed_block_payment"),
         SimulatedAction::ReadFile { path } | SimulatedAction::DeleteFile { path } => {
@@ -42,6 +42,7 @@ pub(super) fn action_metadata(
             "doc.create_text" => "doc.create_text",
             "sheet.create_csv" => "sheet.create_csv",
             "mail.draft" => "mail.draft",
+            "web.fetch" => "web.fetch",
             _ => "productivity",
         },
         _ => tool.name(),
@@ -77,6 +78,7 @@ pub(super) fn summary(action: &SimulatedAction) -> String {
             "{skill_id}: {}",
             params
                 .get("path")
+                .or_else(|| params.get("url"))
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("")
         ),
@@ -135,16 +137,16 @@ pub(super) fn preview_for(
     app: &tauri::AppHandle,
     action: &SimulatedAction,
 ) -> Result<String, String> {
-    let workspace_action = matches!(
-        action,
+    let workspace_action = match action {
         SimulatedAction::ReadFile { .. }
-            | SimulatedAction::WriteFile { .. }
-            | SimulatedAction::DeleteFile { .. }
-            | SimulatedAction::FilesList { .. }
-            | SimulatedAction::FilesSearch { .. }
-            | SimulatedAction::FilesRead { .. }
-            | SimulatedAction::Productivity { .. }
-    );
+        | SimulatedAction::WriteFile { .. }
+        | SimulatedAction::DeleteFile { .. }
+        | SimulatedAction::FilesList { .. }
+        | SimulatedAction::FilesSearch { .. }
+        | SimulatedAction::FilesRead { .. } => true,
+        SimulatedAction::Productivity { skill_id, .. } => skill_id != "web.fetch",
+        _ => false,
+    };
     let (workspace, action) = if workspace_action {
         let write = matches!(
             action,
@@ -282,21 +284,21 @@ pub(super) fn allowed_rate_with_limit(
     Ok(true)
 }
 
-fn execute_action_with_timeout(
+async fn execute_action_with_timeout(
     action: &SimulatedAction,
     app: &tauri::AppHandle,
     timeout: Duration,
 ) -> Result<String, String> {
-    let workspace_action = matches!(
-        action,
+    let workspace_action = match action {
         SimulatedAction::ReadFile { .. }
-            | SimulatedAction::WriteFile { .. }
-            | SimulatedAction::DeleteFile { .. }
-            | SimulatedAction::FilesList { .. }
-            | SimulatedAction::FilesSearch { .. }
-            | SimulatedAction::FilesRead { .. }
-            | SimulatedAction::Productivity { .. }
-    );
+        | SimulatedAction::WriteFile { .. }
+        | SimulatedAction::DeleteFile { .. }
+        | SimulatedAction::FilesList { .. }
+        | SimulatedAction::FilesSearch { .. }
+        | SimulatedAction::FilesRead { .. } => true,
+        SimulatedAction::Productivity { skill_id, .. } => skill_id != "web.fetch",
+        _ => false,
+    };
     let (workspace, action) = if workspace_action {
         let write = matches!(
             action,
@@ -309,12 +311,9 @@ fn execute_action_with_timeout(
         (PathBuf::new(), action.clone())
     };
     let tool = tool_for(&action);
-    let started = Instant::now();
-    let result = tool.execute_with_app(&action, &workspace, app);
-    if started.elapsed() > timeout {
-        return Err("A ferramenta simulada excedeu o tempo limite.".into());
-    }
-    result
+    tokio::time::timeout(timeout, tool.execute_with_app(&action, &workspace, app))
+        .await
+        .map_err(|_| "A ferramenta excedeu o tempo limite.".to_string())?
 }
 
 pub(super) async fn submit_simulated_action_inner(
@@ -349,7 +348,23 @@ pub(super) async fn submit_agent_action(
     cancel: &tokio_util::sync::CancellationToken,
     on_approval: &mut (dyn FnMut(String) + Send),
 ) -> Result<ActionResult, String> {
+    let domain_requires_approval = match &action {
+        SimulatedAction::Productivity { skill_id, params } if skill_id == "web.fetch" => {
+            let raw_url = params
+                .get("url")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            match crate::web_fetch::validate_url(raw_url)
+                .and_then(|url| crate::web_fetch::normalized_domain(&url))
+            {
+                Ok(domain) => !crate::security::external_domain_is_trusted(app, &domain)?,
+                Err(_) => false,
+            }
+        }
+        _ => false,
+    };
     let tainted = tainted
+        || domain_requires_approval
         || matches!(
             &action,
             SimulatedAction::Productivity { skill_id, .. } if skill_id == "mail.draft"
@@ -462,7 +477,7 @@ pub(super) async fn submit_agent_action(
             "started",
             None,
         )?;
-        let result = execute_action_with_timeout(&action, app, timeout);
+        let result = execute_action_with_timeout(&action, app, timeout).await;
         let error = result.as_ref().err().cloned();
         record(
             app,
@@ -607,6 +622,18 @@ pub(super) async fn submit_agent_action(
     let latency = created_at.elapsed().as_millis() as u64;
     match result {
         ApprovalDecision::Aprovada if !state.is_halted() && !cancel.is_cancelled() => {
+            if let SimulatedAction::Productivity { skill_id, params } = &action {
+                if skill_id == "web.fetch" {
+                    let raw_url = params
+                        .get("url")
+                        .and_then(serde_json::Value::as_str)
+                        .ok_or("Informe uma URL HTTPS.")?;
+                    let domain = crate::web_fetch::normalized_domain(
+                        &crate::web_fetch::validate_url(raw_url)?,
+                    )?;
+                    crate::security::remember_fetch_domain(app, &domain)?;
+                }
+            }
             record(
                 app,
                 state,
@@ -622,7 +649,7 @@ pub(super) async fn submit_agent_action(
                 "started",
                 None,
             )?;
-            let execution = execute_action_with_timeout(&action, app, timeout);
+            let execution = execute_action_with_timeout(&action, app, timeout).await;
             let error = execution.as_ref().err().cloned();
             record(
                 app,

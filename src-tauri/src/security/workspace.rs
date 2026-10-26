@@ -1,17 +1,18 @@
 use super::*;
+use std::{future::Future, pin::Pin};
 
-pub(super) trait Tool {
+pub(super) trait Tool: Sync {
     fn name(&self) -> &'static str;
     fn risk(&self, action: &SimulatedAction) -> Risk;
     fn preview(&self, action: &SimulatedAction, workspace: &Path) -> Result<String, String>;
     fn execute(&self, action: &SimulatedAction, workspace: &Path) -> Result<String, String>;
-    fn execute_with_app(
-        &self,
-        action: &SimulatedAction,
-        workspace: &Path,
-        _app: &tauri::AppHandle,
-    ) -> Result<String, String> {
-        self.execute(action, workspace)
+    fn execute_with_app<'a>(
+        &'a self,
+        action: &'a SimulatedAction,
+        workspace: &'a Path,
+        _app: &'a tauri::AppHandle,
+    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
+        Box::pin(async move { self.execute(action, workspace) })
     }
     fn timeout(&self) -> Duration {
         Duration::from_secs(5)
@@ -555,6 +556,9 @@ impl Tool for Productivity {
             {
                 Risk::ComunicacaoExterna
             }
+            SimulatedAction::Productivity { skill_id, .. } if skill_id == "web.fetch" => {
+                Risk::ComunicacaoExterna
+            }
             SimulatedAction::Productivity { skill_id, .. } if skill_id == "mail.draft" => {
                 Risk::ComunicacaoExterna
             }
@@ -565,12 +569,20 @@ impl Tool for Productivity {
         let SimulatedAction::Productivity { skill_id, params } = action else {
             return Err("Parâmetros incompatíveis.".into());
         };
+        if skill_id == "web.fetch" {
+            return crate::web_fetch::preview(
+                params["url"].as_str().ok_or("Informe uma URL HTTPS.")?,
+            );
+        }
         crate::productivity::preview(skill_id, params, root)
     }
     fn execute(&self, action: &SimulatedAction, root: &Path) -> Result<String, String> {
         let SimulatedAction::Productivity { skill_id, params } = action else {
             return Err("Parâmetros incompatíveis.".into());
         };
+        if skill_id == "web.fetch" {
+            return Err("web.fetch precisa ser executado pelo cliente HTTPS do Rust.".into());
+        }
         crate::productivity::execute(skill_id, params, root, None)
     }
     fn execute_with_app(
@@ -578,11 +590,20 @@ impl Tool for Productivity {
         action: &SimulatedAction,
         root: &Path,
         app: &tauri::AppHandle,
-    ) -> Result<String, String> {
+    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
         let SimulatedAction::Productivity { skill_id, params } = action else {
-            return Err("Parâmetros incompatíveis.".into());
+            return Box::pin(async { Err("Parâmetros incompatíveis.".into()) });
         };
-        crate::productivity::execute(skill_id, params, root, Some(app))
+        if skill_id == "web.fetch" {
+            let url = params["url"].as_str().unwrap_or("").to_string();
+            let app = app.clone();
+            return Box::pin(async move { crate::web_fetch::fetch(&app, &url).await });
+        }
+        let result = crate::productivity::execute(skill_id, params, root, Some(app));
+        Box::pin(async move { result })
+    }
+    fn timeout(&self) -> Duration {
+        Duration::from_secs(50)
     }
 }
 

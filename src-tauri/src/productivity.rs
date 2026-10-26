@@ -11,6 +11,9 @@ use tauri_plugin_opener::OpenerExt;
 const MAX_TEXT_BYTES: usize = 1_000_000;
 
 pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
+    if skill_id == "web.fetch" {
+        return crate::web_fetch::validate_skill_params(params);
+    }
     let object = params.as_object().ok_or("Parâmetros inválidos.")?;
     let expected: &[&str] = match skill_id {
         "calendar.create_event" => &[

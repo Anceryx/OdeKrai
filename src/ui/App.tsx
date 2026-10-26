@@ -779,18 +779,22 @@ function MainApp() {
     const url = safeMarkdownUrl(rawUrl);
     const domain = url ? externalLinkDomain(url) : null;
     if (!url || !domain) return;
-    if (!settings.trustedLinkDomains.includes(domain)) {
+    const needsConfirmation = !settings.trustedLinkDomains.includes(domain);
+    if (needsConfirmation) {
       const accepted = window.confirm(
         `Este link abrirá ${domain} no navegador padrão.\n\n${url}\n\nAbrir e lembrar este domínio?`,
       );
       if (!accepted) return;
-      setSettings((current) => ({
-        ...current,
-        trustedLinkDomains: [...new Set([...current.trustedLinkDomains, domain])].slice(0, 100),
-      }));
     }
     try {
       if (!isTauri()) throw new Error('Abra links nas respostas pelo aplicativo OdeKrai.');
+      await invoke('trust_external_domain', { domain });
+      if (needsConfirmation) {
+        setSettings((current) => ({
+          ...current,
+          trustedLinkDomains: [...new Set([...current.trustedLinkDomains, domain])].slice(0, 100),
+        }));
+      }
       await invoke('open_external_link', { url });
     } catch (cause) {
       setToast(cause instanceof Error ? cause.message : 'Não foi possível abrir este link.');

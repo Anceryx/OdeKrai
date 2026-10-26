@@ -44,6 +44,7 @@ export function SettingsScreen({
   const [usage, setUsage] = useState<ProviderUsage[]>([]);
   const [fallbackToAdd, setFallbackToAdd] = useState('');
   const [linkDomainDraft, setLinkDomainDraft] = useState('');
+  const [trustedDomainError, setTrustedDomainError] = useState('');
   const [agentLimits, setAgentLimits] = useState<AgentLimits>({
     maxTurns: 8,
     maxDurationSeconds: 120,
@@ -73,6 +74,16 @@ export function SettingsScreen({
     void invoke<AgentLimits>('get_agent_limits')
       .then(setAgentLimits)
       .catch(() => setAgentLimitsError('Não foi possível carregar os limites do agente.'));
+    void (async () => {
+      for (const value of settings.trustedLinkDomains) {
+        const domain = normalizeTrustedLinkDomain(value);
+        if (domain) {
+          await invoke('trust_external_domain', { domain }).catch(() => undefined);
+        }
+      }
+      const domains = await invoke<string[]>('get_trusted_external_domains');
+      update({ ...settings, trustedLinkDomains: domains });
+    })().catch(() => setTrustedDomainError('Não foi possível carregar os domínios confiáveis.'));
   }, []);
 
   function updateAgentLimit<K extends keyof AgentLimits>(key: K, value: AgentLimits[K]) {
@@ -260,14 +271,21 @@ export function SettingsScreen({
         </p>
         <form
           className="fallback-provider-add"
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault();
             const domain = normalizeTrustedLinkDomain(linkDomainDraft.trim());
             if (!domain || settings.trustedLinkDomains.includes(domain)) return;
+            try {
+              if (isTauri()) await invoke('trust_external_domain', { domain });
+            } catch {
+              setTrustedDomainError('Não foi possível salvar o domínio confiável.');
+              return;
+            }
             update({
               ...settings,
               trustedLinkDomains: [...settings.trustedLinkDomains, domain].slice(0, 100),
             });
+            setTrustedDomainError('');
             setLinkDomainDraft('');
           }}
         >
@@ -289,6 +307,7 @@ export function SettingsScreen({
             Adicionar
           </button>
         </form>
+        {trustedDomainError && <p role="alert">{trustedDomainError}</p>}
         <ul className="trusted-link-domains">
           {settings.trustedLinkDomains.map((domain) => (
             <li key={domain}>
@@ -297,14 +316,23 @@ export function SettingsScreen({
                 className="secondary-button small-button"
                 type="button"
                 aria-label={`Esquecer ${domain}`}
-                onClick={() =>
-                  update({
-                    ...settings,
-                    trustedLinkDomains: settings.trustedLinkDomains.filter(
-                      (item) => item !== domain,
-                    ),
-                  })
-                }
+                onClick={() => {
+                  const forget = isTauri()
+                    ? invoke('forget_external_domain', { domain })
+                    : Promise.resolve();
+                  void forget.then(
+                    () => {
+                      update({
+                        ...settings,
+                        trustedLinkDomains: settings.trustedLinkDomains.filter(
+                          (item) => item !== domain,
+                        ),
+                      });
+                      setTrustedDomainError('');
+                    },
+                    () => setTrustedDomainError('Não foi possível remover o domínio confiável.'),
+                  );
+                }}
               >
                 Esquecer
               </button>

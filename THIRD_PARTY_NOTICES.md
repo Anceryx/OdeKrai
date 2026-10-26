@@ -33,6 +33,39 @@ O texto de licença incluído está em `public/sounds/License.txt`. Não foram u
 
 As dependências declaradas em `package.json` mantêm suas próprias licenças e avisos. Antes de distribuir binários, gerar e revisar um inventário das dependências efetivamente empacotadas e incluir os avisos exigidos por cada licença.
 
+### Crate dom_query
+
+- `dom_query` 0.28.0, usado para converter HTML recebido em texto Markdown. Licença MIT; origem e documentação: https://github.com/niklak/dom_query e https://docs.rs/dom_query/0.28.0. Nenhum código-fonte foi copiado para o repositório.
+
+```text
+MIT License
+
+Copyright (c) 2023 Mykola Humanov
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+This project contains portions of code and architectural concepts originally
+derived from the "nipper" project (https://github.com/importcjj/nipper),
+developed by Chen Jiaju and licensed under the MIT License and the Apache
+License 2.0.
+```
+
 ### Fonte Inter
 
 - Inter Variable, pacote `@fontsource-variable/inter` 5.3.0. Autoria: The Inter Project Authors, liderado por Rasmus Andersson. Licença SIL Open Font License 1.1 (OFL); o texto integral acompanha o pacote em `node_modules/@fontsource-variable/inter/LICENSE`. Projeto: https://github.com/rsms/inter. Pacote: https://fontsource.org/fonts/inter.
