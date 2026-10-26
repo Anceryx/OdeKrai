@@ -66,8 +66,46 @@ impl Skill {
     }
 }
 
+pub(crate) fn result_is_untrusted(
+    app: &tauri::AppHandle,
+    skill_id: &str,
+    params: &Value,
+) -> Result<bool, String> {
+    let action = parse_action(skill_id, params)?;
+    if matches!(
+        action,
+        SimulatedAction::FilesList { .. }
+            | SimulatedAction::FilesSearch { .. }
+            | SimulatedAction::FilesRead { .. }
+    ) {
+        let (root, _) = resolve_action_target(app, &action, false)?;
+        let workspace = crate::agent_home::workspace_path(app)?;
+        return is_external_file_root(&root, &workspace);
+    }
+    Ok(registry()
+        .into_iter()
+        .find(|skill| skill.id == skill_id)
+        .is_some_and(|skill| skill.result_trust == ResultTrust::Untrusted))
+}
+
+fn is_external_file_root(
+    root: &std::path::Path,
+    workspace: &std::path::Path,
+) -> Result<bool, String> {
+    let root = root
+        .canonicalize()
+        .map_err(|_| "Não foi possível validar a origem do resultado.".to_string())?;
+    let workspace = workspace
+        .canonicalize()
+        .map_err(|_| "Não foi possível validar a pasta de trabalho.".to_string())?;
+    Ok(root != workspace)
+}
+
 fn action_id(action: &SimulatedAction) -> &'static str {
     match action {
+        SimulatedAction::FilesList { .. } => "files.list",
+        SimulatedAction::FilesSearch { .. } => "files.search",
+        SimulatedAction::FilesRead { .. } => "files.read",
         SimulatedAction::ReadFile { .. } => "workspace.read_file",
         SimulatedAction::WriteFile { .. } => "workspace.write_file",
         SimulatedAction::DeleteFile { .. } => "workspace.delete_file",
@@ -97,12 +135,23 @@ pub(super) fn resolve_action_target(
     write: bool,
 ) -> Result<(std::path::PathBuf, SimulatedAction), String> {
     let raw = match action {
+        SimulatedAction::FilesList { path, .. }
+        | SimulatedAction::FilesSearch { path, .. }
+        | SimulatedAction::FilesRead { path } => path,
         SimulatedAction::ReadFile { path }
         | SimulatedAction::WriteFile { path, .. }
         | SimulatedAction::DeleteFile { path } => path,
         _ => return Err("Esta habilidade não usa uma pasta permitida.".into()),
     };
     let workspace = crate::agent_home::workspace_path(app)?;
+    if raw.is_empty()
+        && matches!(
+            action,
+            SimulatedAction::FilesList { .. } | SimulatedAction::FilesSearch { .. }
+        )
+    {
+        return Ok((workspace, action.clone()));
+    }
     if !std::path::Path::new(raw).is_absolute() {
         if !is_fixed_drive(&workspace) {
             return Err("A pasta de trabalho precisa estar em uma unidade local fixa.".into());
@@ -149,13 +198,36 @@ pub(super) fn resolve_action_target(
         .to_str()
         .ok_or("O caminho não usa texto UTF-8 válido.")?
         .to_string();
-    relative_path(&relative)?;
+    if !relative.is_empty() {
+        relative_path(&relative)?;
+    }
     if matches!(action, SimulatedAction::WriteFile { .. }) {
         workspace::preview_target(&root, &relative)?;
-    } else {
+    } else if !relative.is_empty() {
         workspace::safe_target(&root, &relative)?;
     }
     let normalized = match action {
+        SimulatedAction::FilesList { depth, limit, .. } => SimulatedAction::FilesList {
+            path: relative,
+            depth: *depth,
+            limit: *limit,
+        },
+        SimulatedAction::FilesSearch {
+            query,
+            by,
+            depth,
+            max_file_bytes,
+            limit,
+            ..
+        } => SimulatedAction::FilesSearch {
+            path: relative,
+            query: query.clone(),
+            by: by.clone(),
+            depth: *depth,
+            max_file_bytes: *max_file_bytes,
+            limit: *limit,
+        },
+        SimulatedAction::FilesRead { .. } => SimulatedAction::FilesRead { path: relative },
         SimulatedAction::ReadFile { .. } => SimulatedAction::ReadFile { path: relative },
         SimulatedAction::WriteFile { content, .. } => SimulatedAction::WriteFile {
             path: relative,
@@ -223,6 +295,9 @@ fn select_allowed_root(
 
 pub fn registry() -> Vec<Skill> {
     let rows = [
+        ("files.list", "Listar arquivos", "Lista arquivos e pastas em uma pasta permitida, com limites.", "Liste itens de uma pasta usando profundidade e limite explícitos.", json!({"type":"object","properties":{"path":{"type":"string"},"depth":{"type":"integer","minimum":1,"maximum":8},"limit":{"type":"integer","minimum":1,"maximum":500}},"required":["path","depth","limit"],"additionalProperties":false}), ResultTrust::Local),
+        ("files.search", "Pesquisar arquivos", "Pesquisa nomes ou conteúdo textual com limites explícitos.", "Pesquise arquivos por nome ou trecho de texto. Informe pasta, modo, profundidade, tamanho máximo e limite de resultados.", json!({"type":"object","properties":{"path":{"type":"string"},"query":{"type":"string","minLength":1,"maxLength":256},"by":{"type":"string","enum":["name","text"]},"depth":{"type":"integer","minimum":1,"maximum":8},"max_file_bytes":{"type":"integer","minimum":1,"maximum":65536},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["path","query","by","depth","max_file_bytes","limit"],"additionalProperties":false}), ResultTrust::Local),
+        ("files.read", "Ler arquivo de texto", "Lê texto UTF-8 ou Windows-1252 de até 64 KiB; recusa binários.", "Leia um arquivo textual de até 64 KiB em pasta permitida.", json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}), ResultTrust::Local),
         (
             "workspace.read_file",
             "Ler arquivo",
@@ -282,6 +357,22 @@ pub fn registry() -> Vec<Skill> {
 
 fn action_example(id: &str) -> SimulatedAction {
     match id {
+        "files.list" => SimulatedAction::FilesList {
+            path: String::new(),
+            depth: 1,
+            limit: 100,
+        },
+        "files.search" => SimulatedAction::FilesSearch {
+            path: String::new(),
+            query: "x".into(),
+            by: "name".into(),
+            depth: 1,
+            max_file_bytes: 65536,
+            limit: 20,
+        },
+        "files.read" => SimulatedAction::FilesRead {
+            path: "sample.txt".into(),
+        },
         "workspace.read_file" => SimulatedAction::ReadFile {
             path: "sample.txt".into(),
         },
@@ -579,6 +670,19 @@ fn protected_absolute_path(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn files_results_from_workspace_are_local_and_from_other_roots_are_untrusted() {
+        let base =
+            std::env::temp_dir().join(format!("odekrai-trust-{}", crate::security::now_millis()));
+        let workspace = base.join("workspace");
+        let allowed = base.join("allowed");
+        std::fs::create_dir_all(&workspace).unwrap();
+        std::fs::create_dir_all(&allowed).unwrap();
+        assert!(!is_external_file_root(&workspace, &workspace).unwrap());
+        assert!(is_external_file_root(&allowed, &workspace).unwrap());
+        let _ = std::fs::remove_dir_all(base);
+    }
 
     #[test]
     fn schemas_reject_unknown_fields_and_risk_is_derived_from_rust_action() {

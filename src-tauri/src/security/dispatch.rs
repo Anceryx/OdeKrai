@@ -15,6 +15,10 @@ pub(super) fn action_metadata(
         SimulatedAction::ReadFile { path } | SimulatedAction::DeleteFile { path } => {
             protected_path_block(path)
         }
+        SimulatedAction::FilesRead { path } => protected_path_block(path),
+        SimulatedAction::FilesList { path, .. } | SimulatedAction::FilesSearch { path, .. } => {
+            protected_path_block(path)
+        }
         SimulatedAction::WriteFile { path, content } => protected_path_block(path)
             .or_else(|| contains_secret_marker(content).then_some("fixed_block_secret_storage")),
         SimulatedAction::SendMessage { message, .. } if contains_secret_marker(message) => {
@@ -30,6 +34,15 @@ pub(super) fn summary(action: &SimulatedAction) -> String {
         SimulatedAction::ReadFile { path } | SimulatedAction::DeleteFile { path } => {
             format!("{}: {}", tool_for(action).name(), path)
         }
+        SimulatedAction::FilesRead { path } | SimulatedAction::FilesList { path, .. } => {
+            format!("{}: {}", tool_for(action).name(), path)
+        }
+        SimulatedAction::FilesSearch { path, query, .. } => format!(
+            "{} em {} por {}",
+            tool_for(action).name(),
+            path,
+            clipped(query, 128)
+        ),
         SimulatedAction::WriteFile { path, content } => {
             format!("Salvar arquivo: {path} ({} bytes)", content.len())
         }
@@ -47,6 +60,16 @@ pub(super) fn audit_params(action: &SimulatedAction) -> String {
     match action {
         SimulatedAction::ReadFile { path } | SimulatedAction::DeleteFile { path } => {
             format!("path={path}")
+        }
+        SimulatedAction::FilesRead { path } | SimulatedAction::FilesList { path, .. } => {
+            format!("path={path}")
+        }
+        SimulatedAction::FilesSearch { path, query, .. } => {
+            format!(
+                "path={path}; query_bytes={}; query_sha256={}",
+                query.len(),
+                digest(query.as_bytes())
+            )
         }
         SimulatedAction::WriteFile { path, content } => format!(
             "path={path}; bytes={}; sha256={}; prefix={}",
@@ -85,6 +108,9 @@ pub(super) fn preview_for(
         SimulatedAction::ReadFile { .. }
             | SimulatedAction::WriteFile { .. }
             | SimulatedAction::DeleteFile { .. }
+            | SimulatedAction::FilesList { .. }
+            | SimulatedAction::FilesSearch { .. }
+            | SimulatedAction::FilesRead { .. }
     );
     let (workspace, action) = if workspace_action {
         let write = matches!(
@@ -231,6 +257,9 @@ fn execute_action_with_timeout(
         SimulatedAction::ReadFile { .. }
             | SimulatedAction::WriteFile { .. }
             | SimulatedAction::DeleteFile { .. }
+            | SimulatedAction::FilesList { .. }
+            | SimulatedAction::FilesSearch { .. }
+            | SimulatedAction::FilesRead { .. }
     );
     let (workspace, action) = if workspace_action {
         let write = matches!(

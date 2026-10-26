@@ -31,6 +31,27 @@ struct WorkspaceWriteArgs {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 #[allow(dead_code)]
+struct FilesListArgs {
+    path: String,
+    depth: u8,
+    limit: usize,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct FilesSearchArgs {
+    path: String,
+    query: String,
+    by: String,
+    depth: u8,
+    max_file_bytes: usize,
+    limit: usize,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
 struct SimulatedMessageArgs {
     recipient: String,
     message: String,
@@ -107,6 +128,7 @@ pub struct ToolExecution {
     pub audit_id: Option<String>,
     pub denied: bool,
     pub external_communication: bool,
+    pub untrusted: bool,
 }
 
 pub trait AgentBackend {
@@ -258,8 +280,8 @@ pub async fn run_agent<B: AgentBackend>(
             };
             let (execution, execution_failed) = match execution_result {
                 Ok(Ok(result)) => (result, false),
-                Ok(Err(_)) => (ToolExecution { content: "A ferramenta falhou. Revise os par\u{00e2}metros ou tente outro caminho seguro.".into(), audit_id: None, denied: false, external_communication: false }, true),
-                Err(_) => (ToolExecution { content: "A ferramenta excedeu o tempo limite.".into(), audit_id: None, denied: false, external_communication: false }, true),
+                Ok(Err(_)) => (ToolExecution { content: "A ferramenta falhou. Revise os par\u{00e2}metros ou tente outro caminho seguro.".into(), audit_id: None, denied: false, external_communication: false, untrusted: true }, true),
+                Err(_) => (ToolExecution { content: "A ferramenta excedeu o tempo limite.".into(), audit_id: None, denied: false, external_communication: false, untrusted: true }, true),
             };
             let content = bounded_result(&execution.content);
             emit(AgentEvent::ToolResult {
@@ -270,9 +292,16 @@ pub async fn run_agent<B: AgentBackend>(
             let content = if execution.denied {
                 format!("<tool-result trust=untrusted>\n[A\u{00e7}\u{00e3}o negada] {content}\nN\u{00e3}o tente obter o mesmo efeito por outra ferramenta ou caminho.\n</tool-result>")
             } else {
-                format!("<tool-result trust=untrusted>\n{content}\n</tool-result>")
+                format!(
+                    "<tool-result trust={}>\n{content}\n</tool-result>",
+                    if execution.untrusted {
+                        "untrusted"
+                    } else {
+                        "local"
+                    }
+                )
             };
-            tainted = true;
+            tainted |= execution.untrusted || execution_failed || execution.denied;
             messages.push(Message {
                 role: "tool".into(),
                 blocks: vec![crate::providers::Block::ToolResult {
@@ -307,6 +336,9 @@ fn validate_tool_call(call: &ToolCall, tools: &[ToolDef]) -> Result<(), String> 
         return Err("Ferramenta desconhecida; a chamada foi recusada.".into());
     };
     let valid = match call.name.as_str() {
+        "files.list" => serde_json::from_value::<FilesListArgs>(call.args.clone()).is_ok(),
+        "files.search" => serde_json::from_value::<FilesSearchArgs>(call.args.clone()).is_ok(),
+        "files.read" => serde_json::from_value::<WorkspacePathArgs>(call.args.clone()).is_ok(),
         "workspace.list" | "workspace.read_file" | "workspace.delete_file" => {
             serde_json::from_value::<WorkspacePathArgs>(call.args.clone()).is_ok()
         }
@@ -474,6 +506,7 @@ mod tests {
                     audit_id: Some("audit-test".into()),
                     denied: !self.executed,
                     external_communication: false,
+                    untrusted: true,
                 })
             })
         }
@@ -500,6 +533,7 @@ mod tests {
                     audit_id: Some("audit-1".into()),
                     denied: false,
                     external_communication: false,
+                    untrusted: true,
                 })
             })
         }
@@ -704,6 +738,7 @@ mod tests {
                         audit_id: Some("audit-denied".into()),
                         denied: !self.write_executed,
                         external_communication: false,
+                        untrusted: true,
                     });
                 }
                 Ok(ToolExecution {
@@ -711,6 +746,7 @@ mod tests {
                     audit_id: Some("audit-read".into()),
                     denied: false,
                     external_communication: false,
+                    untrusted: true,
                 })
             })
         }

@@ -147,6 +147,23 @@ impl SecurityState {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "tool", deny_unknown_fields)]
 pub enum SimulatedAction {
+    #[serde(rename = "files.list")]
+    FilesList {
+        path: String,
+        depth: u8,
+        limit: usize,
+    },
+    #[serde(rename = "files.search")]
+    FilesSearch {
+        path: String,
+        query: String,
+        by: String,
+        depth: u8,
+        max_file_bytes: usize,
+        limit: usize,
+    },
+    #[serde(rename = "files.read")]
+    FilesRead { path: String },
     #[serde(rename = "workspace.read_file")]
     ReadFile { path: String },
     #[serde(rename = "workspace.write_file")]

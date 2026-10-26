@@ -250,6 +250,8 @@ impl AgentBackend for RuntimeBackend<'_> {
                 .events
                 .send(AgentEvent::ActionCard { card: card.clone() });
             let approved_by_user = Arc::new(AtomicBool::new(false));
+            let untrusted_result =
+                security::skills::result_is_untrusted(&self.app, skill.id, &call.args)?;
             let approval_state = approved_by_user.clone();
             let channel = self.events.clone();
             let app = self.app.clone();
@@ -325,6 +327,7 @@ impl AgentBackend for RuntimeBackend<'_> {
                 audit_id: Some(result.id),
                 denied: status == "denied",
                 external_communication: skill.id == "simulated.send_message",
+                untrusted: untrusted_result || status != "completed",
             })
         })
     }

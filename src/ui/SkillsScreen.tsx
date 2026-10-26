@@ -121,7 +121,9 @@ export function SkillsScreen() {
     }
   }
 
-  const workspaceSkills = skills.filter(({ id }) => id.startsWith('workspace.'));
+  const workspaceSkills = skills.filter(
+    ({ id }) => id.startsWith('workspace.') || id.startsWith('files.'),
+  );
   const simulatedSkills = skills.filter(({ id }) => id.startsWith('simulated.'));
 
   return (
