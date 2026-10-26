@@ -13,7 +13,6 @@ import type { ChatMessage } from '../core/provider-messages';
 import type { AgentActionCardData } from './AgentControls';
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   normalizeSoundPreferences,
   playSound,
@@ -105,45 +104,6 @@ export function App() {
 }
 
 function MainApp() {
-  useEffect(() => {
-    if (!isTauri()) return;
-    const started = performance.now();
-    void invoke('record_diagnostic_event', {
-      event: 'startup_command_start',
-      command: 'get_build_info',
-      outcome: 'ok',
-      durationMs: 0,
-    }).catch((error: unknown) => console.warn('[OdeKrai diagnóstico] Falha no log local.', error));
-    void invoke<{
-      version: string;
-      commit: string;
-      build_date: string;
-      webview_version: string;
-    }>('get_build_info')
-      .then((info) => {
-        console.info('[OdeKrai diagnóstico]', info);
-        void invoke('record_diagnostic_event', {
-          event: 'startup_command_finish',
-          command: 'get_build_info',
-          outcome: 'ok',
-          durationMs: Math.max(0, Math.round(performance.now() - started)),
-        }).catch((error: unknown) =>
-          console.warn('[OdeKrai diagnóstico] Falha no log local.', error),
-        );
-      })
-      .catch((error: unknown) => {
-        console.error('[OdeKrai diagnóstico] Falha ao obter cabeçalho:', error);
-        void invoke('record_diagnostic_event', {
-          event: 'startup_command_finish',
-          command: 'get_build_info',
-          outcome: 'error',
-          durationMs: Math.max(0, Math.round(performance.now() - started)),
-        }).catch((logError: unknown) =>
-          console.warn('[OdeKrai diagnóstico] Falha no log local.', logError),
-        );
-      });
-  }, []);
-
   const appState = useAppState();
   const [usedProviderId, setUsedProviderId] = useState<string | null>(null);
   const [agentAvailability, setAgentAvailability] = useState<{
@@ -196,6 +156,8 @@ function MainApp() {
     toast,
     setToast,
     diagnostics,
+    dismissDiagnostics,
+    reportDiagnostic,
     chatMode,
     setChatMode,
     request,
@@ -262,11 +224,12 @@ function MainApp() {
   useEffect(() => {
     if (!isTauri()) return;
     let unlisten: (() => void) | undefined;
+    let disposed = false;
     void listen<string>('pet-action', ({ payload }) => {
       if (payload === 'open') {
-        void getCurrentWindow()
-          .show()
-          .then(() => getCurrentWindow().setFocus());
+        void invoke('show_main_window').catch((error: unknown) =>
+          setToast(`Não foi possível abrir a janela principal: ${String(error)}`),
+        );
       } else if (payload === 'new-chat') {
         setSection('chat');
         setConversationId(null);
@@ -285,9 +248,13 @@ function MainApp() {
         setToast('O pet foi silenciado.');
       }
     }).then((stop) => {
-      unlisten = stop;
+      if (disposed) stop();
+      else unlisten = stop;
     });
-    return () => unlisten?.();
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   }, [setDraft, setMessages, setSection, setSettings, setConversationId, setToast]);
 
   async function choosePet(petId: string) {
@@ -304,6 +271,7 @@ function MainApp() {
   useAppEffects(appState);
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let disposed = false;
     void listen<{ event: string; petVisible?: boolean }>('sound-request', ({ payload }) => {
       if (!SOUND_EVENTS.includes(payload.event as SoundEvent)) return;
       void playSound(
@@ -312,9 +280,13 @@ function MainApp() {
         { petVisible: payload.petVisible },
       );
     }).then((stop) => {
-      unlisten = stop;
+      if (disposed) stop();
+      else unlisten = stop;
     });
-    return () => unlisten?.();
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   }, []);
   useEffect(() => {
     if (diagnostics.length === 0) {
@@ -926,11 +898,37 @@ function MainApp() {
         </header>
         {diagnostics.length > 0 && (
           <aside className="diagnostic-banner" aria-label="Diagnóstico" role="status">
-            <strong>Diagnóstico</strong>
-            {diagnostics.map((item, index) => (
-              <p key={`${item.command}-${index}`}>
-                <code>{item.command}</code>: {item.message}
-              </p>
+            <div className="diagnostic-banner-heading">
+              <strong>Diagnóstico</strong>
+              <button type="button" aria-label="Fechar diagnóstico" onClick={dismissDiagnostics}>
+                ×
+              </button>
+            </div>
+            {diagnostics.map((item) => (
+              <div className="diagnostic-item" key={`${item.command}-${item.message}`}>
+                <p>
+                  <code>{item.command}</code>: {item.message}
+                  {item.count > 1 ? ` (${item.count} ocorrências)` : ''}
+                </p>
+                {item.details && (
+                  <details>
+                    <summary>Detalhes</summary>
+                    <code>{item.details}</code>
+                  </details>
+                )}
+                {item.command === 'agent_home_status' && (
+                  <button
+                    type="button"
+                    className="secondary-button small-button"
+                    onClick={() => {
+                      setSection('agent');
+                      setChatMode(false);
+                    }}
+                  >
+                    Resolver pasta do agente
+                  </button>
+                )}
+              </div>
             ))}
           </aside>
         )}
@@ -1094,6 +1092,7 @@ function MainApp() {
                   initialNickname={profile.nickname}
                   profileValue={profile}
                   onProfileChange={setProfile}
+                  onStatus={() => reportDiagnostic('agent_home_status', '')}
                 />
               )}
             </div>

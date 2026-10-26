@@ -7,6 +7,7 @@ use std::{
 use tauri::{
     Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
+use tauri_plugin_opener::OpenerExt;
 
 #[derive(serde::Serialize)]
 struct BuildInfo {
@@ -14,6 +15,7 @@ struct BuildInfo {
     commit: &'static str,
     build_date: &'static str,
     webview_version: String,
+    windows_version: String,
 }
 
 #[tauri::command]
@@ -24,7 +26,61 @@ fn get_build_info(caller: tauri::WebviewWindow) -> Result<BuildInfo, String> {
         commit: option_env!("ODEKRAI_BUILD_COMMIT").unwrap_or("local"),
         build_date: option_env!("ODEKRAI_BUILD_DATE").unwrap_or("não definida"),
         webview_version: tauri::webview_version().map_err(|error| error.to_string())?,
+        windows_version: windows_version(),
     })
+}
+
+fn windows_version() -> String {
+    #[cfg(windows)]
+    {
+        let output = std::process::Command::new("cmd.exe")
+            .args(["/C", "ver"])
+            .output();
+        if let Ok(output) = output {
+            let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if output.status.success() && !text.is_empty() {
+                return text;
+            }
+        }
+    }
+    "Indisponível".to_string()
+}
+
+#[tauri::command]
+fn open_build_commit(app: tauri::AppHandle, caller: tauri::WebviewWindow) -> Result<(), String> {
+    require_main(&caller)?;
+    let commit = option_env!("ODEKRAI_BUILD_COMMIT").unwrap_or("local");
+    if commit == "local"
+        || !commit
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        return Err("Este build não tem um commit publicado para abrir.".into());
+    }
+    app.opener()
+        .open_url(
+            format!("https://github.com/Anceryx/OdeKrai/commit/{commit}"),
+            None::<&str>,
+        )
+        .map_err(|_| "Não foi possível abrir o commit no navegador padrão.".to_string())
+}
+
+#[tauri::command]
+fn open_logs_folder(app: tauri::AppHandle, caller: tauri::WebviewWindow) -> Result<(), String> {
+    require_main(&caller)?;
+    let logs = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| "Não foi possível localizar os logs.".to_string())?
+        .join("logs");
+    if !logs.is_dir() {
+        return Err("A pasta de logs ainda não foi criada.".into());
+    }
+    std::process::Command::new("explorer.exe")
+        .arg(logs)
+        .spawn()
+        .map(|_| ())
+        .map_err(|_| "Não foi possível abrir a pasta de logs.".to_string())
 }
 
 pub mod agent;
@@ -47,6 +103,31 @@ mod window_sizing;
 
 fn require_main(window: &tauri::WebviewWindow) -> Result<(), String> {
     require_caller(window, &["main"])
+}
+
+#[tauri::command]
+async fn show_main_window(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+) -> Result<(), String> {
+    require_main(&caller)?;
+    let window = app
+        .get_webview_window("main")
+        .ok_or("A janela principal não está disponível.")?;
+    if window
+        .is_minimized()
+        .map_err(|_| "Não foi possível consultar a janela principal.")?
+    {
+        window
+            .unminimize()
+            .map_err(|_| "Não foi possível restaurar a janela principal.")?;
+    }
+    window
+        .show()
+        .map_err(|_| "Não foi possível exibir a janela principal.")?;
+    window
+        .set_focus()
+        .map_err(|_| "Não foi possível focar a janela principal.".to_string())
 }
 
 fn require_caller(window: &tauri::WebviewWindow, allowed: &[&str]) -> Result<(), String> {
@@ -760,6 +841,9 @@ pub fn run() -> Result<(), tauri::Error> {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            show_main_window,
+            open_build_commit,
+            open_logs_folder,
             agent_runtime::agent_run,
             agent_runtime::agent_cancel,
             agent_runtime::agent_availability,

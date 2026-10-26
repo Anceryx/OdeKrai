@@ -45,7 +45,7 @@ function diagnosticMessage(command: string) {
 async function startupInvoke<T>(
   command: string,
   args: Record<string, unknown> | undefined,
-  reportDiagnostic: (command: string, message: string) => void,
+  reportDiagnostic: (command: string, message: string, details?: string) => void,
 ): Promise<T> {
   const started = performance.now();
   let outcome = 'ok';
@@ -56,10 +56,12 @@ async function startupInvoke<T>(
     durationMs: 0,
   }).catch((error: unknown) => console.warn('[OdeKrai diagnóstico] Falha no log local.', error));
   try {
-    return await timeout(invoke<T>(command, args), command);
+    const result = await timeout(invoke<T>(command, args), command);
+    reportDiagnostic(command, '');
+    return result;
   } catch (error) {
     outcome = 'error';
-    reportDiagnostic(command, diagnosticMessage(command));
+    reportDiagnostic(command, diagnosticMessage(command), sanitizeDiagnosticDetails(error));
     throw error;
   } finally {
     const durationMs = Math.max(0, Math.round(performance.now() - started));
@@ -70,6 +72,17 @@ async function startupInvoke<T>(
       durationMs,
     }).catch((error: unknown) => console.warn('[OdeKrai diagnóstico] Falha no log local.', error));
   }
+}
+
+function sanitizeDiagnosticDetails(error: unknown): string {
+  const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  return text
+    .replace(/(?:\\\\\?\\)?[A-Z]:\\(?:[^\\\s]+\\)*[^\\\s]*/gi, '[caminho local]')
+    .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, '[e-mail]')
+    .replace(/(?:Bearer\s+|sk-[A-Za-z0-9_-]{8,})\S+/gi, '[credencial]')
+    .replace(/(?:api[_-]?key|token|secret|password)\s*[:=]\s*\S+/gi, '[credencial]')
+    .replace(/[\r\n\t]+/g, ' ')
+    .slice(0, 240);
 }
 
 export function useAppEffects(state: ReturnType<typeof useAppState>) {
@@ -93,6 +106,7 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
   useEffect(() => {
     if (!isTauri()) return;
     let current = true;
+    let listenersDisposed = false;
     void (async () => {
       let recoveredFromIncompleteRun = false;
       try {
@@ -279,15 +293,17 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
       listen<string>('security-error', ({ payload }) => setToast(payload)),
     ])
       .then((off) => {
-        unlisten = off;
+        if (listenersDisposed) off.forEach((stop) => stop());
+        else unlisten = off;
       })
       .catch(() =>
         reportDiagnostic('listen', 'Não foi possível iniciar alguns avisos de segurança.'),
       );
-    const onError = () => {
+    const onError = (event: ErrorEvent) => {
       reportDiagnostic(
-        'window.onerror',
-        'Ocorreu um erro no frontend. Consulte o log de diagnóstico.',
+        'frontend.window.onerror',
+        'Ocorreu um erro não tratado no frontend.',
+        sanitizeDiagnosticDetails(event.error ?? event.message),
       );
       void invoke('record_diagnostic_event', {
         event: 'frontend_window_error',
@@ -298,10 +314,12 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
         console.warn('[OdeKrai diagnóstico] Falha no log local.', error),
       );
     };
-    const onRejection = () => {
+    const onRejection = (event: PromiseRejectionEvent) => {
+      const detail = sanitizeDiagnosticDetails(event.reason);
       reportDiagnostic(
-        'unhandledrejection',
-        'Uma operação do frontend falhou. Consulte o log de diagnóstico.',
+        'frontend.unhandledrejection',
+        'Uma promessa do frontend foi rejeitada.',
+        detail || 'O WebView não informou o motivo da rejeição.',
       );
       void invoke('record_diagnostic_event', {
         event: 'frontend_unhandled_rejection',
@@ -316,6 +334,7 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
     window.addEventListener('unhandledrejection', onRejection);
     return () => {
       current = false;
+      listenersDisposed = true;
       unlisten.forEach((off) => off());
       window.removeEventListener('error', onError);
       window.removeEventListener('unhandledrejection', onRejection);

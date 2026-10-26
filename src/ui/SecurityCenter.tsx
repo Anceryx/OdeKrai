@@ -522,7 +522,6 @@ export function ApprovalWindow() {
   const [pending, setPending] = useState<Pending | null>(null);
   const [completePreview, setCompletePreview] = useState('');
   const [full, setFull] = useState(false);
-  const [, setClock] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const approvalSoundGate = useRef(new SoundTriggerGate());
@@ -539,13 +538,14 @@ export function ApprovalWindow() {
   useEffect(() => {
     void refresh();
     let unlisten: (() => void) | undefined;
+    let disposed = false;
     void listen('approval-updated', () => void refresh()).then((off) => {
-      unlisten = off;
+      if (disposed) off();
+      else unlisten = off;
     });
-    const timer = window.setInterval(() => setClock((value) => value + 1), 250);
     return () => {
+      disposed = true;
       unlisten?.();
-      window.clearInterval(timer);
     };
   }, []);
 

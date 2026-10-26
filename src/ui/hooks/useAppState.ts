@@ -40,13 +40,28 @@ export function useAppState() {
   const [error, setError] = useState('');
   const [lastFailedPrompt, setLastFailedPrompt] = useState('');
   const [toast, setToast] = useState(initialSettingsLoad.warnings.join(' '));
-  const [diagnostics, setDiagnostics] = useState<{ command: string; message: string }[]>([]);
+  const [diagnostics, setDiagnostics] = useState<
+    { command: string; message: string; details: string; count: number }[]
+  >([]);
   const [chatMode, setChatMode] = useState(false);
   const request = useRef<string | null>(null);
   const companionStateTimer = useRef<number | undefined>(undefined);
-  const reportDiagnostic = useCallback((command: string, message: string) => {
-    setDiagnostics((items) => [...items.slice(-7), { command, message }]);
+  const appliedCloseBehavior = useRef<string | null>(null);
+  const reportDiagnostic = useCallback((command: string, message: string, details = '') => {
+    setDiagnostics((items) => {
+      if (!message) return items.filter((item) => item.command !== command);
+      const existing = items.find((item) => item.command === command && item.message === message);
+      if (existing) {
+        return items.map((item) =>
+          item === existing
+            ? { ...item, count: item.count + 1, details: details || item.details }
+            : item,
+        );
+      }
+      return [...items.slice(-7), { command, message, details, count: 1 }];
+    });
   }, []);
+  const dismissDiagnostics = useCallback(() => setDiagnostics([]), []);
 
   useEffect(() => {
     saveSettings(settings);
@@ -54,6 +69,8 @@ export function useAppState() {
 
   useEffect(() => {
     if (!isTauri()) return;
+    if (appliedCloseBehavior.current === settings.closeBehavior) return;
+    appliedCloseBehavior.current = settings.closeBehavior;
     const started = performance.now();
     void invoke('record_diagnostic_event', {
       event: 'startup_command_start',
@@ -137,6 +154,7 @@ export function useAppState() {
     setToast,
     diagnostics,
     reportDiagnostic,
+    dismissDiagnostics,
     chatMode,
     setChatMode,
     request,
