@@ -185,19 +185,18 @@ fn init_schema(db: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+type AgentContext = (
+    String,
+    String,
+    bool,
+    Vec<ConversationProviderTarget>,
+    Vec<crate::providers::Message>,
+);
+
 pub(crate) fn load_agent_context(
     app: &tauri::AppHandle,
     conversation_id: &str,
-) -> Result<
-    (
-        String,
-        String,
-        bool,
-        Vec<ConversationProviderTarget>,
-        Vec<crate::providers::Message>,
-    ),
-    String,
-> {
+) -> Result<AgentContext, String> {
     if !valid_id(conversation_id) {
         return Err("Identificador de conversa inválido.".into());
     }
@@ -766,6 +765,7 @@ fn read_messages(db: &Connection, conversation_id: &str) -> Result<Vec<StoredMes
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // Assinatura consumida pelo comando Tauri existente.
 pub fn append_conversation_message(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,

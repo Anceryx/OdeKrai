@@ -436,7 +436,7 @@ async fn agent_run_inner(
     }
     let mut backend = RuntimeBackend {
         app: app.clone(),
-        security: &state,
+        security: state,
         conversation_id: conversation_id.clone(),
         targets,
         active_skills,

@@ -263,6 +263,7 @@ fn collect_files(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)] // Parâmetros limitam a busca recursiva sem estado global.
 fn search_files(
     base: &Path,
     current: &Path,

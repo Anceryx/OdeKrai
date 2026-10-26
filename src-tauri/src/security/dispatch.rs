@@ -337,6 +337,7 @@ pub(super) async fn submit_simulated_action_inner(
     .await
 }
 
+#[allow(clippy::too_many_arguments)] // Mantém explícitos os limites e callbacks da execução.
 pub(super) async fn submit_agent_action(
     app: &tauri::AppHandle,
     state: &SecurityState,

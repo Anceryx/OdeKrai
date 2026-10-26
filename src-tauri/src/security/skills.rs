@@ -36,6 +36,7 @@ impl Skill {
         preview_for(app, &action)
     }
 
+    #[allow(clippy::too_many_arguments)] // Encaminha os parâmetros tipados ao dispatcher central.
     pub async fn execute(
         &self,
         app: tauri::AppHandle,
