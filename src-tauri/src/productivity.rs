@@ -22,11 +22,17 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
             "description",
             "alert_minutes",
         ],
+        "mail.draft" => &["to", "subject", "body"],
         "doc.create_markdown" | "doc.create_text" => &["path", "content"],
         "sheet.create_csv" => &["path", "delimiter", "encoding", "headers", "rows"],
         _ => return Err("Habilidade de produtividade desconhecida.".into()),
     };
-    if object.len() != expected.len() || object.keys().any(|key| !expected.contains(&key.as_str()))
+    let mail_path =
+        skill_id == "mail.draft" && object.get("path").and_then(Value::as_str).is_some();
+    if object.len() != expected.len() + usize::from(mail_path)
+        || object
+            .keys()
+            .any(|key| !expected.contains(&key.as_str()) && !(mail_path && key == "path"))
     {
         return Err("Os parâmetros da habilidade não correspondem ao esquema permitido.".into());
     }
@@ -66,6 +72,18 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
                 .is_some_and(|v| !v.is_null() && v.as_u64().is_none_or(|n| n > 10080))
             {
                 return Err("O alerta deve estar entre 0 e 10080 minutos.".into());
+            }
+        }
+        "mail.draft" => {
+            let to = string_field(object, "to", 320)?;
+            let subject = string_field(object, "subject", 998)?;
+            let body = string_field(object, "body", 100_000)?;
+            if to.trim().is_empty()
+                || to.contains(['\r', '\n', '\0'])
+                || subject.contains(['\r', '\n', '\0'])
+                || body.contains('\0')
+            {
+                return Err("Os dados do rascunho de e-mail são inválidos.".into());
             }
         }
         "doc.create_markdown" => {
@@ -126,6 +144,15 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
 }
 
 pub(crate) fn preview(skill_id: &str, params: &Value, root: &Path) -> Result<String, String> {
+    if skill_id == "mail.draft" {
+        validate(skill_id, params)?;
+        return Ok(format!(
+            "Rascunho de e-mail (não será enviado)\nPara: {}\nAssunto: {}\n\nCorpo:\n{}",
+            params["to"].as_str().unwrap_or(""),
+            params["subject"].as_str().unwrap_or(""),
+            params["body"].as_str().unwrap_or("")
+        ));
+    }
     validate(skill_id, params)?;
     let path = resolve(root, params, false)?;
     if skill_id == "calendar.create_event" {
@@ -172,6 +199,53 @@ pub(crate) fn execute(
     app: Option<&tauri::AppHandle>,
 ) -> Result<String, String> {
     validate(skill_id, params)?;
+    if skill_id == "mail.draft" {
+        let to = params["to"].as_str().unwrap_or("");
+        let subject = params["subject"].as_str().unwrap_or("");
+        let body = params["body"].as_str().unwrap_or("");
+        let mailto = build_mailto(to, subject, Some(body));
+        let path = resolve(root, params, false)?;
+        if mailto.len() > 1800 {
+            if app.is_none() {
+                return Err("O rascunho só pode ser aberto após aprovação.".into());
+            }
+            let short_mailto = build_mailto(to, subject, None);
+            if short_mailto.len() > 1800 {
+                return Err(
+                    "Destinatário e assunto excedem o limite seguro do link mailto.".into(),
+                );
+            }
+            let body_path = path.with_file_name(format!(
+                "{}.txt",
+                path.file_stem().unwrap_or_default().to_string_lossy()
+            ));
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&body_path)
+                .map_err(|_| {
+                    "Não foi possível criar o arquivo do corpo do rascunho.".to_string()
+                })?;
+            file.write_all(body.as_bytes())
+                .and_then(|_| file.sync_data())
+                .map_err(|_| "Não foi possível salvar o corpo do rascunho.".to_string())?;
+            app.expect("checked")
+                .opener()
+                .open_url(short_mailto, None::<&str>)
+                .map_err(|_| "Não foi possível abrir o aplicativo de e-mail padrão.".to_string())?;
+            return Ok(format!("Rascunho aberto no aplicativo de e-mail padrão. O corpo completo foi salvo em {} para anexar. Nenhuma mensagem foi enviada.", body_path.display()));
+        }
+        if app.is_none() {
+            return Err("O rascunho só pode ser aberto após aprovação.".into());
+        }
+        app.expect("checked")
+            .opener()
+            .open_url(mailto, None::<&str>)
+            .map_err(|_| "Não foi possível abrir o aplicativo de e-mail padrão.".to_string())?;
+        return Ok(
+            "Rascunho aberto no aplicativo de e-mail padrão. Nenhuma mensagem foi enviada.".into(),
+        );
+    }
     let path = resolve(root, params, true)?;
     let bytes = match skill_id {
         "calendar.create_event" => create_ics(params)?.into_bytes(),
@@ -205,6 +279,57 @@ pub(crate) fn execute(
         return Ok(format!("Arquivo .ics criado e aberto para confirmação: {}. Não há integração direta com Google Calendar nem OAuth nesta etapa.", path.display()));
     }
     Ok(format!("Arquivo criado: {}", path.display()))
+}
+
+fn percent_encode(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .replace('\n', "\r\n")
+        .bytes()
+    {
+        if byte.is_ascii_alphanumeric() || b"-._~".contains(&byte) {
+            encoded.push(byte as char);
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    encoded
+}
+
+fn build_mailto(to: &str, subject: &str, body: Option<&str>) -> String {
+    let mut url = format!(
+        "mailto:{}?subject={}",
+        percent_encode(to),
+        percent_encode(subject)
+    );
+    if let Some(body) = body {
+        url.push_str("&body=");
+        url.push_str(&percent_encode(body));
+    }
+    url
+}
+
+#[cfg(test)]
+mod mail_draft_tests {
+    use super::{build_mailto, percent_encode};
+
+    #[test]
+    fn mailto_values_encode_special_characters_and_normalize_newlines() {
+        assert_eq!(
+            percent_encode("Olá, A&B? #x\nlinha 2"),
+            "Ol%C3%A1%2C%20A%26B%3F%20%23x%0D%0Alinha%202"
+        );
+    }
+
+    #[test]
+    fn complete_mailto_encodes_header_and_body_separators() {
+        assert_eq!(
+            build_mailto("a+b@example.com", "Olá & oi", Some("x? #\ny")),
+            "mailto:a%2Bb%40example.com?subject=Ol%C3%A1%20%26%20oi&body=x%3F%20%23%0D%0Ay"
+        );
+    }
 }
 
 use chrono::Local;

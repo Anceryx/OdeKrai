@@ -555,6 +555,9 @@ impl Tool for Productivity {
             {
                 Risk::ComunicacaoExterna
             }
+            SimulatedAction::Productivity { skill_id, .. } if skill_id == "mail.draft" => {
+                Risk::ComunicacaoExterna
+            }
             _ => Risk::EscritaReversivel,
         }
     }

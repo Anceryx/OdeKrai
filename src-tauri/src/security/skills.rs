@@ -116,6 +116,7 @@ fn action_id(action: &SimulatedAction) -> &'static str {
             "doc.create_markdown" => "doc.create_markdown",
             "doc.create_text" => "doc.create_text",
             "sheet.create_csv" => "sheet.create_csv",
+            "mail.draft" => "mail.draft",
             _ => "",
         },
     }
@@ -128,8 +129,22 @@ fn parse_action(id: &str, params: &Value) -> Result<SimulatedAction, String> {
         .ok_or("Os parâmetros da habilidade são inválidos.")?;
     let payload = if matches!(
         id,
-        "calendar.create_event" | "doc.create_markdown" | "doc.create_text" | "sheet.create_csv"
+        "calendar.create_event"
+            | "doc.create_markdown"
+            | "doc.create_text"
+            | "sheet.create_csv"
+            | "mail.draft"
     ) {
+        if id == "mail.draft" {
+            let suffix = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            object.insert(
+                "path".into(),
+                Value::String(format!("mail-draft-{suffix}.txt")),
+            );
+        }
         json!({ "tool": "productivity", "skill_id": id, "params": payload })
     } else {
         object.insert("tool".into(), Value::String(id.into()));
@@ -375,6 +390,7 @@ pub fn registry() -> Vec<Skill> {
         ("calendar.create_event", "Criar evento de calendário", "Gera um arquivo .ics na pasta de trabalho e abre o calendário padrão para confirmação.", "Crie um evento iCalendar com título, início ISO 8601 com fuso, fim opcional, local, descrição e alerta em minutos. Informe um caminho relativo .ics dentro da pasta de trabalho.", json!({"type":"object","properties":{"path":{"type":"string"},"title":{"type":"string","minLength":1,"maxLength":200},"start":{"type":"string","maxLength":64},"end":{"type":["string","null"],"maxLength":64},"location":{"type":"string","maxLength":500},"description":{"type":"string","maxLength":4000},"alert_minutes":{"type":["integer","null"],"minimum":0,"maximum":10080}},"required":["path","title","start","end","location","description","alert_minutes"],"additionalProperties":false}), ResultTrust::Local),
         ("doc.create_markdown", "Criar documento Markdown", "Cria um arquivo Markdown em pasta permitida.", "Crie um documento Markdown no caminho relativo ou absoluto de uma pasta permitida.", json!({"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string","maxLength":1000000}},"required":["path","content"],"additionalProperties":false}), ResultTrust::Local),
         ("doc.create_text", "Criar documento de texto", "Cria um arquivo de texto em pasta permitida.", "Crie um arquivo de texto UTF-8 no caminho relativo ou absoluto de uma pasta permitida.", json!({"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string","maxLength":1000000}},"required":["path","content"],"additionalProperties":false}), ResultTrust::Local),
+        ("mail.draft", "Criar rascunho de e-mail", "Abre o aplicativo de e-mail padrão com um rascunho; nunca envia a mensagem.", "Prepare um rascunho de e-mail informando destinatário, assunto e corpo. O texto será mostrado integralmente para aprovação. Não envie a mensagem.", json!({"type":"object","properties":{"to":{"type":"string","minLength":1,"maxLength":320},"subject":{"type":"string","maxLength":998},"body":{"type":"string","maxLength":100000}},"required":["to","subject","body"],"additionalProperties":false}), ResultTrust::Local),
         ("sheet.create_csv", "Criar planilha CSV", "Cria um CSV delimitado por vírgula, ponto e vírgula ou tabulação com UTF-8 BOM ou Windows-1252.", "Crie um CSV com caminho, delimitador (comma, semicolon ou tab), codificação (utf8_bom ou windows_1252), cabeçalhos e linhas de valores textuais.", json!({"type":"object","properties":{"path":{"type":"string"},"delimiter":{"type":"string","enum":["comma","semicolon","tab"]},"encoding":{"type":"string","enum":["utf8_bom","windows_1252"]},"headers":{"type":"array","items":{"type":"string","maxLength":256},"minItems":1,"maxItems":100},"rows":{"type":"array","items":{"type":"array","items":{"type":"string","maxLength":4096},"maxItems":100},"maxItems":10000}},"required":["path","delimiter","encoding","headers","rows"],"additionalProperties":false}), ResultTrust::Local),
     ];
     rows.into_iter()
@@ -436,6 +452,10 @@ fn action_example(id: &str) -> SimulatedAction {
         "sheet.create_csv" => SimulatedAction::Productivity {
             skill_id: id.into(),
             params: json!({"path":"planilha.csv","delimiter":"semicolon","encoding":"utf8_bom","headers":["coluna"],"rows":[]}),
+        },
+        "mail.draft" => SimulatedAction::Productivity {
+            skill_id: id.into(),
+            params: json!({"path":"mail-draft-example.txt","to":"user@example.com","subject":"Assunto","body":"Corpo"}),
         },
         "simulated.send_message" => SimulatedAction::SendMessage {
             recipient: "sample".into(),

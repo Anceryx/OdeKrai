@@ -25,6 +25,14 @@ pub(super) fn action_metadata(
         SimulatedAction::SendMessage { message, .. } if contains_secret_marker(message) => {
             Some("fixed_block_secret_exfiltration")
         }
+        SimulatedAction::Productivity { skill_id, params } if skill_id == "mail.draft" => {
+            let sensitive_text = ["to", "subject", "body"]
+                .iter()
+                .filter_map(|key| params.get(*key).and_then(serde_json::Value::as_str))
+                .collect::<Vec<_>>()
+                .join("\n");
+            contains_secret_marker(&sensitive_text).then_some("fixed_block_secret_exfiltration")
+        }
         _ => None,
     };
     let tool_name = match action {
@@ -33,6 +41,7 @@ pub(super) fn action_metadata(
             "doc.create_markdown" => "doc.create_markdown",
             "doc.create_text" => "doc.create_text",
             "sheet.create_csv" => "sheet.create_csv",
+            "mail.draft" => "mail.draft",
             _ => "productivity",
         },
         _ => tool.name(),
@@ -340,6 +349,11 @@ pub(super) async fn submit_agent_action(
     cancel: &tokio_util::sync::CancellationToken,
     on_approval: &mut (dyn FnMut(String) + Send),
 ) -> Result<ActionResult, String> {
+    let tainted = tainted
+        || matches!(
+            &action,
+            SimulatedAction::Productivity { skill_id, .. } if skill_id == "mail.draft"
+        );
     if state.is_halted() || cancel.is_cancelled() {
         return Err("A execução foi parada antes da ação.".into());
     }

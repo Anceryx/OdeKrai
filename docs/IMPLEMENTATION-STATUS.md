@@ -29,6 +29,7 @@ demais provedores permanecem `unverified` para tools.
 - A aplicação registra o plugin de instância única. A CSP de produção restringe conexões do WebView ao IPC, as capabilities da janela principal e das janelas auxiliares são separadas, e os comandos de janela verificam o chamador.
 - Fase 2.1 implementada: catálogo verificado com campos por provedor, configuração isolada por ID e migração local, validação de host/caminho, listagem documentada de modelos, teste de conexão sem prompt de geração, perfil SQLite e processamento de avatar no Rust. Inter é carregada localmente sob OFL 1.1.
 - Fase 3 implementada em Rust: matriz pura de políticas; modos, exceções, atalho e estado do kill switch em SQLite; janela `approval`; auditoria JSONL encadeada; habilidades de arquivos com gravação reversível e lixeira, além de exportação de `.ics`, Markdown, texto e CSV; parada e retomada cancelam/rejeitam trabalho.
+- `mail.draft` prepara um rascunho no aplicativo de e-mail padrão somente após aprovação explícita; não envia mensagens. Corpos acima do limite do link são salvos como `.txt` na pasta de trabalho.
 - Revisão 3.1: caminhos de identidade, logs, banco, configuração e arquivos com marcadores de segredo são bloqueados para leitura/escrita/remoção; `MessageBoxW` roda em `spawn_blocking`; o comando de disparo manual é limitado a debug.
 
 ## Limites e validação pendente

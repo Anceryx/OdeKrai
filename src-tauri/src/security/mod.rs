@@ -682,6 +682,14 @@ mod tests {
             Some("fixed_block_secret_exfiltration")
         );
         assert_eq!(
+            action_metadata(&SimulatedAction::Productivity {
+                skill_id: "mail.draft".into(),
+                params: serde_json::json!({"path":"mail-draft.txt","to":"a@example.invalid","subject":"x","body":"password=secret"}),
+            })
+            .3,
+            Some("fixed_block_secret_exfiltration")
+        );
+        assert_eq!(
             action_metadata(&SimulatedAction::Payment {
                 amount_cents: 1,
                 currency: "USD".into()
