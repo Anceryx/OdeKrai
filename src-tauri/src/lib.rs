@@ -87,6 +87,7 @@ pub mod agent;
 mod agent_home;
 mod agent_runtime;
 mod diagnostics;
+mod discord;
 mod external_links;
 mod hardware;
 mod history;
@@ -909,6 +910,9 @@ pub fn run() -> Result<(), tauri::Error> {
             security::skills::add_allowed_folder,
             security::skills::remove_allowed_folder,
             security::skills::get_allowed_apps,
+            discord::discord_list,
+            discord::discord_save,
+            discord::discord_remove,
             security::skills::register_allowed_app,
             security::skills::remove_allowed_app,
             security::set_kill_shortcut,

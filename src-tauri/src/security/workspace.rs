@@ -580,7 +580,9 @@ impl Tool for Productivity {
             {
                 Risk::ComunicacaoExterna
             }
-            SimulatedAction::Productivity { skill_id, .. } if skill_id == "mail.draft" => {
+            SimulatedAction::Productivity { skill_id, .. }
+                if matches!(skill_id.as_str(), "mail.draft" | "discord.send") =>
+            {
                 Risk::ComunicacaoExterna
             }
             _ => Risk::EscritaReversivel,
@@ -625,6 +627,15 @@ impl Tool for Productivity {
             let url = params["url"].as_str().unwrap_or("").to_string();
             let app = app.clone();
             return Box::pin(async move { crate::web_fetch::fetch(&app, &url).await });
+        }
+        if skill_id == "discord.send" {
+            let app = app.clone();
+            let webhook_id = params["webhook_id"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
+            let text = params["text"].as_str().unwrap_or_default().to_string();
+            return Box::pin(async move { crate::discord::send(&app, &webhook_id, &text).await });
         }
         if skill_id.starts_with("files.") {
             let result = execute_file_skill(skill_id, params, root);

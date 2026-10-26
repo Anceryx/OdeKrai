@@ -173,6 +173,7 @@ export function SkillsScreen() {
       'calendar.',
       'doc.',
       'sheet.',
+      'discord.',
       'system.',
       'settings.',
       'notification.',

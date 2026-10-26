@@ -4,7 +4,8 @@ Este arquivo segue o formato Keep a Changelog. Todas as versões listadas são p
 
 ## [Não lançado]
 
-Sem mudanças registradas.
+- Cadastro de webhooks Discord com credenciais no Gerenciador de Credenciais do Windows e envio de mensagens após aprovação.
+- Bloqueio de menções de transmissão, prévia integral da mensagem e limite de frequência por webhook.
 
 ## [v0.1.0] — Fundação
 

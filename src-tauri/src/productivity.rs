@@ -11,6 +11,21 @@ use tauri_plugin_opener::OpenerExt;
 const MAX_TEXT_BYTES: usize = 1_000_000;
 
 pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
+    if skill_id == "discord.send" {
+        let object = params.as_object().ok_or("Parâmetros inválidos.")?;
+        if object.len() != 2 || !object.contains_key("webhook_id") || !object.contains_key("text") {
+            return Err("Os parâmetros do envio ao Discord são inválidos.".into());
+        }
+        let id = object["webhook_id"].as_str().ok_or("Webhook inválido.")?;
+        let text = object["text"].as_str().ok_or("Texto inválido.")?;
+        if !id.starts_with("discord-") || text.trim().is_empty() || text.chars().count() > 2000 {
+            return Err("Informe webhook cadastrado e texto de até 2000 caracteres.".into());
+        }
+        if text.to_lowercase().contains("@everyone") || text.to_lowercase().contains("@here") {
+            return Err("A mensagem não pode conter @everyone nem @here.".into());
+        }
+        return Ok(());
+    }
     if skill_id == "web.fetch" {
         return crate::web_fetch::validate_skill_params(params);
     }
@@ -173,6 +188,9 @@ pub(crate) fn preview(skill_id: &str, params: &Value, root: &Path) -> Result<Str
         ));
     }
     validate(skill_id, params)?;
+    if skill_id == "discord.send" {
+        return Err("A prévia do Discord exige acesso seguro ao cadastro do webhook.".into());
+    }
     let path = resolve(root, params, false)?;
     if skill_id == "calendar.create_event" {
         let start = parse_datetime(params["start"].as_str().unwrap())?;
@@ -218,6 +236,9 @@ pub(crate) fn execute(
     app: Option<&tauri::AppHandle>,
 ) -> Result<String, String> {
     validate(skill_id, params)?;
+    if skill_id == "discord.send" {
+        return Err("O envio ao Discord requer a execução assíncrona aprovada.".into());
+    }
     if skill_id.starts_with("system.")
         || skill_id == "settings.open"
         || skill_id == "notification.show"
@@ -346,6 +367,17 @@ fn build_mailto(to: &str, subject: &str, body: Option<&str>) -> String {
 #[cfg(test)]
 mod mail_draft_tests {
     use super::{build_mailto, percent_encode};
+    use serde_json::json;
+
+    #[test]
+    fn discord_text_is_bounded_and_forbids_broadcast_mentions() {
+        let valid = json!({"webhook_id":"discord-123456789012345678","text":"x".repeat(2000)});
+        assert!(super::validate("discord.send", &valid).is_ok());
+        let oversized = json!({"webhook_id":"discord-123456789012345678","text":"x".repeat(2001)});
+        assert!(super::validate("discord.send", &oversized).is_err());
+        let mention = json!({"webhook_id":"discord-123456789012345678","text":"@here"});
+        assert!(super::validate("discord.send", &mention).is_err());
+    }
 
     #[test]
     fn mailto_values_encode_special_characters_and_normalize_newlines() {
