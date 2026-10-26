@@ -12,6 +12,8 @@
     "prebuild": "node scripts/generate-sound-manifest.mjs",
     "build": "tsc -b && vite build",
     "check:debug-command": "node scripts/check-debug-command.mjs",
+    "check:version": "node scripts/check-version.mjs",
+    "publish:releases": "node scripts/publish-releases.mjs",
     "check:release-features": "node scripts/check-release-features.mjs",
     "check:tauri-window-commands": "node scripts/check-tauri-window-commands.mjs",
     "test:release-artifact": "node scripts/test-release-artifact.mjs",
