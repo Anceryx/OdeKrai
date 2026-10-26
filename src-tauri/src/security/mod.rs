@@ -405,7 +405,7 @@ pub async fn get_permission_settings(
 }
 
 #[cfg(windows)]
-async fn native_confirm(message: String) -> bool {
+pub(crate) async fn confirm_native(message: String) -> bool {
     tauri::async_runtime::spawn_blocking(move || native_confirm_blocking(&message))
         .await
         .unwrap_or(false)
@@ -431,7 +431,7 @@ fn native_confirm_blocking(message: &str) -> bool {
 }
 
 #[cfg(not(windows))]
-async fn native_confirm(_: String) -> bool {
+pub(crate) async fn confirm_native(_: String) -> bool {
     false
 }
 
@@ -446,7 +446,7 @@ pub async fn set_permission_mode(
     if current == mode {
         return Ok(());
     }
-    if !native_confirm(format!("Alterar o modo de permissão de {} para {}? Esta confirmação ocorre em uma janela nativa do Windows.", current.label(), mode.label())).await {
+    if !confirm_native(format!("Alterar o modo de permissão de {} para {}? Esta confirmação ocorre em uma janela nativa do Windows.", current.label(), mode.label())).await {
         return Err("Alteração de modo cancelada pelo usuário.".into());
     }
     set_db_setting(&app, "mode", mode.label())?;
@@ -465,7 +465,7 @@ pub async fn set_tool_override(
     if !known_tool(&tool) {
         return Err("Ferramenta desconhecida.".into());
     }
-    if more_permissive && !override_enabled(&app, &tool)? && !native_confirm(format!("Permitir que {tool} execute com menos confirmações que o modo global? Esta exceção nunca ignora bloqueios fixos nem conteúdo externo.")).await {
+    if more_permissive && !override_enabled(&app, &tool)? && !confirm_native(format!("Permitir que {tool} execute com menos confirmações que o modo global? Esta exceção nunca ignora bloqueios fixos nem conteúdo externo.")).await {
         return Err("Exceção não ativada.".into());
     }
     database(&app)?.execute("INSERT INTO tool_overrides(tool,more_permissive) VALUES (?1,?2) ON CONFLICT(tool) DO UPDATE SET more_permissive=excluded.more_permissive", params![tool, more_permissive as i64]).map_err(|_| "Não foi possível salvar a exceção.".to_string())?;

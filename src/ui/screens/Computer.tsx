@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { ask, open } from '@tauri-apps/plugin-dialog';
+import { open } from '@tauri-apps/plugin-dialog';
 import {
   LOCAL_MODELS,
   formatBytes,
@@ -59,23 +59,12 @@ export function ComputerScreen() {
       setDownloadError('Escolha a pasta de destino antes de baixar.');
       return;
     }
-    const accepted = await ask(
-      `Modelo: ${model.name}\nTamanho: ${formatBytes(model.sizeBytes)}\nLicença: ${model.license ?? 'não verificada'}\nDestino: ${modelFolder}\n\nO arquivo será baixado por HTTPS e validado por SHA-256. Deseja continuar?`,
-      {
-        title: 'Confirmar download do modelo',
-        kind: 'warning',
-        okLabel: 'Baixar',
-        cancelLabel: 'Cancelar',
-      },
-    );
-    if (!accepted) return;
     setDownloadError('');
     setDownload({ modelId: model.id, receivedBytes: 0, totalBytes: model.sizeBytes ?? 0 });
     try {
       await invoke('download_local_model', {
         modelId: model.id,
         destination: modelFolder,
-        confirmed: true,
       });
       setDownload(null);
     } catch (error) {
@@ -85,15 +74,7 @@ export function ComputerScreen() {
   }
   async function deleteModel(model: (typeof LOCAL_MODELS)[number]) {
     if (!modelFolder) return;
-    const accepted = await ask(`Apagar ${model.name} de ${modelFolder}?`, {
-      title: 'Apagar modelo local',
-      kind: 'warning',
-      okLabel: 'Apagar',
-      cancelLabel: 'Cancelar',
-    });
-    if (accepted) {
-      await invoke('delete_local_model', { modelId: model.id, destination: modelFolder });
-    }
+    await invoke('delete_local_model', { modelId: model.id, destination: modelFolder });
   }
 
   return (

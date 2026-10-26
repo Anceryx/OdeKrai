@@ -47,12 +47,8 @@ pub async fn download_local_model(
     state: tauri::State<'_, Downloads>,
     model_id: String,
     destination: String,
-    confirmed: bool,
 ) -> Result<(), String> {
     crate::require_main(&caller)?;
-    if !confirmed {
-        return Err("Confirme os detalhes antes de iniciar o download.".into());
-    }
     let model = manifest_model(&model_id)?;
     if model.size_bytes.is_none() || model.sha256.is_none() || model.license.is_none() {
         return Err("Este arquivo ainda não tem tamanho, hash e licença verificados.".into());
@@ -65,6 +61,16 @@ pub async fn download_local_model(
         .map_err(|_| "A pasta escolhida não é válida.".to_string())?;
     let final_path = folder.join(&model.file);
     let partial_path = folder.join(format!("{}.part", model.file));
+    let prompt = format!(
+        "Baixar o modelo {}?\nTamanho: {} bytes\nLicença: {}\nDestino: {}\n\nO arquivo será obtido por HTTPS e validado por SHA-256.",
+        model.id,
+        model.size_bytes.unwrap_or_default(),
+        model.license.as_deref().unwrap_or("não verificada"),
+        folder.display()
+    );
+    if !crate::security::confirm_native(prompt).await {
+        return Err("Download cancelado pelo usuário.".into());
+    }
     let token = CancellationToken::new();
     {
         let mut active = state
@@ -105,7 +111,7 @@ pub fn cancel_local_model_download(
 }
 
 #[tauri::command]
-pub fn delete_local_model(
+pub async fn delete_local_model(
     caller: tauri::WebviewWindow,
     model_id: String,
     destination: String,
@@ -118,6 +124,15 @@ pub fn delete_local_model(
     let path = folder.join(&model.file);
     if path.parent() != Some(folder.as_path()) {
         return Err("O destino do modelo é inválido.".into());
+    }
+    if !crate::security::confirm_native(format!(
+        "Apagar o modelo {} de {}?",
+        model.id,
+        folder.display()
+    ))
+    .await
+    {
+        return Err("Exclusão cancelada pelo usuário.".into());
     }
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
