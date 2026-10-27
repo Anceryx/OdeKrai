@@ -37,6 +37,16 @@ pub enum CodeTool {
     Claude,
 }
 
+pub(crate) struct CodeRunConfig {
+    pub(crate) tool: CodeTool,
+    pub(crate) executable: PathBuf,
+    pub(crate) project: PathBuf,
+    pub(crate) allowed_root: PathBuf,
+    pub(crate) task: String,
+    pub(crate) run_id: String,
+    pub(crate) cancel: CancellationToken,
+}
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodeToolSettings {
@@ -244,37 +254,18 @@ fn quote_windows(value: &std::ffi::OsStr) -> String {
     quoted
 }
 
-pub async fn run<'a>(
+pub async fn run(
     app: &tauri::AppHandle,
-    tool: CodeTool,
-    executable: PathBuf,
-    project: PathBuf,
-    allowed_root: PathBuf,
-    task: String,
-    run_id: String,
-    cancel: CancellationToken,
-    on_output: &'a mut (dyn FnMut(String) + Send),
+    config: CodeRunConfig,
+    on_output: &mut (dyn FnMut(String) + Send),
 ) -> Result<String, String> {
-    validate_request(&project.to_string_lossy(), &task)?;
+    validate_request(&config.project.to_string_lossy(), &config.task)?;
     let app_data = app
         .path()
         .app_data_dir()
         .map_err(|_| "Não foi possível localizar a pasta de trabalho do OdeKrai.".to_string())?;
     let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
-    let worker_cancel = cancel.clone();
-    let mut worker = tokio::task::spawn_blocking(move || {
-        run_blocking(
-            tool,
-            executable,
-            project,
-            allowed_root,
-            task,
-            run_id,
-            app_data,
-            worker_cancel,
-            sender,
-        )
-    });
+    let mut worker = tokio::task::spawn_blocking(move || run_blocking(config, app_data, sender));
     let mut output = String::new();
     let result = loop {
         tokio::select! {
@@ -327,25 +318,19 @@ fn truncate_utf8(value: &str, max_bytes: usize) -> &str {
 }
 
 fn run_blocking(
-    tool: CodeTool,
-    executable: PathBuf,
-    project: PathBuf,
-    allowed_root: PathBuf,
-    task: String,
-    run_id: String,
+    config: CodeRunConfig,
     app_data: PathBuf,
-    cancel: CancellationToken,
     output: tokio::sync::mpsc::UnboundedSender<String>,
 ) -> Result<String, String> {
     run_blocking_with(
-        tool,
-        executable,
-        project,
-        allowed_root,
-        task,
-        run_id,
+        config.tool,
+        config.executable,
+        config.project,
+        config.allowed_root,
+        config.task,
+        config.run_id,
         app_data,
-        cancel,
+        config.cancel,
         output,
         None,
         RUN_TIMEOUT,
@@ -771,7 +756,7 @@ mod tests {
                 "HOME",
             ]
             .iter()
-            .any(|allowed| key == OsString::from(allowed))
+            .any(|allowed| key == *allowed)
         }));
     }
 

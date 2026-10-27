@@ -659,13 +659,15 @@ impl Tool for Productivity {
                 let project = root.join(project);
                 crate::code_delegate::run(
                     &app,
-                    tool,
-                    executable,
-                    project,
-                    allowed_root,
-                    task,
-                    run_id,
-                    cancel,
+                    crate::code_delegate::CodeRunConfig {
+                        tool,
+                        executable,
+                        project,
+                        allowed_root,
+                        task,
+                        run_id,
+                        cancel,
+                    },
                     on_output,
                 )
                 .await
