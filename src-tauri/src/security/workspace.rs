@@ -11,6 +11,8 @@ pub(super) trait Tool: Sync {
         action: &'a SimulatedAction,
         workspace: &'a Path,
         _app: &'a tauri::AppHandle,
+        _cancel: &'a tokio_util::sync::CancellationToken,
+        _on_output: &'a mut (dyn FnMut(String) + Send),
     ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
         Box::pin(async move { self.execute(action, workspace) })
     }
@@ -552,6 +554,9 @@ impl Tool for Productivity {
     }
     fn risk(&self, action: &SimulatedAction) -> Risk {
         match action {
+            SimulatedAction::Productivity { skill_id, .. } if skill_id == "code.delegate" => {
+                Risk::ExecucaoDeCodigo
+            }
             SimulatedAction::Productivity { skill_id, .. } if skill_id == "files.delete" => {
                 Risk::DestrutivoFinanceiro
             }
@@ -614,12 +619,14 @@ impl Tool for Productivity {
         }
         crate::productivity::execute(skill_id, params, root, None)
     }
-    fn execute_with_app(
-        &self,
-        action: &SimulatedAction,
-        root: &Path,
-        app: &tauri::AppHandle,
-    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
+    fn execute_with_app<'a>(
+        &'a self,
+        action: &'a SimulatedAction,
+        root: &'a Path,
+        app: &'a tauri::AppHandle,
+        cancel: &'a tokio_util::sync::CancellationToken,
+        on_output: &'a mut (dyn FnMut(String) + Send),
+    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
         let SimulatedAction::Productivity { skill_id, params } = action else {
             return Box::pin(async { Err("Parâmetros incompatíveis.".into()) });
         };
@@ -636,6 +643,33 @@ impl Tool for Productivity {
                 .to_string();
             let text = params["text"].as_str().unwrap_or_default().to_string();
             return Box::pin(async move { crate::discord::send(&app, &webhook_id, &text).await });
+        }
+        if skill_id == "code.delegate" {
+            let app = app.clone();
+            let project = params["project"].as_str().unwrap_or_default().to_string();
+            let task = params["task"].as_str().unwrap_or_default().to_string();
+            let allowed_root = root.to_path_buf();
+            let run_id = params["_delegate_id"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
+            let cancel = cancel.clone();
+            return Box::pin(async move {
+                let (tool, executable) = crate::code_delegate::configured_tool(&app)?;
+                let project = root.join(project);
+                crate::code_delegate::run(
+                    &app,
+                    tool,
+                    executable,
+                    project,
+                    allowed_root,
+                    task,
+                    run_id,
+                    cancel,
+                    on_output,
+                )
+                .await
+            });
         }
         if skill_id.starts_with("files.") {
             let result = execute_file_skill(skill_id, params, root);

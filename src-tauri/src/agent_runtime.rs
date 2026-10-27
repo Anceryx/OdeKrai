@@ -232,6 +232,7 @@ impl AgentBackend for RuntimeBackend<'_> {
                 crate::policy::Risk::EscritaReversivel => "escrita reversível",
                 crate::policy::Risk::ComunicacaoExterna => "comunicação externa",
                 crate::policy::Risk::DestrutivoFinanceiro => "destrutivo ou financeiro",
+                crate::policy::Risk::ExecucaoDeCodigo => "execução de código (alto)",
             };
             let summary = action_card_summary(skill, &call.args);
             let mut card = crate::history::AgentActionCard {
@@ -261,6 +262,38 @@ impl AgentBackend for RuntimeBackend<'_> {
             let app = self.app.clone();
             let card_conversation = conversation_id.clone();
             let approval_card = card.clone();
+            let stream_app = self.app.clone();
+            let stream_events = self.events.clone();
+            let stream_conversation = conversation_id.clone();
+            let mut stream_card = card.clone();
+            let mut on_output = move |chunk: String| {
+                let cleaned: String = chunk
+                    .chars()
+                    .map(|character| {
+                        if character.is_control() {
+                            ' '
+                        } else {
+                            character
+                        }
+                    })
+                    .collect();
+                stream_card.result_summary.push_str(&cleaned);
+                if stream_card.result_summary.len() > 480 {
+                    let mut end = 480;
+                    while !stream_card.result_summary.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    stream_card.result_summary.truncate(end);
+                }
+                let _ = crate::history::save_agent_action_card(
+                    &stream_app,
+                    &stream_conversation,
+                    &stream_card,
+                );
+                let _ = stream_events.send(AgentEvent::ActionCard {
+                    card: stream_card.clone(),
+                });
+            };
             let mut on_approval = move |approval_id: String| {
                 approval_state.store(true, Ordering::SeqCst);
                 let mut waiting = approval_card.clone();
@@ -282,6 +315,7 @@ impl AgentBackend for RuntimeBackend<'_> {
                     tainted,
                     cancel,
                     &mut on_approval,
+                    &mut on_output,
                 )
                 .await?;
             let status = result.status.clone();
@@ -315,7 +349,23 @@ impl AgentBackend for RuntimeBackend<'_> {
                 _ => "A execução foi interrompida.".into(),
             };
             crate::history::save_agent_action_card(&self.app, &conversation_id, &card)?;
-            let _ = self.events.send(AgentEvent::ActionCard { card });
+            if skill.id == "code.delegate" && status == "completed" {
+                if let Some(result) = result.result.as_deref() {
+                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(result) {
+                        if value.get("applied") == Some(&serde_json::Value::Bool(false)) {
+                            card.diff = value
+                                .get("diff")
+                                .and_then(serde_json::Value::as_str)
+                                .map(str::to_owned);
+                            card.result_summary = "Diff pronto para revisão; nenhuma alteração foi aplicada ao projeto original.".into();
+                        }
+                    }
+                }
+            }
+            crate::history::save_agent_action_card(&self.app, &conversation_id, &card)?;
+            let _ = self
+                .events
+                .send(AgentEvent::ActionCard { card: card.clone() });
             let result_text = result.result.as_deref().unwrap_or(&result.message);
             let result_hash = format!("{:x}", Sha256::digest(result_text.as_bytes()));
             crate::history::persist_agent_record(
@@ -339,6 +389,24 @@ impl AgentBackend for RuntimeBackend<'_> {
 
 fn action_card_summary(skill: &Skill, params: &serde_json::Value) -> String {
     let mut summary = skill.description.to_string();
+    if skill.id == "code.delegate" {
+        if let Some(project) = params.get("project").and_then(serde_json::Value::as_str) {
+            summary.push_str(&format!(" Projeto: {project}."));
+        }
+        if let Some(task) = params.get("task").and_then(serde_json::Value::as_str) {
+            let task: String = task
+                .chars()
+                .map(|character| {
+                    if character.is_control() {
+                        ' '
+                    } else {
+                        character
+                    }
+                })
+                .collect();
+            summary.push_str(&format!(" Tarefa: {task}"));
+        }
+    }
     if let Some(path) = params.get("path").and_then(serde_json::Value::as_str) {
         if let Some(name) = std::path::Path::new(path)
             .file_name()

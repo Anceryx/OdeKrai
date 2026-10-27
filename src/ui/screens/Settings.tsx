@@ -7,6 +7,7 @@ import { PageHeader, Toggle } from '../DesignSystem';
 import { HistoryDeletionSettings } from '../HistoryDeletionSettings';
 import { normalizeTrustedLinkDomain } from '../../core/markdown';
 import { DiscordWebhooksSettings } from '../DiscordWebhooksSettings';
+import { CodeDelegationSettings } from '../CodeDelegationSettings';
 
 type BuildInfo = {
   version: string;
@@ -279,6 +280,7 @@ export function SettingsScreen({
         </div>
       </section>
       <DiscordWebhooksSettings />
+      <CodeDelegationSettings />
       <section className="settings-panel settings-section" aria-labelledby="trusted-links-heading">
         <h2 id="trusted-links-heading">Links externos</h2>
         <p className="settings-description">

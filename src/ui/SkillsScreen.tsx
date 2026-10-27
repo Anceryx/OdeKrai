@@ -5,7 +5,12 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { Icon } from './Icon';
 import { Button, PageHeader, SelectInput, Toggle } from './DesignSystem';
 
-type Risk = 'leitura' | 'escrita_reversivel' | 'comunicacao_externa' | 'destrutivo_financeiro';
+type Risk =
+  | 'leitura'
+  | 'escrita_reversivel'
+  | 'comunicacao_externa'
+  | 'destrutivo_financeiro'
+  | 'execucao_de_codigo';
 type Skill = {
   id: string;
   name: string;
@@ -24,6 +29,7 @@ const riskLabels: Record<Risk, string> = {
   escrita_reversivel: 'Escrita reversível',
   comunicacao_externa: 'Comunicação externa',
   destrutivo_financeiro: 'Destrutivo ou financeiro',
+  execucao_de_codigo: 'Execução de código (alto)',
 };
 
 export function SkillsScreen() {

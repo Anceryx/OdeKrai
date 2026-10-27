@@ -87,6 +87,7 @@ pub mod agent;
 mod agent_home;
 mod agent_runtime;
 mod calendar;
+mod code_delegate;
 mod diagnostics;
 mod discord;
 mod external_links;
@@ -851,6 +852,8 @@ pub fn run() -> Result<(), tauri::Error> {
             show_main_window,
             open_build_commit,
             open_logs_folder,
+            code_delegate::get_code_tool_settings,
+            code_delegate::set_code_tool,
             agent_runtime::agent_run,
             agent_runtime::agent_cancel,
             agent_runtime::agent_availability,

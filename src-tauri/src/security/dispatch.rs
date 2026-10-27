@@ -66,6 +66,7 @@ pub(super) fn action_metadata(
             "sheet.create_csv" => "sheet.create_csv",
             "mail.draft" => "mail.draft",
             "discord.send" => "discord.send",
+            "code.delegate" => "code.delegate",
             "web.fetch" => "web.fetch",
             "system.open_url"
             | "system.open_path"
@@ -94,13 +95,14 @@ fn is_workspace_skill(skill_id: &str) -> bool {
                 | "doc.create_text"
                 | "sheet.create_csv"
                 | "mail.draft"
+                | "code.delegate"
                 | "system.open_path"
                 | "system.reveal_in_folder"
         )
 }
 
 fn require_batch_approval(action: &SimulatedAction, decision: Decision) -> Decision {
-    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "files.apply_plan" | "app.launch" | "clipboard.read" | "clipboard.write" | "discord.send"))
+    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "files.apply_plan" | "app.launch" | "clipboard.read" | "clipboard.write" | "discord.send" | "code.delegate"))
         && matches!(decision, Decision::Allow(_))
     {
         Decision::AskUser("batch_requires_approval")
@@ -287,6 +289,11 @@ pub(super) fn preview_for(
     } else {
         (PathBuf::new(), action.clone())
     };
+    if let SimulatedAction::Productivity { skill_id, params } = &action {
+        if skill_id == "code.delegate" {
+            return crate::code_delegate::preview(app, &workspace, params);
+        }
+    }
     if matches!(action, SimulatedAction::WriteFile { .. }) {
         let location = if agent_home::workspace_path(app).is_ok_and(|home| home == workspace) {
             "pasta de trabalho"
@@ -417,6 +424,8 @@ async fn execute_action_with_timeout(
     action: &SimulatedAction,
     app: &tauri::AppHandle,
     timeout: Duration,
+    cancel: &tokio_util::sync::CancellationToken,
+    on_output: &mut (dyn FnMut(String) + Send),
 ) -> Result<String, String> {
     let workspace_action = match action {
         SimulatedAction::ReadFile { .. }
@@ -442,9 +451,12 @@ async fn execute_action_with_timeout(
         (PathBuf::new(), action.clone())
     };
     let tool = tool_for(&action);
-    tokio::time::timeout(timeout, tool.execute_with_app(&action, &workspace, app))
-        .await
-        .map_err(|_| "A ferramenta excedeu o tempo limite.".to_string())?
+    tokio::time::timeout(
+        timeout,
+        tool.execute_with_app(&action, &workspace, app, cancel, on_output),
+    )
+    .await
+    .map_err(|_| "A ferramenta excedeu o tempo limite.".to_string())?
 }
 
 pub(super) async fn submit_simulated_action_inner(
@@ -453,6 +465,7 @@ pub(super) async fn submit_simulated_action_inner(
     request: ActionRequest,
 ) -> Result<ActionResult, String> {
     let mut on_approval = |_| {};
+    let mut on_output = |_| {};
     let tool = tool_for(&request.action);
     submit_agent_action(
         &app,
@@ -464,6 +477,7 @@ pub(super) async fn submit_simulated_action_inner(
         tool.rate_limit_per_minute(),
         &tokio_util::sync::CancellationToken::new(),
         &mut on_approval,
+        &mut on_output,
     )
     .await
 }
@@ -479,6 +493,7 @@ pub(super) async fn submit_agent_action(
     rate_limit_per_minute: usize,
     cancel: &tokio_util::sync::CancellationToken,
     on_approval: &mut (dyn FnMut(String) + Send),
+    on_output: &mut (dyn FnMut(String) + Send),
 ) -> Result<ActionResult, String> {
     let domain_requires_approval = match &action {
         SimulatedAction::Productivity { skill_id, params }
@@ -619,7 +634,7 @@ pub(super) async fn submit_agent_action(
             "started",
             None,
         )?;
-        let result = execute_action_with_timeout(&action, app, timeout).await;
+        let result = execute_action_with_timeout(&action, app, timeout, cancel, on_output).await;
         let error = result.as_ref().err().cloned();
         record(
             app,
@@ -796,7 +811,8 @@ pub(super) async fn submit_agent_action(
                 "started",
                 None,
             )?;
-            let execution = execute_action_with_timeout(&action, app, timeout).await;
+            let execution =
+                execute_action_with_timeout(&action, app, timeout, cancel, on_output).await;
             let error = execution.as_ref().err().cloned();
             record(
                 app,

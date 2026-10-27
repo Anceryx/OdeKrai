@@ -11,6 +11,30 @@ use tauri_plugin_opener::OpenerExt;
 const MAX_TEXT_BYTES: usize = 1_000_000;
 
 pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
+    if skill_id == "code.delegate" {
+        let object = params.as_object().ok_or("Parâmetros inválidos.")?;
+        if object.len() != 3
+            || !object.contains_key("project")
+            || !object.contains_key("task")
+            || !object.contains_key("_delegate_id")
+        {
+            return Err("Os parâmetros da delegação de código são inválidos.".into());
+        }
+        let project = object["project"].as_str().ok_or("Projeto inválido.")?;
+        let task = object["task"].as_str().ok_or("Tarefa inválida.")?;
+        let run_id = object["_delegate_id"]
+            .as_str()
+            .ok_or("Execução inválida.")?;
+        crate::code_delegate::validate_request(project, task)?;
+        if run_id.is_empty()
+            || !run_id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        {
+            return Err("Identificador interno da execução inválido.".into());
+        }
+        return Ok(());
+    }
     if skill_id == "discord.send" {
         let object = params.as_object().ok_or("Parâmetros inválidos.")?;
         if object.len() != 2 || !object.contains_key("webhook_id") || !object.contains_key("text") {

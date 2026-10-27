@@ -14,6 +14,8 @@ demais provedores permanecem `unverified` para tools.
 
 ## Implementado
 
+- `code.delegate`: permite executar Codex CLI ou Claude Code já instalado pelo usuário em um `git worktree` descartável, sob aprovação obrigatória. O caminho do executável fica nas configurações locais; o projeto precisa estar em pasta permitida com leitura e escrita. Saída e diff são dados não confiáveis, o diff aparece no cartão e nunca é aplicado ao projeto original por esta habilidade. Limite de tempo, cancelamento, limite de saída e Job Object encerram o processo. O uso real das duas CLIs e a validação visual nativa continuam pendentes.
+
 - Base de habilidades em Rust para as ferramentas já existentes: schemas fechados, risco calculado no backend, prévias, confiança do resultado e limites da ferramenta. A ativação começa desligada. A tela “Habilidades” configura capacidades e exceções de modo; “Pastas permitidas” salva níveis de acesso em SQLite, mantém o workspace sempre em leitura e escrita e valida caminhos locais contra redirecionamentos e áreas protegidas. O loop do modelo ainda não consome esse registro.
 - O prompt de sistema inclui em Rust a data, a hora, o fuso local do Windows e o idioma atual desta versão (`pt-BR`), além de instruções para não alegar ações sem resultado confirmado e não contornar uma negação.
 

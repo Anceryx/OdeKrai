@@ -7,7 +7,12 @@ import { normalizeSoundPreferences, playSound, SoundTriggerGate } from '../core/
 import { Button, PageHeader, SelectableCard } from './DesignSystem';
 
 type Mode = 'sempre_perguntar' | 'aprovar_por_mim' | 'controle_total';
-type Risk = 'leitura' | 'escrita_reversivel' | 'comunicacao_externa' | 'destrutivo_financeiro';
+type Risk =
+  | 'leitura'
+  | 'escrita_reversivel'
+  | 'comunicacao_externa'
+  | 'destrutivo_financeiro'
+  | 'execucao_de_codigo';
 type ToolOverride = { tool: string; morePermissive: boolean };
 type PermissionSettings = {
   mode: Mode;
@@ -71,6 +76,7 @@ const risks: { id: Risk; title: string }[] = [
   { id: 'escrita_reversivel', title: 'Escrita reversível' },
   { id: 'comunicacao_externa', title: 'Comunicação externa' },
   { id: 'destrutivo_financeiro', title: 'Destrutivo ou financeiro' },
+  { id: 'execucao_de_codigo', title: 'Execução de código (alto)' },
 ];
 const tools = [
   ['workspace.read_file', 'Ler arquivo em pasta permitida'],
@@ -90,6 +96,7 @@ function riskLabel(risk: Risk): string {
 
 function decision(mode: Mode, risk: Risk): string {
   if (risk === 'leitura') return 'Permitir em pastas permitidas';
+  if (risk === 'execucao_de_codigo') return 'Sempre pedir aprovação';
   if (mode === 'sempre_perguntar') return 'Pedir aprovação';
   if (mode === 'aprovar_por_mim')
     return risk === 'escrita_reversivel' ? 'Permitir em pastas permitidas' : 'Pedir aprovação';

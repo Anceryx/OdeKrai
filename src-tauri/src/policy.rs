@@ -16,6 +16,7 @@ pub enum Risk {
     EscritaReversivel,
     ComunicacaoExterna,
     DestrutivoFinanceiro,
+    ExecucaoDeCodigo,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,10 +51,14 @@ pub fn decide(
     if let Some(rule) = fixed_block {
         return Decision::Deny(rule);
     }
+    if risk == Risk::ExecucaoDeCodigo {
+        return Decision::AskUser("code_execution_requires_approval");
+    }
     if origin.is_tainted() && risk != Risk::Leitura {
         return Decision::AskUser("origin_tainted");
     }
     let base = match (mode, risk, inside_workspace) {
+        (_, Risk::ExecucaoDeCodigo, _) => Decision::AskUser("code_execution_requires_approval"),
         (_, Risk::Leitura, true) => Decision::Allow("workspace_read"),
         (_, Risk::Leitura, false) => Decision::Deny("outside_workspace"),
         (Mode::SemprePerguntar, _, _) => Decision::AskUser("mode_always_ask"),
@@ -78,7 +83,8 @@ pub fn decide(
         }
         (Mode::ControleTotal, _, true) => Decision::Allow("mode_total_workspace"),
     };
-    let fixed_approval = risk == Risk::DestrutivoFinanceiro && !inside_workspace;
+    let fixed_approval =
+        risk == Risk::ExecucaoDeCodigo || (risk == Risk::DestrutivoFinanceiro && !inside_workspace);
     if permissive_override
         && !fixed_approval
         && !origin.is_tainted()
@@ -128,6 +134,7 @@ mod tests {
                 Risk::EscritaReversivel,
                 Risk::ComunicacaoExterna,
                 Risk::DestrutivoFinanceiro,
+                Risk::ExecucaoDeCodigo,
             ] {
                 for origin in [
                     Origin::User,
@@ -136,7 +143,9 @@ mod tests {
                 ] {
                     for inside in [false, true] {
                         let decision = decide(mode, risk, &origin, inside, None, false);
-                        let expected = if risk != Risk::Leitura && origin.is_tainted() {
+                        let expected = if risk == Risk::ExecucaoDeCodigo {
+                            Decision::AskUser("code_execution_requires_approval")
+                        } else if risk != Risk::Leitura && origin.is_tainted() {
                             Decision::AskUser("origin_tainted")
                         } else if risk == Risk::Leitura {
                             if inside {
@@ -313,5 +322,26 @@ mod tests {
             ),
             Decision::AskUser("origin_tainted")
         );
+    }
+
+    #[test]
+    fn code_execution_always_requires_approval_even_with_permissive_override() {
+        for mode in [
+            Mode::SemprePerguntar,
+            Mode::AprovarPorMim,
+            Mode::ControleTotal,
+        ] {
+            assert_eq!(
+                decide(
+                    mode,
+                    Risk::ExecucaoDeCodigo,
+                    &Origin::User,
+                    true,
+                    None,
+                    true,
+                ),
+                Decision::AskUser("code_execution_requires_approval")
+            );
+        }
     }
 }
