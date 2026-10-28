@@ -10,6 +10,8 @@ pub struct HardwareProfile {
     pub avx2: bool,
     pub avx512: bool,
     pub adapters: Vec<VideoAdapter>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
@@ -51,9 +53,9 @@ fn windows_profile() -> Result<HardwareProfile, String> {
         dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
         ..Default::default()
     };
-    unsafe {
-        GlobalMemoryStatusEx(&mut memory)
-            .map_err(|_| "Não foi possível consultar a memória do computador.")?;
+    let mut warnings = Vec::new();
+    if unsafe { GlobalMemoryStatusEx(&mut memory) }.is_err() {
+        warnings.push("Não foi possível consultar a memória RAM.".to_string());
     }
     let models_path = dirs_path().join("models");
     let volume_path = if models_path.exists() {
@@ -75,26 +77,28 @@ fn windows_profile() -> Result<HardwareProfile, String> {
         )
     };
     if disk_ok == 0 {
-        return Err("Não foi possível consultar o espaço livre para modelos.".into());
+        warnings.push("Não foi possível consultar o espaço livre para modelos.".to_string());
     }
-    let factory: IDXGIFactory1 = unsafe {
-        CreateDXGIFactory1().map_err(|_| "Não foi possível consultar os adaptadores de vídeo.")?
-    };
+    let factory: Option<IDXGIFactory1> = unsafe { CreateDXGIFactory1().ok() };
     let mut adapters = Vec::new();
-    let mut index = 0;
-    while let Ok(adapter) = unsafe { factory.EnumAdapters1(index) } {
-        if let Ok(desc) = unsafe { adapter.GetDesc1() } {
-            let name = String::from_utf16_lossy(&desc.Description)
-                .trim_end_matches('\0')
-                .to_string();
-            if desc.Flags & 2 == 0 {
-                adapters.push(VideoAdapter {
-                    name,
-                    dedicated_vram_bytes: desc.DedicatedVideoMemory as u64,
-                });
+    if let Some(factory) = factory {
+        let mut index = 0;
+        while let Ok(adapter) = unsafe { factory.EnumAdapters1(index) } {
+            if let Ok(desc) = unsafe { adapter.GetDesc1() } {
+                let name = String::from_utf16_lossy(&desc.Description)
+                    .trim_end_matches('\0')
+                    .to_string();
+                if desc.Flags & 2 == 0 {
+                    adapters.push(VideoAdapter {
+                        name,
+                        dedicated_vram_bytes: desc.DedicatedVideoMemory as u64,
+                    });
+                }
             }
+            index += 1;
         }
-        index += 1;
+    } else {
+        warnings.push("Não foi possível consultar os adaptadores de vídeo.".to_string());
     }
     Ok(HardwareProfile {
         total_ram_bytes: memory.ullTotalPhys,
@@ -102,11 +106,12 @@ fn windows_profile() -> Result<HardwareProfile, String> {
         models_free_bytes: free,
         cpu_cores: std::thread::available_parallelism()
             .map(usize::from)
-            .unwrap_or(1),
+            .unwrap_or_default(),
         avx: std::is_x86_feature_detected!("avx"),
         avx2: std::is_x86_feature_detected!("avx2"),
         avx512: std::is_x86_feature_detected!("avx512f"),
         adapters,
+        warnings,
     })
 }
 

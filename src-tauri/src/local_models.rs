@@ -21,6 +21,7 @@ struct Manifest {
 #[serde(rename_all = "camelCase")]
 struct Model {
     id: String,
+    name: String,
     repository: String,
     file: String,
     size_bytes: Option<u64>,
@@ -37,8 +38,134 @@ struct DownloadProgress {
     total_bytes: u64,
 }
 
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalModelInventory {
+    model_id: String,
+    name: String,
+    file_name: String,
+    path: String,
+    size_bytes: u64,
+    status: &'static str,
+    engine: &'static str,
+    ram_vram_estimate: &'static str,
+}
+
 #[derive(Default)]
 pub struct Downloads(Mutex<HashMap<String, CancellationToken>>);
+
+/// Reads the chosen folder directly. The filesystem is the persisted inventory source;
+/// this command never treats a selected UI model as a downloaded or verified file.
+#[tauri::command]
+pub fn inspect_local_models(
+    caller: tauri::WebviewWindow,
+    state: tauri::State<'_, Downloads>,
+    destination: String,
+) -> Result<Vec<LocalModelInventory>, String> {
+    crate::require_main(&caller)?;
+    let folder = PathBuf::from(destination)
+        .canonicalize()
+        .map_err(|_| "A pasta de modelos não existe ou não pode ser acessada.".to_string())?;
+    let manifest: Manifest = serde_json::from_str(include_str!("../resources/local-models.json"))
+        .map_err(|_| "O catálogo de modelos está inválido.".to_string())?;
+    let active = state
+        .0
+        .lock()
+        .map_err(|_| "Não foi possível consultar os downloads ativos.".to_string())?;
+    inventory_models(&folder, manifest.models, &active)
+}
+
+fn inventory_models(
+    folder: &Path,
+    models: Vec<Model>,
+    active: &HashMap<String, CancellationToken>,
+) -> Result<Vec<LocalModelInventory>, String> {
+    let mut inventory = Vec::with_capacity(models.len());
+    for model in models {
+        if Path::new(&model.file)
+            .file_name()
+            .and_then(|name| name.to_str())
+            != Some(model.file.as_str())
+            || model.file.contains("..")
+        {
+            return Err("O catálogo contém um nome de arquivo inválido.".into());
+        }
+        let path = folder.join(&model.file);
+        let metadata = fs::symlink_metadata(&path);
+        let (size_bytes, status) = match metadata {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let partial = folder.join(format!("{}.part", model.file));
+                match fs::symlink_metadata(partial) {
+                    Err(partial_error) if partial_error.kind() == std::io::ErrorKind::NotFound => {
+                        (0, "NAO_BAIXADO")
+                    }
+                    Ok(meta) if !meta.file_type().is_file() => (meta.len(), "ERRO"),
+                    Ok(meta) if meta.len() > model.size_bytes.unwrap_or_default() => {
+                        (meta.len(), "ERRO")
+                    }
+                    Ok(meta) if active.contains_key(&model.id) => (meta.len(), "BAIXANDO"),
+                    Ok(meta) => (meta.len(), "PARCIAL"),
+                    Err(_) => (0, "ERRO"),
+                }
+            }
+            Err(_) => (0, "ERRO"),
+            Ok(metadata) if !metadata.file_type().is_file() => (metadata.len(), "ERRO"),
+            Ok(metadata) => {
+                let expected_size = model.size_bytes.unwrap_or_default();
+                if metadata.len() != expected_size {
+                    (metadata.len(), "ERRO")
+                } else if let Some(expected_hash) = model.sha256.as_deref() {
+                    match hash_file(&path) {
+                        Ok(actual)
+                            if actual.eq_ignore_ascii_case(expected_hash)
+                                && has_gguf_magic(&path) =>
+                        {
+                            (metadata.len(), "VERIFICADO")
+                        }
+                        Ok(_) | Err(_) => (metadata.len(), "ERRO"),
+                    }
+                } else {
+                    (metadata.len(), "BAIXADO")
+                }
+            }
+        };
+        inventory.push(LocalModelInventory {
+            model_id: model.id,
+            name: model.name,
+            file_name: model.file,
+            path: path.to_string_lossy().into_owned(),
+            size_bytes,
+            status,
+            engine: "GGUF sem executor integrado",
+            ram_vram_estimate: "NÃO VERIFICADO",
+        });
+    }
+    Ok(inventory)
+}
+
+fn hash_file(path: &Path) -> Result<String, String> {
+    let mut file =
+        fs::File::open(path).map_err(|_| "Não foi possível ler o arquivo.".to_string())?;
+    let mut hash = Sha256::new();
+    let mut buffer = [0; 1024 * 1024];
+    loop {
+        let count = std::io::Read::read(&mut file, &mut buffer)
+            .map_err(|_| "Não foi possível verificar o arquivo.".to_string())?;
+        if count == 0 {
+            break;
+        }
+        hash.update(&buffer[..count]);
+    }
+    Ok(format!("{:x}", hash.finalize()))
+}
+
+fn has_gguf_magic(path: &Path) -> bool {
+    let Ok(mut file) = fs::File::open(path) else {
+        return false;
+    };
+    let mut magic = [0; 4];
+    std::io::Read::read_exact(&mut file, &mut magic).is_ok() && &magic == b"GGUF"
+}
 
 #[tauri::command]
 pub async fn download_local_model(
@@ -278,6 +405,9 @@ async fn download_file(
     if actual_hash != expected_hash {
         return Err("A verificação SHA-256 falhou; o arquivo parcial foi mantido.".into());
     }
+    if !has_gguf_magic(partial) {
+        return Err("O arquivo recebido não tem cabeçalho GGUF; o parcial foi mantido.".into());
+    }
     fs::rename(partial, destination)
         .map_err(|_| "Não foi possível finalizar o arquivo do modelo.".to_string())?;
     Ok(())
@@ -328,5 +458,86 @@ mod tests {
         let model = manifest_model("qwen35-2b-q4km").unwrap();
         assert_eq!(Path::new(&model.file).components().count(), 1);
         assert!(!model.file.contains(".."));
+    }
+
+    #[test]
+    fn inventory_reads_exact_files_and_detects_removed_or_similar_names() {
+        let folder = std::env::temp_dir().join(format!(
+            "odekrai-model-inventory-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&folder).unwrap();
+        let first = Model {
+            id: "first".into(),
+            name: "Similar model first".into(),
+            repository: "test/model".into(),
+            file: "same-q4.gguf".into(),
+            size_bytes: Some(4),
+            sha256: Some(format!("{:x}", Sha256::digest(b"GGUF"))),
+            license: Some("test".into()),
+            download_hosts: vec!["example.test".into()],
+        };
+        let second = Model {
+            id: "second".into(),
+            name: "Similar model second".into(),
+            file: "same-q4-other.gguf".into(),
+            ..first.clone()
+        };
+        let first_file = first.file.clone();
+        fs::write(folder.join(&first.file), b"GGUF").unwrap();
+        assert_eq!(
+            inventory_models(
+                &folder,
+                vec![first.clone(), second.clone()],
+                &HashMap::new()
+            )
+            .unwrap()
+            .iter()
+            .map(|item| item.status)
+            .collect::<Vec<_>>(),
+            ["VERIFICADO", "NAO_BAIXADO"]
+        );
+        fs::write(folder.join(&first.file), b"NOPE").unwrap();
+        assert!(!has_gguf_magic(&folder.join(&first.file)));
+        assert_eq!(
+            inventory_models(
+                &folder,
+                vec![first.clone(), second.clone()],
+                &HashMap::new()
+            )
+            .unwrap()[0]
+                .status,
+            "ERRO"
+        );
+        fs::write(folder.join(&first.file), b"GGUF").unwrap();
+        assert!(has_gguf_magic(&folder.join(&first.file)));
+        fs::remove_file(folder.join(first_file.clone())).unwrap();
+        let partial = folder.join(format!("{first_file}.part"));
+        fs::write(&partial, b"GGUF").unwrap();
+        let partial_status = inventory_models(
+            &folder,
+            vec![first.clone(), second.clone()],
+            &HashMap::new(),
+        )
+        .unwrap();
+        assert_eq!(partial_status[0].status, "PARCIAL");
+        let active = HashMap::from([(first.id.clone(), CancellationToken::new())]);
+        let active_status =
+            inventory_models(&folder, vec![first.clone(), second.clone()], &active).unwrap();
+        assert_eq!(active_status[0].status, "BAIXANDO");
+        fs::remove_file(partial).unwrap();
+        assert_eq!(
+            inventory_models(&folder, vec![first, second], &HashMap::new())
+                .unwrap()
+                .iter()
+                .map(|item| item.status)
+                .collect::<Vec<_>>(),
+            ["NAO_BAIXADO", "NAO_BAIXADO"]
+        );
+        fs::remove_dir_all(folder).unwrap();
     }
 }

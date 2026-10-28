@@ -7,6 +7,7 @@ import {
   formatBytes,
   recommendLocalModel,
   type HardwareProfile,
+  type LocalModelInventory,
 } from '../../core/local-models';
 import { Badge, Button, Card, PageHeader } from '../DesignSystem';
 import { Icon } from '../Icon';
@@ -29,6 +30,23 @@ export function ComputerScreen() {
     totalBytes: number;
   } | null>(null);
   const [downloadError, setDownloadError] = useState('');
+  const [inventory, setInventory] = useState<LocalModelInventory[]>([]);
+  const [inventoryError, setInventoryError] = useState('');
+  async function refreshInventory(folder = modelFolder) {
+    if (!isTauri() || !folder) {
+      setInventory([]);
+      return;
+    }
+    try {
+      setInventory(
+        await invoke<LocalModelInventory[]>('inspect_local_models', { destination: folder }),
+      );
+      setInventoryError('');
+    } catch (error) {
+      setInventory([]);
+      setInventoryError(String(error));
+    }
+  }
   useEffect(() => {
     if (!isTauri()) return;
     let unlisten: (() => void) | undefined;
@@ -44,6 +62,9 @@ export function ComputerScreen() {
       .then(setHardware)
       .catch(() => setError('Não foi possível consultar o hardware deste computador.'));
   }, []);
+  useEffect(() => {
+    void refreshInventory();
+  }, [modelFolder]);
   const recommendation = hardware ? recommendLocalModel(hardware) : null;
   async function chooseModelFolder() {
     const folder = await open({
@@ -54,6 +75,7 @@ export function ComputerScreen() {
     if (typeof folder !== 'string') return;
     setModelFolder(folder);
     localStorage.setItem('odekrai.modelFolder', folder);
+    await refreshInventory(folder);
   }
   async function downloadModel(model: (typeof LOCAL_MODELS)[number]) {
     if (!modelFolder) {
@@ -68,9 +90,11 @@ export function ComputerScreen() {
         destination: modelFolder,
       });
       setDownload(null);
+      await refreshInventory();
     } catch (error) {
       setDownloadError(String(error));
       setDownload(null);
+      await refreshInventory();
     }
   }
   async function deleteModel(model: (typeof LOCAL_MODELS)[number]) {
@@ -87,7 +111,8 @@ export function ComputerScreen() {
       />
       {error && (
         <div className="ui-banner ui-banner--warning" role="status">
-          {error}
+          {error} Você ainda pode escolher um modelo manualmente; a execução e os requisitos mínimos
+          não são verificados pelo aplicativo.
         </div>
       )}
       {hardware ? (
@@ -99,16 +124,20 @@ export function ComputerScreen() {
             <div>
               <dt>Memória RAM</dt>
               <dd>
-                {gib(hardware.available_ram_bytes)} disponível de {gib(hardware.total_ram_bytes)}
+                {hardware.total_ram_bytes > 0
+                  ? `${gib(hardware.available_ram_bytes)} disponível de ${gib(hardware.total_ram_bytes)}`
+                  : 'Não detectada'}
               </dd>
             </div>
             <div>
               <dt>Espaço livre para modelos</dt>
-              <dd>{gib(hardware.models_free_bytes)}</dd>
+              <dd>
+                {hardware.models_free_bytes > 0 ? gib(hardware.models_free_bytes) : 'Não detectado'}
+              </dd>
             </div>
             <div>
               <dt>Núcleos de CPU</dt>
-              <dd>{hardware.cpu_cores}</dd>
+              <dd>{hardware.cpu_cores > 0 ? hardware.cpu_cores : 'Não detectado'}</dd>
             </div>
             <div>
               <dt>CPU</dt>
@@ -127,10 +156,15 @@ export function ComputerScreen() {
                           `${adapter.name} (${gib(adapter.dedicated_vram_bytes)} VRAM dedicada)`,
                       )
                       .join('; ')
-                  : 'Nenhum adaptador detectado'}
+                  : 'Nenhum adaptador com VRAM dedicada detectado'}
               </dd>
             </div>
           </dl>
+          {hardware.warnings.length > 0 && (
+            <div className="ui-banner ui-banner--warning" role="status">
+              {hardware.warnings.join(' ')} Você ainda pode escolher um modelo manualmente.
+            </div>
+          )}
           {recommendation && <p className="recommendation-reason">{recommendation.reason}</p>}
         </Card>
       ) : !error ? (
@@ -138,6 +172,12 @@ export function ComputerScreen() {
       ) : null}
       <section className="model-choice-section">
         <h2>Escolher modelo</h2>
+        <p role="note">
+          Arquivos GGUF não são executados pelo OdeKrai. Para usá-los, instale e inicie um servidor
+          local compatível por conta própria, carregue o modelo nele e conecte em Provedores &gt; IA
+          local. A descoberta consulta somente 127.0.0.1 nas portas 11434 (Ollama) e 8080 (llama.cpp
+          server); o aplicativo não instala nem inicia esses motores.
+        </p>
         <div className="ui-actions">
           <Button variant="secondary" onClick={() => void chooseModelFolder()}>
             Escolher pasta dos modelos
@@ -172,6 +212,11 @@ export function ComputerScreen() {
             {downloadError}
           </div>
         )}
+        {inventoryError && (
+          <div className="ui-banner ui-banner--warning" role="status">
+            Inventário indisponível: {inventoryError}
+          </div>
+        )}
         <div className="local-model-cards">
           {groups.map((group) => {
             const entries = LOCAL_MODELS.filter((model) => group.accepts.includes(model.profile));
@@ -188,8 +233,45 @@ export function ComputerScreen() {
                   <div className="local-model-option" key={model.id}>
                     <strong>{model.name}</strong>
                     <span>Tamanho: {formatBytes(model.sizeBytes)}</span>
+                    {inventory.find((entry) => entry.modelId === model.id) && (
+                      <>
+                        <span>
+                          Estado:{' '}
+                          {
+                            {
+                              NAO_BAIXADO: 'Não baixado',
+                              BAIXANDO: 'Baixando',
+                              PARCIAL: 'Download parcial, disponível para retomada',
+                              BAIXADO: 'Baixado, ainda não verificado',
+                              VERIFICADO: 'Verificado por tamanho, SHA-256 e cabeçalho GGUF',
+                              ERRO: 'Erro: arquivo não corresponde ao catálogo',
+                            }[inventory.find((entry) => entry.modelId === model.id)!.status]
+                          }
+                        </span>
+                        <span>Executor: GGUF sem executor integrado</span>
+                        <span>RAM/VRAM estimada: não verificada</span>
+                        <details>
+                          <summary>Detalhes do arquivo</summary>
+                          <span>
+                            Nome: {inventory.find((entry) => entry.modelId === model.id)!.name}
+                          </span>
+                          <span>
+                            Caminho: {inventory.find((entry) => entry.modelId === model.id)!.path}
+                          </span>
+                          <span>
+                            Tamanho encontrado:{' '}
+                            {formatBytes(
+                              inventory.find((entry) => entry.modelId === model.id)!.sizeBytes,
+                            )}
+                          </span>
+                        </details>
+                      </>
+                    )}
                     <span>Requisitos mínimos: não verificados</span>
-                    <span>Licença: {model.license ?? 'não verificada'}</span>
+                    <span>
+                      Licença declarada do modelo base: {model.license ?? 'não verificada'}; licença
+                      do repositório GGUF: não verificada.
+                    </span>
                     <span>Thinking: {model.thinkingNotes}</span>
                     <Button
                       variant={selected === model.id ? 'primary' : 'secondary'}

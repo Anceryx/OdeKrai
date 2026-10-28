@@ -865,6 +865,7 @@ pub fn run() -> Result<(), tauri::Error> {
             local_models::download_local_model,
             local_models::cancel_local_model_download,
             local_models::delete_local_model,
+            local_models::inspect_local_models,
             diagnostics::get_startup_state,
             diagnostics::complete_startup,
             diagnostics::record_diagnostic_event,

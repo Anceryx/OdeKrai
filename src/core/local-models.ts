@@ -9,6 +9,18 @@ export type HardwareProfile = {
   avx2: boolean;
   avx512: boolean;
   adapters: { name: string; dedicated_vram_bytes: number }[];
+  warnings: string[];
+};
+
+export type LocalModelInventory = {
+  modelId: string;
+  name: string;
+  fileName: string;
+  path: string;
+  sizeBytes: number;
+  status: 'NAO_BAIXADO' | 'BAIXANDO' | 'PARCIAL' | 'BAIXADO' | 'VERIFICADO' | 'ERRO';
+  engine: string;
+  ramVramEstimate: string;
 };
 
 export const LOCAL_MODELS = manifest.models;
