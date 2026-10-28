@@ -5,20 +5,22 @@ Leia este arquivo inteiro antes de alterar qualquer coisa.
 
 ## O que é o projeto
 
-OdeKrai é um "pet" de IA para Windows que age como assistente pessoal do usuário ("o eu" dele),
-usando até 15 provedores de IA configuráveis. Stack: Tauri 2 (Rust) + React 19 + TypeScript + Vite.
+OdeKrai é um assistente de IA para Windows com mascote, usando provedores de nuvem configuráveis
+e conexão local compatível. Stack: Tauri 2 (Rust) + React 19 + TypeScript + Vite.
 
-Estado atual: chat com um provedor por vez, pet 2D, pasta pessoal, memória manual e motor de permissões em Rust exercitado por ferramentas simuladas.
-Ainda NÃO existem: agent loop, ferramentas reais, aprendizado automático e roteador.
+Estado atual: conversas, seleção de provedor principal e reservas, loop de agente em Rust,
+habilidades registradas no Rust, motor de permissões, pet 2D, pasta pessoal e memória manual.
+Não há aprendizado automático; Vertex AI está presente como guia sem autenticação integrada.
 Consulte `docs/IMPLEMENTATION-STATUS.md` e `docs/ROADMAP.md` antes de planejar.
 
 ## Mapa do código
 
-- `src-tauri/src/lib.rs` — janelas `main`, `island`, `mascot`, regiões Win32, comandos de janela.
-- `src-tauri/src/providers.rs` — credenciais (keyring), chamadas HTTP (reqwest), allowlist de hosts.
+- `src-tauri/src/lib.rs` — inicialização Tauri, janelas, plugins, comandos e integração dos módulos.
+- `src-tauri/src/providers/` — credenciais (keyring), adaptadores HTTP (reqwest), catálogo e allowlist de hosts.
 - `src-tauri/src/agent_home.rs` — pasta pessoal, identidade aprovada e memória manual.
 - `src-tauri/src/policy.rs` — matriz pura de modo, risco, origem e workspace.
-- `src-tauri/src/security.rs` — ferramentas simuladas, aprovações, auditoria e kill switch.
+- `src-tauri/src/security/` — registro e execução de habilidades, aprovações, auditoria e kill switch.
+- `src-tauri/src/agent_runtime.rs` — loop do agente e coordenação de chamadas de habilidades.
 - `src/core/` — lógica sem UI: `providers`, `settings`, `island` (FSM), `sounds` e `pets`.
 - `src/ui/` — React: `App.tsx` (Hub + chat), `PetSprite.tsx` e `IslandWindow.tsx`.
 - `scripts/render-pets.mjs` — ferramenta local de desenvolvimento que usa Three.js para renderizar assets Kenney; não faz parte do aplicativo.
@@ -53,8 +55,9 @@ Consulte `docs/IMPLEMENTATION-STATUS.md` e `docs/ROADMAP.md` antes de planejar.
   tool). Ação originada por conteúdo externo exige aprovação do usuário em qualquer modo.
 - **Tools** têm schema tipado validado antes de executar, timeout, rate limit e nível de risco
   (`leitura` / `escrita reversível` / `comunicação externa` / `destrutivo-financeiro`).
-- **Bloqueios fixos** que nenhum modo desativa: formatar/apagar fora do workspace, pagamentos,
-  exfiltrar segredos, alterar `ODEKRAI.md` sem aprovação explícita.
+- **Bloqueios fixos** que nenhum modo desativa: pagamentos, exfiltrar segredos e alterar
+  `ODEKRAI.md` sem aprovação explícita. Operações de arquivo só podem atingir o workspace ou
+  pastas explicitamente permitidas; bloqueios adicionais de caminhos protegidos são aplicados no Rust.
 - **Kill switch** global e **log de auditoria** append-only em todo caminho que execute ações.
 - Tauri: capabilities com escopo mínimo **por janela**; CSP restrita; validar quem chama cada comando.
 - Rede: só HTTPS, host allowlist por provedor, sem redirects automáticos.
