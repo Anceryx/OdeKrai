@@ -436,6 +436,8 @@ fn action_card_summary(skill: &Skill, params: &serde_json::Value) -> String {
     summary.chars().take(480).collect()
 }
 
+// Tauri derives these parameters from the frontend command payload.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn agent_run(
     app: tauri::AppHandle,
@@ -449,16 +451,16 @@ pub async fn agent_run(
 ) -> Result<String, String> {
     crate::require_main(&caller)?;
     let error_emitted = Arc::new(AtomicBool::new(false));
-    let result = agent_run_inner(
-        app.clone(),
-        &state,
+    let result = agent_run_inner(AgentRunContext {
+        app: app.clone(),
+        state: &state,
         conversation_id,
         message,
         image_base64,
         daily_token_limit,
-        on_event.clone(),
-        error_emitted.clone(),
-    )
+        on_event: on_event.clone(),
+        error_emitted: error_emitted.clone(),
+    })
     .await;
     match result {
         Ok(answer) => Ok(answer),
@@ -478,16 +480,28 @@ pub async fn agent_run(
     }
 }
 
-async fn agent_run_inner(
+struct AgentRunContext<'a> {
     app: tauri::AppHandle,
-    state: &SecurityState,
+    state: &'a SecurityState,
     conversation_id: String,
     message: String,
     image_base64: Option<String>,
     daily_token_limit: u64,
     on_event: Channel<AgentEvent>,
     error_emitted: Arc<AtomicBool>,
-) -> Result<String, String> {
+}
+
+async fn agent_run_inner(context: AgentRunContext<'_>) -> Result<String, String> {
+    let AgentRunContext {
+        app,
+        state,
+        conversation_id,
+        message,
+        image_base64,
+        daily_token_limit,
+        on_event,
+        error_emitted,
+    } = context;
     if message.trim().is_empty() || message.len() > 1_000_000 {
         return Err("Informe uma mensagem válida para o agente.".into());
     }

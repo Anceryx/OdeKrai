@@ -225,7 +225,7 @@ fn capture_virtual_screen() -> Result<Vec<u8>, String> {
         bmp.extend_from_slice(&0u32.to_le_bytes());
         bmp.extend_from_slice(&(pixels.len() as u32).to_le_bytes());
         bmp.extend_from_slice(&[0; 16]);
-        for pixel in pixels.chunks_exact_mut(4) {
+        for pixel in pixels.as_chunks_mut::<4>().0 {
             pixel[3] = 255;
         }
         bmp.extend_from_slice(&pixels);
