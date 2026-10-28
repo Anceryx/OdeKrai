@@ -4,8 +4,29 @@ Este arquivo segue o formato Keep a Changelog. Todas as versões listadas são p
 
 ## [Não lançado]
 
-- Cadastro de webhooks Discord com credenciais no Gerenciador de Credenciais do Windows e envio de mensagens após aprovação.
-- Bloqueio de menções de transmissão, prévia integral da mensagem e limite de frequência por webhook.
+## [v0.15.0] — Ferramentas locais e análise visual — 2026-10-28
+
+### Adicionado
+
+- Agenda local com edição, recorrência e importação/exportação iCalendar; lembretes, planilhas e memória manual como habilidades do agente.
+- Habilidades com limites para operações de arquivos e controles de áudio/mídia do sistema.
+- Integração Discord por webhook cadastrado, com credencial no Gerenciador de Credenciais do Windows, prévia e aprovação antes do envio e revogação confirmada.
+- Delegação de tarefas para Codex CLI ou Claude Code em `git worktree` temporário, sob aprovação.
+- Inventário de hardware e arquivos GGUF do catálogo, com download confirmado, retomada e verificação SHA-256.
+- Captura de tela local com prévia, salvamento separado e análise enviada a modelos permitidos somente após confirmação.
+- Enquadramento JSON-RPC limitado como base técnica para MCP; transporte e integração de servidores não estão disponíveis.
+
+### Alterado
+
+- Catálogo de provedores, apresentação de conexão e mensagens de erro do agente revisados.
+- Telas de Habilidades, Agenda, Computador e configurações ampliadas para os recursos acima.
+
+### Segurança e limitações
+
+- Decisões de ferramentas e permissões continuam no Rust; conteúdo externo permanece não confiável e ações de risco seguem o motor de aprovação.
+- Captura e análise visual estão implementadas somente para Windows. Verificação visual no executável, múltiplos monitores, DPI, Credential Manager, contas reais de provedores/Discord e execução real das CLIs não foram validados neste marco.
+- A IA local não inclui executor GGUF; o usuário precisa configurar um serviço compatível separado. As integrações Google são pesquisa, não conectores implementados.
+- O workflow Windows é manual e produz artefato diagnóstico de curta retenção; ele não publica nem anexa binários a uma release.
 
 ## [v0.1.0] — Fundação
 
@@ -133,3 +154,4 @@ Este arquivo segue o formato Keep a Changelog. Todas as versões listadas são p
 [v0.12.0]: https://github.com/Anceryx/OdeKrai/compare/v0.11.0...v0.12.0
 [v0.13.0]: https://github.com/Anceryx/OdeKrai/compare/v0.12.0...v0.13.0
 [v0.14.0]: https://github.com/Anceryx/OdeKrai/compare/v0.13.0...v0.14.0
+[v0.15.0]: https://github.com/Anceryx/OdeKrai/compare/v0.14.0...v0.15.0
