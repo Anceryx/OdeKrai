@@ -28,9 +28,13 @@ describe('configuração da integração Discord', () => {
     expect(command).not.toHaveBeenCalled();
   });
 
-  it('revoga o cadastro local usando somente seu identificador', async () => {
+  it('solicita revogação pelo identificador local sem exibir ou reenviar a URL', async () => {
     const command = vi.fn(async (_command: string, _args?: Record<string, unknown>) => undefined);
-    await revokeDiscordIntegration('discord-123', command);
+    await expect(revokeDiscordIntegration('discord-123', false, command)).rejects.toThrow(
+      'Confirme a revogação',
+    );
+    expect(command).not.toHaveBeenCalled();
+    await revokeDiscordIntegration('discord-123', true, command);
     expect(command).toHaveBeenCalledWith('discord_remove', { webhookId: 'discord-123' });
   });
 });

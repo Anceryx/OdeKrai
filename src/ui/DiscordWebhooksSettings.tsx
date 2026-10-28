@@ -69,9 +69,14 @@ export function DiscordWebhooksSettings({ onChanged }: { onChanged?: () => Promi
   }
 
   async function remove(webhook: DiscordWebhook) {
+    const confirmed = window.confirm(
+      `Revogar o webhook “${webhook.name}” no Discord? O endpoint será apagado e não poderá ser reutilizado.`,
+    );
+    if (!confirmed) return;
     setBusy(true);
     try {
-      await revokeDiscordIntegration(webhook.id, invoke);
+      await revokeDiscordIntegration(webhook.id, confirmed, invoke);
+      setNotice('Webhook revogado no Discord e credencial local removida.');
       await refresh();
       await onChanged?.();
     } catch (cause) {
@@ -89,9 +94,8 @@ export function DiscordWebhooksSettings({ onChanged }: { onChanged?: () => Promi
       <h3 id="discord-integration-heading">Discord · webhook de saída</h3>
       <p className="settings-description">
         Permite enviar mensagens ao canal associado ao webhook, sempre após aprovação da ação. Não
-        há escopos OAuth nem acesso de leitura ao Discord. Ao remover esta integração, apagamos a
-        credencial deste app; para revogá-la no Discord, exclua o webhook nas configurações do
-        servidor.
+        há escopos OAuth nem acesso de leitura ao Discord. Revogar apaga o webhook no Discord e
+        remove a credencial deste aplicativo. A ação pede confirmação e não pode ser desfeita.
       </p>
       {error && (
         <div className="error-banner" role="alert">
@@ -164,7 +168,7 @@ export function DiscordWebhooksSettings({ onChanged }: { onChanged?: () => Promi
               variant="ghost"
               disabled={busy}
               onClick={() => void remove(webhook)}
-              aria-label={`Remover webhook ${webhook.name}`}
+              aria-label={`Revogar webhook ${webhook.name} no Discord e remover do aplicativo`}
             >
               <Icon name="delete" />
             </Button>

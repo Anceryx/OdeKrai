@@ -1,6 +1,7 @@
 use keyring::Entry;
 use serde::Serialize;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tauri::Emitter;
 
 const SERVICE: &str = "site.anceryx.odekrai.discord-webhook";
 const MIN_SEND_INTERVAL: u64 = 5;
@@ -107,6 +108,17 @@ fn connection_status(status: reqwest::StatusCode) -> Result<(), String> {
     }
 }
 
+fn revocation_status(status: reqwest::StatusCode) -> Result<(), String> {
+    match status.as_u16() {
+        200..=299 | 404 => Ok(()),
+        401 | 403 => Err("Discord recusou a revogação; a credencial local foi mantida.".into()),
+        429 => Err("Discord limitou a frequência (429); a credencial local foi mantida.".into()),
+        code => Err(format!(
+            "Discord respondeu com HTTP {code}; a credencial local foi mantida."
+        )),
+    }
+}
+
 #[tauri::command]
 pub async fn discord_test_connection(
     caller: tauri::WebviewWindow,
@@ -153,7 +165,7 @@ pub fn discord_save(
 }
 
 #[tauri::command]
-pub fn discord_remove(
+pub async fn discord_remove(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
     webhook_id: String,
@@ -174,9 +186,26 @@ pub fn discord_remove(
     if !exists {
         return Err("Webhook não cadastrado.".into());
     }
-    credential(&id)?.delete_credential().map_err(|_| {
-        "Não foi possível remover a credencial do Gerenciador de Credenciais.".to_string()
+    drop(db);
+    let raw = credential(&id)?
+        .get_password()
+        .map_err(|_| "A credencial do webhook não está disponível para revogação.".to_string())?;
+    validate_webhook_url(&raw)?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|_| "Não foi possível preparar a revogação segura.".to_string())?;
+    let response = client.delete(&raw).send().await.map_err(|_| {
+        "Falha de conexão com o Discord; a credencial local foi mantida para nova tentativa."
+            .to_string()
     })?;
+    revocation_status(response.status())?;
+    credential(&id)?.delete_credential().map_err(|_| {
+        "O webhook foi revogado no Discord, mas a credencial local não pôde ser removida."
+            .to_string()
+    })?;
+    let db = crate::security::database(&app)?;
     db.execute("DELETE FROM discord_webhooks WHERE id=?1", [&id])
         .map_err(|_| "Não foi possível remover o webhook.".to_string())?;
     if !discord_is_configured(&app)? {
@@ -186,6 +215,7 @@ pub fn discord_remove(
         )
         .map_err(|_| "Não foi possível desativar a habilidade do Discord.".to_string())?;
     }
+    let _ = app.emit("skills-updated", ());
     Ok(())
 }
 
@@ -299,6 +329,15 @@ mod tests {
         assert!(connection_status(reqwest::StatusCode::TOO_MANY_REQUESTS)
             .unwrap_err()
             .contains("429"));
+    }
+
+    #[test]
+    fn revocation_status_is_idempotent_and_preserves_credentials_on_failure() {
+        assert!(revocation_status(reqwest::StatusCode::NO_CONTENT).is_ok());
+        assert!(revocation_status(reqwest::StatusCode::NOT_FOUND).is_ok());
+        assert!(revocation_status(reqwest::StatusCode::UNAUTHORIZED)
+            .unwrap_err()
+            .contains("foi mantida"));
     }
 
     #[test]

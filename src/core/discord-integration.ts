@@ -23,7 +23,9 @@ export async function saveDiscordIntegration(
 
 export async function revokeDiscordIntegration(
   webhookId: string,
+  confirmed: boolean,
   command: SkillCommand,
 ): Promise<void> {
+  if (!confirmed) throw new Error('Confirme a revogação antes de continuar.');
   await command('discord_remove', { webhookId });
 }
