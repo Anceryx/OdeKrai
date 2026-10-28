@@ -561,9 +561,19 @@ impl Tool for Productivity {
                 Risk::DestrutivoFinanceiro
             }
             SimulatedAction::Productivity { skill_id, .. }
+                if skill_id == "calendar.delete_event" =>
+            {
+                Risk::DestrutivoFinanceiro
+            }
+            SimulatedAction::Productivity { skill_id, .. }
                 if skill_id == "calendar.create_event" =>
             {
                 Risk::ComunicacaoExterna
+            }
+            SimulatedAction::Productivity { skill_id, .. }
+                if skill_id == "calendar.list_events" =>
+            {
+                Risk::Leitura
             }
             SimulatedAction::Productivity { skill_id, .. } if skill_id == "web.fetch" => {
                 Risk::ComunicacaoExterna
@@ -602,6 +612,9 @@ impl Tool for Productivity {
                 params["url"].as_str().ok_or("Informe uma URL HTTPS.")?,
             );
         }
+        if skill_id.starts_with("calendar.") {
+            return crate::productivity::preview(skill_id, params, root);
+        }
         if skill_id.starts_with("files.") {
             return file_skill_preview(skill_id, params, root);
         }
@@ -613,6 +626,9 @@ impl Tool for Productivity {
         };
         if skill_id == "web.fetch" {
             return Err("web.fetch precisa ser executado pelo cliente HTTPS do Rust.".into());
+        }
+        if skill_id.starts_with("calendar.") {
+            return crate::productivity::execute(skill_id, params, root, None);
         }
         if skill_id.starts_with("files.") {
             return execute_file_skill(skill_id, params, root);
@@ -634,6 +650,14 @@ impl Tool for Productivity {
             let url = params["url"].as_str().unwrap_or("").to_string();
             let app = app.clone();
             return Box::pin(async move { crate::web_fetch::fetch(&app, &url).await });
+        }
+        if skill_id.starts_with("calendar.") {
+            let skill_id = skill_id.clone();
+            let params = params.clone();
+            let app = app.clone();
+            return Box::pin(async move {
+                crate::productivity::execute(&skill_id, &params, Path::new(""), Some(&app))
+            });
         }
         if skill_id == "discord.send" {
             let app = app.clone();

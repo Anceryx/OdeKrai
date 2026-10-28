@@ -11,6 +11,94 @@ use tauri_plugin_opener::OpenerExt;
 const MAX_TEXT_BYTES: usize = 1_000_000;
 
 pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
+    if skill_id.starts_with("calendar.") {
+        let object = params.as_object().ok_or("Parâmetros inválidos.")?;
+        if skill_id == "calendar.create_event"
+            && object.get("end").and_then(Value::as_str).is_none()
+        {
+            return Err("A duração não foi informada; pergunte o horário de término antes de criar o evento.".into());
+        }
+        let (expected, required): (&[&str], &[&str]) = match skill_id {
+            "calendar.create_event" => (
+                &[
+                    "title",
+                    "start",
+                    "end",
+                    "location",
+                    "description",
+                    "alert_minutes",
+                    "recurrence",
+                ],
+                &[
+                    "title",
+                    "start",
+                    "end",
+                    "location",
+                    "description",
+                    "recurrence",
+                ],
+            ),
+            "calendar.list_events" => (&["from", "to"], &["from", "to"]),
+            "calendar.update_event" => (&["event"], &["event"]),
+            "calendar.delete_event" => (&["id"], &["id"]),
+            _ => return Err("Habilidade de agenda desconhecida.".into()),
+        };
+        if object.len() != expected.len()
+            || object.keys().any(|key| !expected.contains(&key.as_str()))
+            || required.iter().any(|key| !object.contains_key(*key))
+        {
+            return Err("Os parâmetros da agenda são inválidos.".into());
+        }
+        match skill_id {
+            "calendar.create_event" => {
+                let title = string_field(object, "title", 200)?;
+                if title.trim().is_empty() {
+                    return Err("Informe o título do evento.".into());
+                }
+                let start = parse_datetime(string_field(object, "start", 64)?)?;
+                let end = parse_datetime(string_field(object, "end", 64)?)?;
+                if end <= start {
+                    return Err("O fim do evento precisa ocorrer depois do início.".into());
+                }
+                if string_field(object, "location", 500)?.contains('\0')
+                    || string_field(object, "description", 4000)?.contains('\0')
+                {
+                    return Err("Os dados do evento são inválidos.".into());
+                }
+                if !matches!(
+                    object["recurrence"].as_str(),
+                    Some("none" | "daily" | "weekly" | "monthly")
+                ) {
+                    return Err("Recorrência inválida.".into());
+                }
+                if object
+                    .get("alert_minutes")
+                    .is_some_and(|v| !v.is_null() && v.as_u64().is_none_or(|n| n > 10080))
+                {
+                    return Err("Alerta inválido.".into());
+                }
+            }
+            "calendar.list_events" => {
+                let from = parse_datetime(string_field(object, "from", 64)?)?;
+                let to = parse_datetime(string_field(object, "to", 64)?)?;
+                if to <= from {
+                    return Err("Intervalo inválido.".into());
+                }
+            }
+            "calendar.update_event" => {
+                serde_json::from_value::<crate::calendar::CalendarEvent>(object["event"].clone())
+                    .map_err(|_| "Evento inválido.".to_string())?;
+            }
+            "calendar.delete_event" => {
+                let id = string_field(object, "id", 80)?;
+                if id.is_empty() {
+                    return Err("Identificador inválido.".into());
+                }
+            }
+            _ => unreachable!(),
+        }
+        return Ok(());
+    }
     if skill_id == "code.delegate" {
         let object = params.as_object().ok_or("Parâmetros inválidos.")?;
         if object.len() != 3
@@ -196,6 +284,23 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
 }
 
 pub(crate) fn preview(skill_id: &str, params: &Value, root: &Path) -> Result<String, String> {
+    if skill_id.starts_with("calendar.") {
+        validate(skill_id, params)?;
+        return Ok(match skill_id {
+            "calendar.create_event" => format!(
+                "Salvar na Agenda local: {} — {}",
+                params["title"], params["start"]
+            ),
+            "calendar.update_event" => {
+                format!("Atualizar evento {} na Agenda local", params["event"]["id"])
+            }
+            "calendar.delete_event" => format!("Apagar evento {} da Agenda local", params["id"]),
+            _ => format!(
+                "Consultar Agenda local entre {} e {}",
+                params["from"], params["to"]
+            ),
+        });
+    }
     if skill_id.starts_with("system.")
         || skill_id.starts_with("audio.")
         || skill_id.starts_with("media.")
@@ -263,6 +368,14 @@ pub(crate) fn execute(
     root: &Path,
     app: Option<&tauri::AppHandle>,
 ) -> Result<String, String> {
+    if skill_id.starts_with("calendar.") {
+        validate(skill_id, params)?;
+        return crate::calendar::execute_skill(
+            app.ok_or("A Agenda só pode ser usada no aplicativo.")?,
+            skill_id,
+            params,
+        );
+    }
     validate(skill_id, params)?;
     if skill_id == "discord.send" {
         return Err("O envio ao Discord requer a execução assíncrona aprovada.".into());
@@ -693,7 +806,7 @@ mod tests {
 
     #[test]
     fn creates_rfc5545_utc_ics_with_crlf_escaping_and_folding() {
-        let params = json!({"path":"evento.ics","title":"Reunião, equipe; \"A\"","start":"2030-06-10T14:30:00-03:00","end":"2030-06-10T15:30:00-03:00","location":"São Paulo","description":"linha 1\nlinha 2 ".repeat(8),"alert_minutes":15});
+        let params = json!({"title":"Reunião, equipe; \"A\"","start":"2030-06-10T14:30:00-03:00","end":"2030-06-10T15:30:00-03:00","location":"São Paulo","description":"linha 1\nlinha 2 ".repeat(8),"alert_minutes":15,"recurrence":"none"});
         let ics = create_ics(&params).unwrap();
         assert!(ics.starts_with("BEGIN:VCALENDAR\r\n"));
         assert!(ics.contains("DTSTART:20300610T173000Z\r\n"));
@@ -710,11 +823,13 @@ mod tests {
 
     #[test]
     fn rejects_events_without_timezone_or_with_non_increasing_end() {
-        let mut p = json!({"path":"event.ics","title":"x","start":"2030-01-01T10:00:00-03:00","end":"2030-01-01T09:00:00-03:00","location":"","description":"","alert_minutes":null});
+        let mut p = json!({"title":"x","start":"2030-01-01T10:00:00-03:00","end":"2030-01-01T09:00:00-03:00","location":"","description":"","alert_minutes":null,"recurrence":"none"});
         assert!(validate("calendar.create_event", &p).is_err());
         p["start"] = json!("2030-01-01T10:00:00");
         p["end"] = Value::Null;
-        assert!(validate("calendar.create_event", &p).is_err());
+        assert!(validate("calendar.create_event", &p)
+            .unwrap_err()
+            .contains("pergunte o horário de término"));
     }
 
     #[test]

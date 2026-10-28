@@ -532,7 +532,8 @@ async fn agent_run_inner(
             role: "system".into(),
             blocks: vec![Block::Text {
                 text: format!(
-                    "{prompt}\n\nHabilidades ativas para esta execução:\n{skill_context}"
+                    "{prompt}\n\nData e hora locais no momento da execução: {}. Use este relógio e o fuso do sistema para interpretar datas relativas. Nunca presuma duração de eventos: pergunte ao usuário se o fim não foi informado.\n\nHabilidades ativas para esta execução:\n{skill_context}",
+                    crate::calendar::current_local_time()
                 ),
             }],
         },

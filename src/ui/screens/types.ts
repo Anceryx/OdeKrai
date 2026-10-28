@@ -10,6 +10,7 @@ export type Section =
   | 'activity'
   | 'agent'
   | 'computer'
-  | 'skills';
+  | 'skills'
+  | 'calendar';
 
 export type Conversation = ConversationSummary;

@@ -5,6 +5,7 @@ export const navigationItems: { id: Section; label: string; icon: IconName; grou
   { id: 'overview', label: 'Visão geral', icon: 'home', group: 'ESPAÇO DE TRABALHO' },
   { id: 'chat', label: 'Conversas', icon: 'chat', group: 'ESPAÇO DE TRABALHO' },
   { id: 'agent', label: 'Identidade e memória', icon: 'memory', group: 'ESPAÇO DE TRABALHO' },
+  { id: 'calendar', label: 'Agenda', icon: 'calendar', group: 'ESPAÇO DE TRABALHO' },
   { id: 'providers', label: 'Conectores de IA', icon: 'connectors', group: 'INTELIGÊNCIA' },
   { id: 'computer', label: 'Seu computador', icon: 'desktop', group: 'INTELIGÊNCIA' },
   { id: 'skills', label: 'Habilidades', icon: 'wrench', group: 'INTELIGÊNCIA' },

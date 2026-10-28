@@ -13,6 +13,7 @@ O OdeKrai conversa com o provedor de IA que você configurar e pode executar hab
 - **Escolha a sua IA:** provedores de nuvem, opções com plano gratuito sinalizado e conexão com servidor local compatível.
 - **Um mascote com nome:** 12 personagens com animações e modos Ilha e Livre.
 - **Habilidades locais:** o agente pode executar ações registradas no aplicativo, sujeitas às permissões do Rust.
+- **Agenda local:** organize eventos por dia e mês, configure recorrências e importe ou exporte arquivos `.ics`.
 - **Você no controle:** modos de permissão, aprovações, registro de atividade e kill switch.
 - **Configurações locais:** credenciais de provedores são armazenadas pelo Rust no Gerenciador de Credenciais do Windows.
 
@@ -28,7 +29,7 @@ As conversas são mantidas no histórico SQLite local. Para responder, o conteú
 
 ### Agente e habilidades
 
-Ative o modo agente em uma conversa para permitir que o modelo solicite habilidades registradas no Rust. As habilidades disponíveis incluem operações de leitura e organização de arquivos em pastas permitidas; criação de arquivos de calendário `.ics`, Markdown, texto e CSV; abertura de links, arquivos e configurações do Windows; notificações, área de transferência, informações do sistema, volume e controles de mídia; rascunhos de e-mail; envio aprovado por webhook do Discord; leitura de páginas web; e delegação de código ao Codex CLI ou Claude Code.
+Ative o modo agente em uma conversa para permitir que o modelo solicite habilidades registradas no Rust. As habilidades disponíveis incluem operações de leitura e organização de arquivos em pastas permitidas; criação, consulta, edição e remoção aprovada de eventos na Agenda local ou criação em um arquivo `.ics` escolhido; criação de arquivos Markdown, texto e CSV; abertura de links, arquivos e configurações do Windows; notificações, área de transferência, informações do sistema, volume e controles de mídia; rascunhos de e-mail; envio aprovado por webhook do Discord; leitura de páginas web; e delegação de código ao Codex CLI ou Claude Code.
 
 As habilidades começam desativadas e podem ser habilitadas na tela Habilidades. Os resultados de conteúdo externo são tratados como não confiáveis, e ações com efeitos colaterais podem exigir aprovação conforme a política aplicada pelo Rust.
 

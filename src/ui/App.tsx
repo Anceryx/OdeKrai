@@ -49,6 +49,11 @@ const ComputerScreen = lazy(() =>
     default: withScreenBoundary(module.ComputerScreen),
   })),
 );
+const CalendarScreen = lazy(() =>
+  import('./screens/Calendar').then((module) => ({
+    default: withScreenBoundary(module.CalendarScreen),
+  })),
+);
 const IdentityScreen = lazy(() =>
   import('./screens/Identity').then((module) => ({
     default: withScreenBoundary(module.IdentityScreen),
@@ -1100,6 +1105,7 @@ function MainApp() {
                 />
               )}
               {section === 'computer' && <ComputerScreen />}
+              {section === 'calendar' && <CalendarScreen />}
               {section === 'skills' && <SkillsScreen />}
               {section === 'companion' && (
                 <AssistantScreen

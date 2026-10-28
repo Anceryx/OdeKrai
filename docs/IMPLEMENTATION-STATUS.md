@@ -2,21 +2,24 @@
 
 Atualizado em 24/10/2026 após a verificação de fechamento da Fase 3. Requisitos e limites estão detalhados em [`TRACEABILITY.md`](TRACEABILITY.md).
 
+## Agenda local
+
+- A navegação principal abre a tela “Agenda”, com grade mensal, lista dos eventos do mês, edição e exclusão com confirmação. O formulário aceita início/fim, local, descrição, alerta e recorrência diária, semanal ou mensal.
+- O armazenamento base usa `calendar_events` em `calendar.sqlite3`. As habilidades Rust `calendar.create_event`, `calendar.list_events`, `calendar.update_event` e `calendar.delete_event` percorrem o dispatcher; a exclusão exige aprovação em qualquer modo. Criação repetida com os mesmos título, início, fim e recorrência usa ID estável e atualiza em vez de duplicar.
+- Importação/exportação `.ics` é local. Importações aceitam eventos VEVENT delimitados, limitadas a 1 MB e 1.000 eventos, e gravam em transação; exportação cria um arquivo novo e não sobrescreve. TZID nomeado e eventos de dia inteiro não são suportados; horários flutuantes são interpretados no fuso do sistema.
+- “Calendário padrão” controla o destino de eventos criados pelo agente: SQLite local ou um arquivo `.ics` escolhido pelo usuário e aberto no calendário do sistema. Abrir um arquivo não comprova que outro aplicativo importou o evento. As operações CRUD da tela continuam na Agenda local.
+- Não há integração Google Calendar nem agendador A6 conectado; alertas são registrados como pendentes. A data/hora local atual e o fuso entram no prompt de cada execução do agente. A interpretação de linguagem natural de “amanhã” depende do modelo e não substitui a confirmação da duração ausente.
+- Testes automatizados cobrem gravação repetida com SQLite temporário, recusa de evento sem fim, importação/parsing iCalendar, relógio injetado e a exigência de aprovação para exclusão. A validação visual e do calendário padrão do Windows permanece pendente.
+
 ## Fase 4
 
-**Pendente.** O modelo ainda não pode solicitar tools. O chat existente é textual e usa um único
-provedor por vez. Não há `LlmProvider`, schemas de tools, roteador, fallback, orçamento de tokens,
-loop de agente, ferramentas de workspace expostas ao modelo, persistência de tool calls, modo agente
-na conversa, painel de uso ou eventos de execução. A matriz de evidências e os testes realmente
-existentes estão em [`TRACEABILITY.md`](TRACEABILITY.md). Anthropic e OpenAI têm documentação
-oficial de tool use/function calling consultada; isso não equivale a integração local. Todos os
-demais provedores permanecem `unverified` para tools.
+**Implementado com limites.** `agent_runtime::agent_run` prepara a execução e `agent::run_agent` coordena chamadas de modelo e ferramentas, respeitando limites, cancelamento e respostas de aprovação. `security::skills::model_tools` oferece somente habilidades ativadas; o dispatcher aplica schemas, política e executor Rust. Os adaptadores e modelos não têm suporte uniforme a tools, e não há roteador geral entre provedores. Os testes em `agent.rs`, `agent_runtime.rs` e `security/` cobrem a continuidade e os bloqueios. A matriz de evidências está em [`TRACEABILITY.md`](TRACEABILITY.md).
 
 ## Implementado
 
 - `code.delegate`: permite executar Codex CLI ou Claude Code já instalado pelo usuário em um `git worktree` descartável, sob aprovação obrigatória. O caminho do executável fica nas configurações locais; o projeto precisa estar em pasta permitida com leitura e escrita. Saída e diff são dados não confiáveis, o diff aparece no cartão e nunca é aplicado ao projeto original por esta habilidade. Limite de tempo, cancelamento, limite de saída e Job Object encerram o processo. O uso real das duas CLIs e a validação visual nativa continuam pendentes.
 
-- Base de habilidades em Rust para as ferramentas já existentes: schemas fechados, risco calculado no backend, prévias, confiança do resultado e limites da ferramenta. A ativação começa desligada. A tela “Habilidades” configura capacidades e exceções de modo; “Pastas permitidas” salva níveis de acesso em SQLite, mantém o workspace sempre em leitura e escrita e valida caminhos locais contra redirecionamentos e áreas protegidas. O loop do modelo ainda não consome esse registro.
+- Base de habilidades em Rust: schemas fechados, risco calculado no backend, prévias, confiança do resultado e limites por ferramenta. As habilidades começam desativadas; o agente recebe somente as que foram ativadas na tela “Habilidades”. “Pastas permitidas” salva níveis de acesso em SQLite e valida caminhos locais contra redirecionamentos e áreas protegidas.
 - O prompt de sistema inclui em Rust a data, a hora, o fuso local do Windows e o idioma atual desta versão (`pt-BR`), além de instruções para não alegar ações sem resultado confirmado e não contornar uma negação.
 
 - UI-3: catálogo 2D Kenney CC0, seleção no Assistente persistida no SQLite, avatar e pet da Visão geral, estados CSS ligados à FSM e overlays Phosphor. Os doze PNGs renderizados medem 512×512; o renderer 3D foi removido do aplicativo. Three.js permanece somente como dependência de desenvolvimento do script de renderização.

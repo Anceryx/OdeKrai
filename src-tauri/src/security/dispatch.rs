@@ -102,7 +102,7 @@ fn is_workspace_skill(skill_id: &str) -> bool {
 }
 
 fn require_batch_approval(action: &SimulatedAction, decision: Decision) -> Decision {
-    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "files.apply_plan" | "app.launch" | "clipboard.read" | "clipboard.write" | "discord.send" | "code.delegate"))
+    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "files.apply_plan" | "app.launch" | "clipboard.read" | "clipboard.write" | "discord.send" | "code.delegate" | "calendar.delete_event"))
         && matches!(decision, Decision::Allow(_))
     {
         Decision::AskUser("batch_requires_approval")
@@ -255,6 +255,9 @@ pub(super) fn preview_for(
     action: &SimulatedAction,
 ) -> Result<String, String> {
     if let SimulatedAction::Productivity { skill_id, params } = action {
+        if skill_id.starts_with("calendar.") {
+            return crate::calendar::preview_skill(app, skill_id, params);
+        }
         if skill_id == "app.launch" {
             return crate::system_actions::preview_allowed_app(app, params);
         }
@@ -1105,6 +1108,22 @@ mod batch_approval_tests {
         };
         assert_eq!(
             require_batch_approval(&action, Decision::Allow("mode_total_workspace")),
+            Decision::AskUser("batch_requires_approval")
+        );
+        assert_eq!(
+            require_batch_approval(&action, Decision::AskUser("mode_always_ask")),
+            Decision::AskUser("mode_always_ask")
+        );
+    }
+
+    #[test]
+    fn calendar_delete_always_requires_explicit_approval() {
+        let action = SimulatedAction::Productivity {
+            skill_id: "calendar.delete_event".into(),
+            params: serde_json::json!({"id":"evt-1"}),
+        };
+        assert_eq!(
+            require_batch_approval(&action, Decision::Allow("mode_total")),
             Decision::AskUser("batch_requires_approval")
         );
         assert_eq!(
