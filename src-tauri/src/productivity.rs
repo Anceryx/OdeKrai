@@ -11,6 +11,45 @@ use tauri_plugin_opener::OpenerExt;
 const MAX_TEXT_BYTES: usize = 1_000_000;
 
 pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
+    if skill_id.starts_with("reminder.") {
+        return crate::reminders::validate_params(skill_id, params);
+    }
+    if skill_id.starts_with("memory.") {
+        return crate::memory_skills::validate_params(skill_id, params);
+    }
+    if skill_id == "sheet.create_xlsx" {
+        return crate::spreadsheets::validate_create(params);
+    }
+    if skill_id == "sheet.read" {
+        let object = params
+            .as_object()
+            .ok_or("Parâmetros da planilha inválidos.")?;
+        if object.len() != 2
+            || object
+                .keys()
+                .any(|key| !["path", "max_rows"].contains(&key.as_str()))
+        {
+            return Err("Os parâmetros de leitura não correspondem ao esquema permitido.".into());
+        }
+        let path = string_field(object, "path", 4096)?;
+        if !Path::new(path).extension().is_some_and(|extension| {
+            extension.eq_ignore_ascii_case("csv") || extension.eq_ignore_ascii_case("xlsx")
+        }) {
+            return Err("A leitura aceita somente arquivos .csv ou .xlsx.".into());
+        }
+        if Path::new(path).is_absolute() {
+            crate::security::skills::validate_raw_folder_path(path)?;
+        } else {
+            crate::security::workspace::relative_path(path)?;
+        }
+        if object["max_rows"]
+            .as_u64()
+            .is_none_or(|limit| !(1..=1000).contains(&limit))
+        {
+            return Err("O limite deve ficar entre 1 e 1.000 linhas.".into());
+        }
+        return Ok(());
+    }
     if skill_id.starts_with("calendar.") {
         let object = params.as_object().ok_or("Parâmetros inválidos.")?;
         if skill_id == "calendar.create_event"
@@ -284,6 +323,20 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
 }
 
 pub(crate) fn preview(skill_id: &str, params: &Value, root: &Path) -> Result<String, String> {
+    if skill_id.starts_with("reminder.") {
+        crate::reminders::validate_params(skill_id, params)?;
+        return Ok(match skill_id {
+            "reminder.create" => format!(
+                "Criar lembrete: {} para {}.",
+                params["title"], params["when"]
+            ),
+            "reminder.cancel" => format!("Cancelar lembrete {}.", params["id"]),
+            _ => "Listar lembretes pendentes.".into(),
+        });
+    }
+    if skill_id.starts_with("memory.") {
+        return crate::memory_skills::preview(skill_id, params);
+    }
     if skill_id.starts_with("calendar.") {
         validate(skill_id, params)?;
         return Ok(match skill_id {
@@ -323,6 +376,24 @@ pub(crate) fn preview(skill_id: &str, params: &Value, root: &Path) -> Result<Str
     validate(skill_id, params)?;
     if skill_id == "discord.send" {
         return Err("A prévia do Discord exige acesso seguro ao cadastro do webhook.".into());
+    }
+    if skill_id == "sheet.create_xlsx" {
+        let target =
+            crate::security::workspace::preview_target(root, params["path"].as_str().unwrap())?;
+        return Ok(format!(
+            "Criar XLSX em {} com {} aba(s).",
+            target.display(),
+            params["sheets"].as_array().unwrap().len()
+        ));
+    }
+    if skill_id == "sheet.read" {
+        let target =
+            crate::security::workspace::safe_target(root, params["path"].as_str().unwrap())?;
+        return Ok(format!(
+            "Ler até {} linhas da planilha {}.",
+            params["max_rows"],
+            target.display()
+        ));
     }
     let path = resolve(root, params, false)?;
     if skill_id == "calendar.create_event" {
@@ -368,6 +439,22 @@ pub(crate) fn execute(
     root: &Path,
     app: Option<&tauri::AppHandle>,
 ) -> Result<String, String> {
+    if skill_id.starts_with("reminder.") {
+        validate(skill_id, params)?;
+        return crate::reminders::execute_skill(
+            app.ok_or("Lembretes só podem ser usados no aplicativo.")?,
+            skill_id,
+            params,
+        );
+    }
+    if skill_id.starts_with("memory.") {
+        validate(skill_id, params)?;
+        return crate::memory_skills::execute(
+            app.ok_or("Memória só pode ser usada no aplicativo.")?,
+            skill_id,
+            params,
+        );
+    }
     if skill_id.starts_with("calendar.") {
         validate(skill_id, params)?;
         return crate::calendar::execute_skill(
@@ -379,6 +466,12 @@ pub(crate) fn execute(
     validate(skill_id, params)?;
     if skill_id == "discord.send" {
         return Err("O envio ao Discord requer a execução assíncrona aprovada.".into());
+    }
+    if skill_id == "sheet.create_xlsx" {
+        return crate::spreadsheets::create_xlsx(root, params);
+    }
+    if skill_id == "sheet.read" {
+        return crate::spreadsheets::read(root, params);
     }
     if skill_id.starts_with("system.")
         || skill_id.starts_with("audio.")
@@ -855,6 +948,13 @@ mod tests {
     fn productivity_tools_reject_unrecognized_fields_in_rust() {
         let p = json!({"path":"x.txt","content":"ok","risk":"destructive"});
         assert!(validate("doc.create_text", &p).is_err());
+    }
+
+    #[test]
+    fn sheet_read_accepts_absolute_path_shape_for_allowed_folder_resolution() {
+        let path = std::env::temp_dir().join("read.xlsx");
+        let params = json!({"path":path.to_string_lossy(),"max_rows":10});
+        assert!(validate("sheet.read", &params).is_ok());
     }
 
     #[test]

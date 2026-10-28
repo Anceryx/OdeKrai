@@ -575,6 +575,14 @@ impl Tool for Productivity {
             {
                 Risk::Leitura
             }
+            SimulatedAction::Productivity { skill_id, .. }
+                if matches!(
+                    skill_id.as_str(),
+                    "reminder.list" | "sheet.read" | "memory.list" | "memory.search"
+                ) =>
+            {
+                Risk::Leitura
+            }
             SimulatedAction::Productivity { skill_id, .. } if skill_id == "web.fetch" => {
                 Risk::ComunicacaoExterna
             }
@@ -651,7 +659,10 @@ impl Tool for Productivity {
             let app = app.clone();
             return Box::pin(async move { crate::web_fetch::fetch(&app, &url).await });
         }
-        if skill_id.starts_with("calendar.") {
+        if skill_id.starts_with("calendar.")
+            || skill_id.starts_with("reminder.")
+            || skill_id.starts_with("memory.")
+        {
             let skill_id = skill_id.clone();
             let params = params.clone();
             let app = app.clone();
@@ -1224,7 +1235,7 @@ pub(super) fn protected_path_block(raw: &str) -> Option<&'static str> {
     None
 }
 
-pub(super) fn contains_secret_marker(text: &str) -> bool {
+pub(crate) fn contains_secret_marker(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
     [
         "-----begin private key-----",
@@ -1356,7 +1367,7 @@ pub(crate) fn has_reparse(path: &Path) -> bool {
     false
 }
 
-pub(super) fn safe_target(root: &Path, raw: &str) -> Result<PathBuf, String> {
+pub(crate) fn safe_target(root: &Path, raw: &str) -> Result<PathBuf, String> {
     let relative = relative_path(raw)?;
     let target = root.join(relative);
     validate_windows_path_limit(&target)?;

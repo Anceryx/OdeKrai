@@ -361,7 +361,7 @@ fn diff_text(approved: &str, current: &str) -> String {
     )
 }
 
-fn memory_name(name: &str) -> Result<(), String> {
+pub(crate) fn memory_name(name: &str) -> Result<(), String> {
     if name.len() > 64
         || !name.ends_with(".md")
         || name.eq_ignore_ascii_case("permissoes.md")
@@ -378,7 +378,7 @@ fn memory_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn memory_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn memory_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let (_, home) = configured_home(app)?.ok_or("Configure a pasta do agente primeiro.")?;
     let dir = home.join("memory");
     if has_reparse(&dir) || !dir.is_dir() {

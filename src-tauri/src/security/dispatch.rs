@@ -54,6 +54,25 @@ pub(super) fn action_metadata(
             .and_then(serde_json::Value::as_str)
             .is_some_and(contains_secret_marker)
             .then_some("fixed_block_secret_exfiltration"),
+        SimulatedAction::Productivity { skill_id, params } if skill_id == "memory.propose_note" => {
+            params
+                .get("text")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(contains_secret_marker)
+                .then_some("fixed_block_secret_storage")
+        }
+        SimulatedAction::Productivity { skill_id, params }
+            if matches!(skill_id.as_str(), "sheet.create_csv" | "sheet.create_xlsx") =>
+        {
+            let content = ["headers", "rows", "sheets"]
+                .iter()
+                .filter_map(|key| params.get(*key))
+                .map(serde_json::Value::to_string)
+                .collect::<Vec<_>>()
+                .join("\n");
+            crate::memory_skills::contains_sensitive_data(&content)
+                .then_some("fixed_block_secret_storage")
+        }
         _ => None,
     };
     let tool_name = match action {
@@ -61,9 +80,15 @@ pub(super) fn action_metadata(
             "files.write" | "files.append" | "files.mkdir" | "files.copy" | "files.move"
             | "files.rename" | "files.delete" | "files.apply_plan" => skill_id,
             "calendar.create_event" => "calendar.create_event",
+            "reminder.create" | "reminder.list" | "reminder.cancel" => skill_id,
             "doc.create_markdown" => "doc.create_markdown",
             "doc.create_text" => "doc.create_text",
             "sheet.create_csv" => "sheet.create_csv",
+            "sheet.create_xlsx"
+            | "sheet.read"
+            | "memory.search"
+            | "memory.list"
+            | "memory.propose_note" => skill_id,
             "mail.draft" => "mail.draft",
             "discord.send" => "discord.send",
             "code.delegate" => "code.delegate",
@@ -94,6 +119,8 @@ fn is_workspace_skill(skill_id: &str) -> bool {
                 | "doc.create_markdown"
                 | "doc.create_text"
                 | "sheet.create_csv"
+                | "sheet.create_xlsx"
+                | "sheet.read"
                 | "mail.draft"
                 | "code.delegate"
                 | "system.open_path"
@@ -102,7 +129,11 @@ fn is_workspace_skill(skill_id: &str) -> bool {
 }
 
 fn require_batch_approval(action: &SimulatedAction, decision: Decision) -> Decision {
-    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "files.apply_plan" | "app.launch" | "clipboard.read" | "clipboard.write" | "discord.send" | "code.delegate" | "calendar.delete_event"))
+    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "memory.propose_note")
+        && matches!(decision, Decision::Allow(_))
+    {
+        Decision::AskUser("memory_proposal_requires_approval")
+    } else if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "files.apply_plan" | "app.launch" | "clipboard.read" | "clipboard.write" | "discord.send" | "code.delegate" | "calendar.delete_event"))
         && matches!(decision, Decision::Allow(_))
     {
         Decision::AskUser("batch_requires_approval")
@@ -164,6 +195,18 @@ mod explicit_approval_tests {
             action_metadata(&action).3,
             Some("fixed_block_secret_exfiltration")
         );
+    }
+
+    #[test]
+    fn memory_note_proposal_always_requires_explicit_approval() {
+        let action = SimulatedAction::Productivity {
+            skill_id: "memory.propose_note".into(),
+            params: json!({"name":"nota.md","text":"Preferência por respostas curtas."}),
+        };
+        assert!(matches!(
+            require_batch_approval(&action, Decision::Allow("mode_total")),
+            Decision::AskUser("memory_proposal_requires_approval")
+        ));
     }
 }
 
@@ -258,6 +301,9 @@ pub(super) fn preview_for(
         if skill_id.starts_with("calendar.") {
             return crate::calendar::preview_skill(app, skill_id, params);
         }
+        if skill_id == "memory.propose_note" {
+            return crate::productivity::preview(skill_id, params, Path::new(""));
+        }
         if skill_id == "app.launch" {
             return crate::system_actions::preview_allowed_app(app, params);
         }
@@ -284,7 +330,7 @@ pub(super) fn preview_for(
             SimulatedAction::WriteFile { .. } | SimulatedAction::DeleteFile { .. } => true,
             SimulatedAction::Productivity { skill_id, .. } => !matches!(
                 skill_id.as_str(),
-                "system.open_path" | "system.reveal_in_folder"
+                "system.open_path" | "system.reveal_in_folder" | "sheet.read"
             ),
             _ => false,
         };
@@ -445,7 +491,7 @@ async fn execute_action_with_timeout(
             SimulatedAction::WriteFile { .. } | SimulatedAction::DeleteFile { .. } => true,
             SimulatedAction::Productivity { skill_id, .. } => !matches!(
                 skill_id.as_str(),
-                "system.open_path" | "system.reveal_in_folder"
+                "system.open_path" | "system.reveal_in_folder" | "sheet.read"
             ),
             _ => false,
         };

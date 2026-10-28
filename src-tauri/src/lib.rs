@@ -95,12 +95,15 @@ mod hardware;
 mod history;
 mod local_models;
 pub mod mcp;
+mod memory_skills;
 mod pet_position;
 mod policy;
 mod productivity;
 mod profile;
 mod providers;
+mod reminders;
 mod security;
+mod spreadsheets;
 mod system_actions;
 mod system_controls;
 mod tray;
@@ -829,7 +832,9 @@ pub fn run() -> Result<(), tauri::Error> {
         .manage(security::SecurityState::new(true))
         .manage(tray::CloseBehaviorState::default())
         .manage(tray::ShutdownState::default())
+        .manage(reminders::ReminderScheduler::default())
         .setup(|app| {
+            reminders::start_scheduler(app.handle());
             load_pet_position(app.handle());
             let startup_state = diagnostics::setup(app.handle()).unwrap_or_else(|error| {
                 log::error!("Não foi possível preparar o estado de inicialização: {error}");

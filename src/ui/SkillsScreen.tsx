@@ -177,8 +177,10 @@ export function SkillsScreen() {
   const productivitySkills = skills.filter(({ id }) =>
     [
       'calendar.',
+      'reminder.',
       'doc.',
       'sheet.',
+      'memory.',
       'discord.',
       'system.',
       'audio.',
