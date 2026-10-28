@@ -1,56 +1,84 @@
-﻿![Banner do OdeKrai](banner.png)
+![Banner do OdeKrai](banner.png)
 
-[PortuguÃªs (Brasil)](README.md) Â· [English](README.en.md)
+[Português (Brasil)](README.md) · [English](README.en.md)
 
-**Um assistente de IA para o seu Windows, com um mascote que fica ao seu lado.**
+**Um assistente de IA para o seu Windows, com um mascote que fica ao seu lado e faz coisas por você.**
 
-O OdeKrai conversa com o provedor de IA que vocÃª configurar e pode executar habilidades no computador dentro das permissÃµes definidas por vocÃª. A interface reÃºne conversas, configuraÃ§Ãµes e um mascote que acompanha o uso do aplicativo.
+O OdeKrai conversa com a IA que você escolher, lembra do seu jeito de falar e, quando você permite, age no seu computador: organiza arquivos, abre sites e programas, cria eventos e documentos, mexe no volume e muito mais. Você decide o quanto ele pode fazer sozinho, e tudo fica registrado.
 
-> Projeto em prÃ©-lanÃ§amento (versÃ£o 0.14.0), para Windows.
+> Projeto em pré-lançamento (versão 0.14.0). Windows 10 e 11.
 
 ## Destaques
 
-- **Escolha a sua IA:** provedores de nuvem, opÃ§Ãµes com plano gratuito sinalizado e conexÃ£o com servidor local compatÃ­vel.
-- **Um mascote com nome:** 12 personagens com animaÃ§Ãµes e modos Ilha e Livre.
-- **Habilidades locais:** o agente pode executar aÃ§Ãµes registradas no aplicativo, sujeitas Ã s permissÃµes do Rust.
-- **Agenda local:** organize eventos por dia e mÃªs, configure recorrÃªncias e importe ou exporte arquivos `.ics`.
-- **VocÃª no controle:** modos de permissÃ£o, aprovaÃ§Ãµes, registro de atividade e kill switch.
-- **ConfiguraÃ§Ãµes locais:** credenciais de provedores sÃ£o armazenadas pelo Rust no Gerenciador de Credenciais do Windows.
+- **Escolha a sua IA:** 17 provedores, incluindo opções com plano gratuito e IA local rodando no seu computador.
+- **Um mascote com nome:** 12 personagens animados, na área de trabalho como ilha ou solto na tela.
+- **Agente que faz:** pede, e o OdeKrai executa habilidades no seu computador, sempre dentro das regras que você definiu.
+- **Três modos de permissão:** aprovar por mim, sempre perguntar ou controle total.
+- **Você no controle:** janela de aprovação, registro de tudo que foi feito e botão de parada de emergência.
+- **Privado por padrão:** chaves no Gerenciador de Credenciais do Windows e conversas no seu computador.
+- **Tudo em português**, com interface escura e leve.
 
 ## O que o OdeKrai faz
 
-### Conversas e provedores
+### Conversa com a IA que você escolher
+- **17 provedores:** OpenAI, Anthropic, Google Gemini, xAI, Mistral, Cohere, Groq, DeepSeek, Perplexity, Together AI, Cerebras, OpenRouter, Fireworks AI, Azure OpenAI, AWS Bedrock, Vertex AI (guia de integração) e **IA local**.
+- **Planos gratuitos** sinalizados (Groq, Google Gemini, Mistral, Cerebras e OpenRouter), com o passo a passo de cada provedor.
+- **IA local:** conecta a servidores como Ollama e llama.cpp, mostra o que o seu computador aguenta e oferece modelos Qwen para baixar com a sua autorização.
+- **Provedor principal e reservas:** se o principal falhar por problema temporário, o OdeKrai usa o próximo da lista.
+- **Controle de uso:** limite diário de tokens e painel de consumo por provedor.
+- **Respostas em tempo real**, histórico local com busca, links abertos com segurança e texto formatado.
 
-O catÃ¡logo inclui OpenAI, Anthropic, Google Gemini, xAI, Mistral, Cohere, Groq, DeepSeek, Perplexity, Cerebras, Together AI, OpenRouter, Fireworks AI, Azure OpenAI e AWS Bedrock. Vertex AI aparece como guia de integraÃ§Ã£o, sem autenticaÃ§Ã£o integrada. A conexÃ£o local Ã© compatÃ­vel com servidores como Ollama e llama.cpp jÃ¡ iniciados.
+### Agente: o OdeKrai age no seu computador
+Ligue o **Modo agente** na conversa e peça em linguagem natural. As habilidades disponíveis:
 
-O catÃ¡logo sinaliza opÃ§Ãµes gratuitas para Google Gemini, Mistral, Groq, Cerebras e OpenRouter; disponibilidade e limites dependem do provedor, modelo e conta. Ã‰ possÃ­vel configurar um provedor principal e reservas. O failover Ã© limitado a falhas transitÃ³rias antes de haver saÃ­da observada; chamadas de ferramentas nÃ£o sÃ£o repetidas pelo failover.
+| Área | O que ele faz |
+|---|---|
+| **Arquivos e pastas** | listar, pesquisar, ler, criar, editar, copiar, mover, renomear, organizar pastas em lote e apagar com segurança (Lixeira), guardando versões anteriores |
+| **Abrir e sistema** | abrir sites (com confirmação por domínio), pastas e arquivos, iniciar programas que você cadastrar, abrir configurações do Windows, copiar texto, mostrar notificações, informar dados do sistema, controlar volume e mídia |
+| **Calendário, documentos e planilhas** | criar eventos de calendário (arquivo `.ics` aberto no seu calendário), documentos em Markdown e texto, planilhas CSV |
+| **Comunicação** | preparar rascunhos de e-mail no seu programa de e-mail; enviar mensagens ao Discord por webhook, com aprovação |
+| **Web** | ler páginas da internet com proteção contra conteúdo malicioso |
+| **Código** | delegar tarefas ao Codex CLI ou ao Claude Code em uma área isolada, com revisão das mudanças antes de aplicar |
 
-As conversas sÃ£o mantidas no histÃ³rico SQLite local. Para responder, o conteÃºdo enviado Ã© encaminhado ao provedor configurado. O aplicativo tambÃ©m oferece respostas em streaming quando suportadas pelo adaptador, busca no histÃ³rico e abertura de links externos com confirmaÃ§Ã£o por domÃ­nio.
+O OdeKrai só age nas **pastas que você liberar** e pode ter cada habilidade ligada ou desligada na tela **Habilidades**.
 
-### Agente e habilidades
+### Você decide o quanto ele faz sozinho
+- **Aprovar por mim:** o que é seguro roda sozinho; o que é arriscado pede a sua aprovação.
+- **Sempre perguntar:** toda ação com efeito pede aprovação numa janela própria, mostrando exatamente o que será feito.
+- **Controle total:** ele executa sem perguntar, mas respeitando bloqueios que nenhum modo desliga.
+- Pedidos vindos de conteúdo externo (uma página, um arquivo baixado) **sempre pedem aprovação**.
 
-Ative o modo agente em uma conversa para permitir que o modelo solicite habilidades registradas no Rust. As habilidades disponÃ­veis incluem operaÃ§Ãµes de leitura e organizaÃ§Ã£o de arquivos em pastas permitidas; criaÃ§Ã£o, consulta, ediÃ§Ã£o e remoÃ§Ã£o aprovada de eventos na Agenda local ou criaÃ§Ã£o em um arquivo `.ics` escolhido; criaÃ§Ã£o de arquivos Markdown, texto e CSV; abertura de links, arquivos e configuraÃ§Ãµes do Windows; notificaÃ§Ãµes, Ã¡rea de transferÃªncia, informaÃ§Ãµes do sistema, volume e controles de mÃ­dia; rascunhos de e-mail; envio aprovado por webhook do Discord; leitura de pÃ¡ginas web; e delegaÃ§Ã£o de cÃ³digo ao Codex CLI ou Claude Code.
+### Segurança
+- **Parada de emergência** por atalho global.
+- **Registro de atividade** encadeado, que detecta adulteração.
+- **Bloqueios fixos:** pastas do sistema, dados de navegadores e senhas, pagamentos e dados do próprio OdeKrai.
+- **Modo seguro** na inicialização após uma interrupção.
+- Política de segurança do aplicativo restrita e permissões mínimas por janela.
 
-As habilidades comeÃ§am desativadas e podem ser habilitadas na tela Habilidades. Os resultados de conteÃºdo externo sÃ£o tratados como nÃ£o confiÃ¡veis, e aÃ§Ãµes com efeitos colaterais podem exigir aprovaÃ§Ã£o conforme a polÃ­tica aplicada pelo Rust.
+### Identidade e memória
+- Uma pasta pessoal só sua, com o arquivo `ODEKRAI.md` que define como ele se comporta, e que só muda com a sua aprovação.
+- Notas de memória que você pode ver, editar e apagar.
+- Perfil com nome, apelido e foto (a foto nunca é enviada à IA).
 
-### PermissÃµes e seguranÃ§a
-
-- **Aprovar por mim**, **Sempre perguntar** e **Controle total** sÃ£o os modos disponÃ­veis; bloqueios fixos continuam valendo em todos eles.
-- AprovaÃ§Ãµes sÃ£o apresentadas em janela prÃ³pria. O atalho global configurado aciona o kill switch, que interrompe execuÃ§Ãµes e bloqueia novas aÃ§Ãµes atÃ© ser retomado.
-- O registro de auditoria local encadeia entradas e bloqueia aÃ§Ãµes se uma gravaÃ§Ã£o ou verificaÃ§Ã£o falhar.
-- O Rust valida habilidades, riscos, caminhos e permissÃµes. O WebView apresenta o estado e encaminha decisÃµes do usuÃ¡rio.
-
-### Identidade, mascote e sons
-
-O aplicativo oferece uma pasta pessoal, identidade `ODEKRAI.md` aprovada pelo usuÃ¡rio, notas de memÃ³ria editÃ¡veis e perfil local. O mascote tem 12 personagens e animaÃ§Ãµes associadas aos estados do aplicativo. Pode aparecer nos modos Ilha e Livre, com posiÃ§Ã£o persistida. HÃ¡ sons de interface configurÃ¡veis e opÃ§Ã£o para minimizar para a bandeja ao fechar a janela.
+### Mascotes e pet
+- **12 mascotes com nome** (Nina, Mel, Clara, Alice, Vera, Bia, Theo, Beto, Guto, Davi, Caio e Leo), com animações para cada estado: parado, pensando, trabalhando, aguardando aprovação, sucesso e erro.
+- **Ilha** junto à borda da tela ou **Livre**, para arrastar para onde quiser, com a posição lembrada.
+- Sons de interface e ícone na bandeja do Windows, com opção de continuar rodando ao fechar a janela.
 
 ### Privacidade
+- As **chaves de API** ficam no Gerenciador de Credenciais do Windows, nunca em arquivos.
+- Conversas, perfil e preferências ficam **no seu computador**.
+- O conteúdo da conversa só vai ao provedor que você configurou.
+- Registro de diagnóstico sem conteúdo de conversas e sem segredos.
 
-Credenciais de provedores sÃ£o guardadas pelo backend Rust no Gerenciador de Credenciais do Windows. O histÃ³rico, perfil e preferÃªncias usam armazenamento local; isso nÃ£o significa que o banco local ou backups sejam criptografados. O conteÃºdo enviado em uma conversa vai ao provedor escolhido. Os logs de diagnÃ³stico nÃ£o incluem o conteÃºdo das conversas.
+## Em breve
+Lembretes e agenda própria, planilhas Excel, memória gerenciada pelo agente, integração com Google (Agenda, Gmail e Planilhas), conectores MCP e uma biblioteca de extensões, comandos de voz, análise de imagens, Discord pelo aplicativo e uma ilha ainda mais completa.
 
-## InstalaÃ§Ã£o e desenvolvimento
-
-O projeto estÃ¡ em prÃ©-lanÃ§amento. O bundle Windows configurado Ã© NSIS. Para desenvolvimento, sÃ£o necessÃ¡rios Windows, Node.js 22.12 ou superior, Rust e as ferramentas C++ da Microsoft, Windows SDK e WebView2 Runtime.
+## Instalação
+O OdeKrai está em pré-lançamento e ainda não tem instalador assinado.
+- **Versões de teste:** o workflow **Build Windows**, no GitHub Actions, gera o executável.
+- **Notas de cada versão:** `docs/releases/` e o `CHANGELOG.md` (tags de `v0.1.0` a `v0.14.0`).
+- **Desenvolvimento:** Node.js 22.12 ou superior, Rust e as ferramentas de build C++ da Microsoft. Veja `docs/DEVELOPMENT.md`.
 
 ```powershell
 npm ci
@@ -58,10 +86,7 @@ npm run tauri:dev
 ```
 
 ## Capturas de tela
-
 As capturas ficam em `docs/screenshots/`.
 
-## LicenÃ§as e crÃ©ditos
-
-Consulte [LICENSE](LICENSE), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) e [LICENSE-ASSETS.md](LICENSE-ASSETS.md) para os termos do cÃ³digo, dependÃªncias e assets. NÃ£o distribua assets privados do proprietÃ¡rio.
-
+## Licenças e créditos
+Código sob a licença do arquivo `LICENSE`. Mascotes e sons: pacotes CC0 da Kenney. Ícones: Phosphor Icons (MIT). Fonte: Inter. Veja `THIRD_PARTY_NOTICES.md` e `LICENSE-ASSETS.md`.
