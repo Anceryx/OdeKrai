@@ -53,7 +53,6 @@ describe('catálogo de provedores', () => {
       integration: 'openai-chat',
       baseUrl: 'https://api.cerebras.ai/v1',
       authMode: 'bearer',
-      freePlan: { limitsUrl: 'https://inference-docs.cerebras.ai/support/pricing' },
     });
   });
 
@@ -62,7 +61,6 @@ describe('catálogo de provedores', () => {
       'gemini',
       'mistral',
       'groq',
-      'cerebras',
       'openrouter',
     ]);
   });

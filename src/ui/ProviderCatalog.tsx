@@ -13,7 +13,8 @@ import {
   filterProviderDirectory,
   providerCardHasManagement,
   loadProviderDirectoryTab,
-  loadConnectedProviderIds,
+  loadSavedCredentialProviderIds,
+  isProviderConnected,
   removeProviderCredential,
   confirmProviderCredentialRemoval,
   saveProviderDirectoryTab,
@@ -30,7 +31,6 @@ import {
 
 type Props = {
   settings: AppSettings;
-  keySaved: boolean;
   selectedId: string;
   onSelect: (provider: AiProvider) => void;
   onSetPrimary: (providerId: string) => void;
@@ -39,9 +39,18 @@ type Props = {
   onChat: () => void;
   onCredentialRemoved: (providerId: string) => void;
 };
+
+type LocalDiscovery = {
+  onlineEndpoints: string[];
+  models: { baseUrl: string; model: { id: string; name: string } }[];
+};
+
+function localModelKey(baseUrl: string, modelId: string) {
+  return JSON.stringify([baseUrl, modelId]);
+}
+
 export function ProviderCatalog({
   settings,
-  keySaved,
   selectedId,
   onSelect,
   onSetPrimary,
@@ -63,21 +72,36 @@ export function ProviderCatalog({
   const [tab, setTab] = useState<ProviderDirectoryTab>(() =>
     loadProviderDirectoryTab(typeof localStorage === 'undefined' ? undefined : localStorage),
   );
-  const [connectedIds, setConnectedIds] = useState<Set<string>>(new Set());
+  const [credentialSavedIds, setCredentialSavedIds] = useState<Set<string>>(new Set());
+  const [localServiceOnline, setLocalServiceOnline] = useState(false);
+  const [localServiceChecked, setLocalServiceChecked] = useState(false);
+  const connectedIds = useMemo(
+    () =>
+      new Set(
+        AI_PROVIDERS.filter((provider) =>
+          isProviderConnected(
+            provider.id,
+            credentialSavedIds.has(provider.id),
+            settings.providers[provider.id]?.lastTest?.status,
+            localServiceOnline,
+          ),
+        ).map((provider) => provider.id),
+      ),
+    [credentialSavedIds, localServiceOnline, settings.providers],
+  );
   const primaryConnected =
     Boolean(settings.activeProviderId) &&
     connectedIds.has(settings.activeProviderId) &&
     settings.providers[settings.activeProviderId]?.enabled !== false;
   const [credentialChecksComplete, setCredentialChecksComplete] = useState(false);
   const [credentialCheckFailed, setCredentialCheckFailed] = useState(false);
-  const [localServerAvailable, setLocalServerAvailable] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [externalLinkError, setExternalLinkError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [credentialAvailable, setCredentialAvailable] = useState(keySaved);
+  const credentialAvailable = credentialSavedIds.has(selected.id);
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
-  const [localModelEndpoints, setLocalModelEndpoints] = useState<Record<string, string>>({});
+  const [localModels, setLocalModels] = useState<LocalDiscovery['models']>([]);
   const [stages, setStages] = useState<{ id: string; status: string; message: string }[]>([]);
   const [technicalError, setTechnicalError] = useState('');
   const [replacementPrimary, setReplacementPrimary] = useState('');
@@ -93,7 +117,7 @@ export function ProviderCatalog({
     setTechnicalError('');
     setModels([]);
     setStages([]);
-  }, [selected.id, settings.providers[selected.id]]);
+  }, [selected.id]);
   useEffect(() => {
     let current = true;
     setCredentialChecksComplete(false);
@@ -103,27 +127,31 @@ export function ProviderCatalog({
         (provider) => provider.id,
       );
       void Promise.all([
-        loadConnectedProviderIds(providerIds, (providerId) =>
+        loadSavedCredentialProviderIds(providerIds, (providerId) =>
           invoke<boolean>('has_provider_credential', { providerId }),
         ),
-        invoke<{ model: { id: string } }[]>('discover_local_models').catch(() => []),
+        invoke<LocalDiscovery>('discover_local_models').catch(() => ({
+          onlineEndpoints: [],
+          models: [],
+        })),
       ]).then(([result, localModels]) => {
         if (!current) return;
-        const connected = new Set(result.connectedIds);
-        if (localModels.length > 0) connected.add('local');
-        setConnectedIds(connected);
-        setLocalServerAvailable(localModels.length > 0);
+        setCredentialSavedIds(result.credentialIds);
+        setLocalServiceOnline(localModels.onlineEndpoints.length > 0);
+        setLocalModels(localModels.models);
+        setModels(localModels.models.map((item) => item.model));
+        setLocalServiceChecked(true);
         setCredentialChecksComplete(true);
         setCredentialCheckFailed(result.failedIds.size > 0);
       });
-    } else setCredentialChecksComplete(true);
+    } else {
+      setCredentialChecksComplete(true);
+      setLocalServiceChecked(true);
+    }
     return () => {
       current = false;
     };
   }, []);
-  useEffect(() => {
-    setCredentialAvailable(connectedIds.has(selected.id));
-  }, [selected.id, connectedIds]);
   useEffect(() => {
     let current = true;
     const baseCapabilities = catalogEntry?.capabilities ?? null;
@@ -158,7 +186,10 @@ export function ProviderCatalog({
     selected.integration !== 'guide' &&
     Boolean(draft.model.trim() && (selected.id === 'local' || credentialAvailable));
   function updateDraft(field: keyof ProviderSettings, value: string) {
-    setDraft((current) => ({ ...current, [field]: value }));
+    setDraft((current) => {
+      const { lastTest: _lastTest, ...withoutLastTest } = current;
+      return { ...withoutLastTest, [field]: value };
+    });
   }
   function changeTab(next: ProviderDirectoryTab) {
     setTab(next);
@@ -191,6 +222,7 @@ export function ProviderCatalog({
       name: selected.name,
       baseUrl,
       authMode: selected.authMode,
+      ...(secret.trim() ? { lastTest: undefined } : {}),
     };
     setBusy(true);
     setNotice('');
@@ -202,8 +234,7 @@ export function ProviderCatalog({
           credential: secret.trim(),
         });
       if (secret.trim() || credentialAvailable) {
-        setCredentialAvailable(true);
-        setConnectedIds((ids) => new Set(ids).add(selected.id));
+        setCredentialSavedIds((ids) => new Set(ids).add(selected.id));
       }
       setCredentialChecksComplete(true);
       onSave(next);
@@ -229,7 +260,7 @@ export function ProviderCatalog({
           lastTest: {
             status: status as 'passed' | 'failed' | 'partial',
             at: new Date().toISOString(),
-            message: result.overall,
+            message: `Teste de conexão ${status === 'passed' ? 'aprovado' : status === 'partial' ? 'parcial' : 'reprovado'}.`,
           },
         };
         setDraft(saved);
@@ -239,7 +270,12 @@ export function ProviderCatalog({
             ? 'Conexão validada sem enviar texto ao modelo.'
             : 'Verificação parcial; consulte as etapas abaixo.',
         );
-      } else setNotice('Credencial salva no Gerenciador do Windows. Ainda não validada.');
+      } else
+        setNotice(
+          selected.id === 'local'
+            ? 'Configuração local salva. O serviço e o modelo ainda não foram testados.'
+            : 'Credencial salva no Gerenciador do Windows. Ainda não validada.',
+        );
     } catch (error) {
       const message =
         typeof error === 'string' ? error : 'Não foi possível configurar este provedor.';
@@ -247,7 +283,11 @@ export function ProviderCatalog({
       if (test) {
         const failed = {
           ...next,
-          lastTest: { status: 'failed' as const, at: new Date().toISOString(), message },
+          lastTest: {
+            status: 'failed' as const,
+            at: new Date().toISOString(),
+            message: 'Teste de conexão reprovado.',
+          },
         };
         setDraft(failed);
         onSave(failed);
@@ -262,16 +302,34 @@ export function ProviderCatalog({
     setNotice('');
     try {
       if (selected.id === 'local') {
-        const discovered =
-          await invoke<{ baseUrl: string; model: { id: string; name: string } }[]>(
-            'discover_local_models',
-          );
-        setModels(discovered.map((item) => item.model));
-        setLocalModelEndpoints(
-          Object.fromEntries(discovered.map((item) => [item.model.id, item.baseUrl])),
+        const defaults = ['http://127.0.0.1:11434/v1', 'http://127.0.0.1:8080/v1'];
+        let discovered: LocalDiscovery;
+        if (defaults.includes(endpointForDraft())) {
+          discovered = await invoke<LocalDiscovery>('discover_local_models');
+        } else {
+          await invoke('validate_provider_endpoint', {
+            providerId: 'local',
+            baseUrl: endpointForDraft(),
+          });
+          const localModels = await invoke<{ id: string; name: string }[]>('list_provider_models', {
+            providerId: 'local',
+            baseUrl: endpointForDraft(),
+          });
+          discovered = {
+            onlineEndpoints: [endpointForDraft()],
+            models: localModels.map((model) => ({ baseUrl: endpointForDraft(), model })),
+          };
+        }
+        setLocalServiceOnline(discovered.onlineEndpoints.length > 0);
+        setLocalServiceChecked(true);
+        setLocalModels(discovered.models);
+        setModels(discovered.models.map((item) => item.model));
+        if (discovered.models[0]) updateDraft('baseUrl', discovered.models[0].baseUrl);
+        setNotice(
+          discovered.models.length
+            ? `${discovered.models.length} modelos locais encontrados.`
+            : 'Serviço local online, mas sem modelos disponíveis.',
         );
-        if (discovered[0]) updateDraft('baseUrl', discovered[0].baseUrl);
-        setNotice(`${discovered.length} modelos locais encontrados.`);
         return;
       }
       await invoke('validate_provider_endpoint', {
@@ -285,6 +343,12 @@ export function ProviderCatalog({
       setModels(result);
       setNotice(`${result.length} modelos carregados.`);
     } catch (error) {
+      if (selected.id === 'local') {
+        setLocalServiceOnline(false);
+        setLocalServiceChecked(true);
+        setLocalModels([]);
+        setModels([]);
+      }
       setNotice(typeof error === 'string' ? error : 'Não foi possível carregar os modelos.');
     } finally {
       setBusy(false);
@@ -310,7 +374,7 @@ export function ProviderCatalog({
         lastTest: {
           status: 'passed' as const,
           at: new Date().toISOString(),
-          message: 'O teste rápido foi aceito.',
+          message: 'Teste rápido aceito pelo provedor.',
         },
       };
       setDraft(saved);
@@ -322,7 +386,11 @@ export function ProviderCatalog({
       const failed = {
         ...draft,
         baseUrl: endpointForDraft(),
-        lastTest: { status: 'failed' as const, at: new Date().toISOString(), message },
+        lastTest: {
+          status: 'failed' as const,
+          at: new Date().toISOString(),
+          message: 'Teste rápido reprovado.',
+        },
       };
       setDraft(failed);
       onSave(failed);
@@ -344,11 +412,10 @@ export function ProviderCatalog({
           const next = await removeProviderCredential(
             providerId,
             (id) => invoke('remove_provider_credential', { providerId: id }),
-            connectedIds,
+            credentialSavedIds,
           );
           onCredentialRemoved(providerId);
-          if (providerId === selected.id) setCredentialAvailable(false);
-          setConnectedIds(next);
+          setCredentialSavedIds(next);
           setNotice('Credencial removida do Gerenciador do Windows.');
         } catch {
           setNotice('Não foi possível remover a credencial.');
@@ -374,6 +441,20 @@ export function ProviderCatalog({
         { providerId: provider.id, baseUrl: config.baseUrl, model: config.model },
       );
       setStages(result.stages);
+      const status =
+        result.overall === 'passed'
+          ? 'passed'
+          : result.overall === 'partial'
+            ? 'partial'
+            : 'failed';
+      onSave({
+        ...config,
+        lastTest: {
+          status,
+          at: new Date().toISOString(),
+          message: `Teste de conexão ${status === 'passed' ? 'aprovado' : status === 'partial' ? 'parcial' : 'reprovado'}.`,
+        },
+      });
       setNotice(
         result.overall === 'passed'
           ? 'Conexão validada.'
@@ -381,6 +462,14 @@ export function ProviderCatalog({
       );
     } catch (error) {
       setTechnicalError(typeof error === 'string' ? error : 'Falha ao testar a conexão.');
+      onSave({
+        ...config,
+        lastTest: {
+          status: 'failed',
+          at: new Date().toISOString(),
+          message: 'Teste de conexão reprovado.',
+        },
+      });
       setNotice('Não foi possível testar a conexão. Consulte os detalhes técnicos.');
     } finally {
       setBusy(false);
@@ -392,22 +481,19 @@ export function ProviderCatalog({
     setBusy(true);
     setNotice('Procurando servidores locais…');
     try {
-      const discovered =
-        await invoke<{ baseUrl: string; model: { id: string; name: string } }[]>(
-          'discover_local_models',
-        );
-      setModels(discovered.map((item) => item.model));
-      setLocalModelEndpoints(
-        Object.fromEntries(discovered.map((item) => [item.model.id, item.baseUrl])),
-      );
-      if (discovered.length) setConnectedIds((ids) => new Set([...ids, 'local']));
-      setLocalServerAvailable(discovered.length > 0);
+      const discovered = await invoke<LocalDiscovery>('discover_local_models');
+      setLocalServiceOnline(discovered.onlineEndpoints.length > 0);
+      setLocalServiceChecked(true);
+      setLocalModels(discovered.models);
+      setModels(discovered.models.map((item) => item.model));
       setNotice(
-        discovered.length
-          ? `${discovered.length} modelos locais encontrados.`
-          : 'Servidor encontrado, sem modelos disponíveis.',
+        discovered.models.length
+          ? `${discovered.models.length} modelos locais encontrados.`
+          : 'Serviço local online, mas sem modelos disponíveis.',
       );
     } catch (error) {
+      setLocalServiceOnline(false);
+      setLocalServiceChecked(true);
       setNotice(typeof error === 'string' ? error : 'Nenhum servidor local foi encontrado.');
     } finally {
       setBusy(false);
@@ -427,19 +513,27 @@ export function ProviderCatalog({
         }
       />
       <div className="provider-summary" role="status">
-        <span className={`connection-orb ${keySaved ? 'ready' : ''}`} />
+        <span className={`connection-orb ${primaryConnected ? 'ready' : ''}`} />
         <div>
           <strong>
             {primaryConnected
-              ? `${active.name} · Principal · Ativo`
-              : 'Nenhum provedor principal conectado'}
+              ? `${active.name} · Principal · Conectado`
+              : settings.activeProviderId
+                ? `${active.name} · Principal configurado, ainda não conectado`
+                : 'Nenhum provedor principal configurado'}
           </strong>
           <span>
-            {keySaved
-              ? 'Credencial disponível nesta sessão; o teste de conexão é opcional.'
-              : active.name === 'IA local' && localServerAvailable
-                ? 'Servidor local disponível neste dispositivo.'
-                : 'Escolha um provedor conectado ou configure um novo acesso.'}
+            {settings.activeProviderId === 'local'
+              ? localServiceOnline
+                ? 'Serviço local online; credencial é opcional.'
+                : localServiceChecked
+                  ? 'Serviço local não encontrado nas portas verificadas.'
+                  : 'Serviço local ainda não verificado.'
+              : credentialSavedIds.has(settings.activeProviderId)
+                ? settings.providers[settings.activeProviderId]?.lastTest?.status === 'passed'
+                  ? 'Credencial salva e teste aprovado.'
+                  : 'Credencial salva; teste de conexão ainda não aprovado.'
+                : 'Salve uma credencial e teste a conexão para verificar este provedor.'}
           </span>
         </div>
         {primaryConnected && isActive && (
@@ -448,7 +542,7 @@ export function ProviderCatalog({
           </button>
         )}
       </div>
-      <div className="provider-layout">
+      <div className={`provider-layout ${detailsOpen ? 'has-detail' : ''}`}>
         <section className="provider-browser" aria-label="Catálogo de provedores de IA">
           <div className="provider-browser-heading">
             <div>
@@ -493,8 +587,11 @@ export function ProviderCatalog({
           <div className="provider-grid">
             {filtered.map((provider) => {
               const connected = connectedIds.has(provider.id);
+              const credentialSaved = credentialSavedIds.has(provider.id);
               const enabled = settings.providers[provider.id]?.enabled !== false;
               const primary = settings.activeProviderId === provider.id;
+              const lastTest = settings.providers[provider.id]?.lastTest;
+              const freePlanVerified = provider.freePlan?.status === 'verified';
               return (
                 <article className="provider-card" key={provider.id}>
                   <button
@@ -515,11 +612,25 @@ export function ProviderCatalog({
                     <span className="provider-badges">
                       {[
                         connected && 'Conectado',
+                        credentialSaved && 'Credencial salva',
+                        lastTest &&
+                          `Teste ${
+                            lastTest.status === 'passed'
+                              ? 'aprovado'
+                              : lastTest.status === 'partial'
+                                ? 'parcial'
+                                : 'reprovado'
+                          }`,
                         primary && 'Principal',
-                        connected && enabled && 'Ativo',
-                        provider.freePlan && 'Plano gratuito',
+                        enabled ? 'Habilitado' : 'Desativado',
+                        freePlanVerified && 'Plano gratuito verificado',
                         provider.id === 'local' && 'Local',
-                        provider.id === 'local' && localServerAvailable && 'Servidor disponível',
+                        provider.id === 'local' &&
+                          (localServiceOnline
+                            ? 'Serviço local online'
+                            : localServiceChecked
+                              ? 'Serviço local offline'
+                              : 'Serviço local não verificado'),
                       ]
                         .filter(Boolean)
                         .map((badge) => (
@@ -649,8 +760,10 @@ export function ProviderCatalog({
                 : tab === 'connected' && !search.trim() && credentialCheckFailed
                   ? 'Não foi possível consultar as credenciais. A lista pode estar incompleta.'
                   : tab === 'connected' && !search.trim()
-                    ? 'Nenhum provedor conectado.'
-                    : 'Nenhum provedor corresponde à busca.'}
+                    ? 'Nenhum provedor conectado após um teste aprovado.'
+                    : tab === 'free' && !search.trim()
+                      ? 'Nenhum plano gratuito verificado neste catálogo.'
+                      : 'Nenhum provedor corresponde à busca.'}
             </p>
           )}
           <p className="provider-compat-note">
@@ -677,13 +790,6 @@ export function ProviderCatalog({
             )}
         </section>
         {detailsOpen && (
-          <button
-            className="provider-detail-backdrop"
-            aria-label="Fechar detalhes do provedor"
-            onClick={() => setDetailsOpen(false)}
-          />
-        )}
-        {detailsOpen && (
           <aside className="provider-detail" aria-label={`Detalhes de ${selected.name}`}>
             <button
               className="provider-detail-close"
@@ -705,10 +811,55 @@ export function ProviderCatalog({
               </div>
             </div>
             <p className="provider-description">{selected.description}</p>
+            {selected.integration !== 'guide' && (
+              <div className="provider-status-list" aria-label="Status do conector">
+                <span>{connectedIds.has(selected.id) ? 'Conectado' : 'Não conectado'}</span>
+                <span>
+                  {credentialSavedIds.has(selected.id)
+                    ? 'Credencial salva'
+                    : 'Sem credencial salva'}
+                </span>
+                <span>
+                  {settings.providers[selected.id]?.lastTest
+                    ? `Teste ${
+                        settings.providers[selected.id].lastTest?.status === 'passed'
+                          ? 'aprovado'
+                          : settings.providers[selected.id].lastTest?.status === 'partial'
+                            ? 'parcial'
+                            : 'reprovado'
+                      }`
+                    : 'Ainda não testado'}
+                </span>
+                <span>{isActive ? 'Principal' : 'Não principal'}</span>
+                <span>
+                  {settings.providers[selected.id]?.enabled === false ? 'Desativado' : 'Habilitado'}
+                </span>
+                {selected.freePlan && (
+                  <span>
+                    Plano gratuito{' '}
+                    {selected.freePlan.status === 'verified' ? 'verificado' : 'não verificado'}
+                  </span>
+                )}
+                {selected.id === 'local' && (
+                  <span>
+                    Serviço local{' '}
+                    {localServiceOnline
+                      ? 'online'
+                      : localServiceChecked
+                        ? 'offline'
+                        : 'não verificado'}
+                  </span>
+                )}
+              </div>
+            )}
             {selected.id === 'local' && (
               <p className="provider-key-note" role="status">
-                <strong>Servidor local:</strong>{' '}
-                {localServerAvailable ? 'disponível' : 'não encontrado nas portas padrão'}.
+                <strong>Serviço local:</strong>{' '}
+                {localServiceOnline
+                  ? `online em ${localModels.length} modelo(s) listado(s).`
+                  : localServiceChecked
+                    ? 'offline nas portas padrão verificadas.'
+                    : 'ainda não verificado.'}
               </p>
             )}
             {connectedIds.has(selected.id) && selected.integration !== 'guide' && (
@@ -814,7 +965,11 @@ export function ProviderCatalog({
             )}
             {selected.freePlan && (
               <div className="provider-free-note">
-                <strong>Plano gratuito disponível</strong>
+                <strong>
+                  {selected.freePlan.status === 'verified'
+                    ? `Plano gratuito verificado em ${selected.freePlan.verifiedAt}`
+                    : 'Possível plano gratuito, ainda não verificado'}
+                </strong>
                 {selected.freePlan.note && <span>{selected.freePlan.note}</span>}
                 <ProviderExternalLink
                   href={selected.freePlan.limitsUrl}
@@ -1007,22 +1162,31 @@ export function ProviderCatalog({
                   <label className="field-label">
                     Modelo local
                     <select
-                      value={models.some((item) => item.id === draft.model) ? draft.model : ''}
+                      value={
+                        localModels.some(
+                          (item) => item.model.id === draft.model && item.baseUrl === draft.baseUrl,
+                        )
+                          ? localModelKey(draft.baseUrl, draft.model)
+                          : ''
+                      }
                       onChange={(event) => {
-                        const selectedModel = models.find((item) => item.id === event.target.value);
+                        const selectedModel = localModels.find(
+                          (item) =>
+                            localModelKey(item.baseUrl, item.model.id) === event.target.value,
+                        );
                         if (selectedModel) {
-                          updateDraft('model', selectedModel.id);
-                          updateDraft(
-                            'baseUrl',
-                            localModelEndpoints[selectedModel.id] ?? draft.baseUrl,
-                          );
+                          updateDraft('model', selectedModel.model.id);
+                          updateDraft('baseUrl', selectedModel.baseUrl);
                         }
                       }}
                     >
                       <option value="">Selecione um modelo encontrado</option>
-                      {models.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name}
+                      {localModels.map((item) => (
+                        <option
+                          key={localModelKey(item.baseUrl, item.model.id)}
+                          value={localModelKey(item.baseUrl, item.model.id)}
+                        >
+                          {item.model.name} · {new URL(item.baseUrl).host}
                         </option>
                       ))}
                     </select>

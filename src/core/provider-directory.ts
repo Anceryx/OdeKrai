@@ -26,20 +26,20 @@ export function saveProviderDirectoryTab(
   }
 }
 
-export async function loadConnectedProviderIds(
+export async function loadSavedCredentialProviderIds(
   providerIds: readonly string[],
   hasCredential: (providerId: string) => Promise<boolean>,
-): Promise<{ connectedIds: Set<string>; failedIds: Set<string> }> {
-  const connectedIds = new Set<string>();
+): Promise<{ credentialIds: Set<string>; failedIds: Set<string> }> {
+  const credentialIds = new Set<string>();
   const failedIds = new Set<string>();
   for (const providerId of providerIds) {
     try {
-      if (await hasCredential(providerId)) connectedIds.add(providerId);
+      if (await hasCredential(providerId)) credentialIds.add(providerId);
     } catch {
       failedIds.add(providerId);
     }
   }
-  return { connectedIds, failedIds };
+  return { credentialIds, failedIds };
 }
 
 export function filterProviderDirectory(
@@ -51,9 +51,19 @@ export function filterProviderDirectory(
   const query = search.trim().toLocaleLowerCase('pt-BR');
   return providers.filter((provider) => {
     if (tab === 'connected' && !connectedIds.has(provider.id)) return false;
-    if (tab === 'free' && !provider.freePlan) return false;
+    if (tab === 'free' && provider.freePlan?.status !== 'verified') return false;
     return !query || provider.name.toLocaleLowerCase('pt-BR').includes(query);
   });
+}
+
+export function isProviderConnected(
+  providerId: string,
+  credentialSaved: boolean,
+  lastTestStatus: 'passed' | 'failed' | 'partial' | undefined,
+  localServiceOnline: boolean,
+): boolean {
+  if (providerId === 'local') return localServiceOnline;
+  return credentialSaved && lastTestStatus === 'passed';
 }
 
 export function setProviderEnabled<T extends { enabled?: boolean }>(
@@ -116,11 +126,11 @@ export function toggleProviderSettings(
   };
 }
 
-export function removeConnectedProvider(
-  connectedIds: ReadonlySet<string>,
+export function removeSavedCredentialProviderId(
+  credentialIds: ReadonlySet<string>,
   providerId: string,
 ): Set<string> {
-  const next = new Set(connectedIds);
+  const next = new Set(credentialIds);
   next.delete(providerId);
   return next;
 }
@@ -128,10 +138,10 @@ export function removeConnectedProvider(
 export async function removeProviderCredential(
   providerId: string,
   remove: (providerId: string) => Promise<unknown>,
-  connectedIds: ReadonlySet<string>,
+  credentialIds: ReadonlySet<string>,
 ): Promise<Set<string>> {
   await remove(providerId);
-  return removeConnectedProvider(connectedIds, providerId);
+  return removeSavedCredentialProviderId(credentialIds, providerId);
 }
 
 export async function confirmProviderCredentialRemoval(

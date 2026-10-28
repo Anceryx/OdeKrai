@@ -3,9 +3,9 @@ import { AI_PROVIDERS } from './providers';
 import { defaultSettings } from './settings';
 import {
   filterProviderDirectory,
-  loadConnectedProviderIds,
+  loadSavedCredentialProviderIds,
   removeProviderCredential,
-  removeConnectedProvider,
+  removeSavedCredentialProviderId,
   setPrimaryProviderSettings,
   moveFallbackProvider,
   setFallbackProviderIds,
@@ -15,6 +15,7 @@ import {
   saveProviderDirectoryTab,
   confirmProviderCredentialRemoval,
   providerCardHasManagement,
+  isProviderConnected,
 } from './provider-directory';
 
 describe('diretório de provedores', () => {
@@ -24,19 +25,22 @@ describe('diretório de provedores', () => {
     const calls: string[] = [];
     let activeCalls = 0;
     let maxActiveCalls = 0;
-    const result = await loadConnectedProviderIds(['openai', 'groq', 'gemini'], async (id) => {
-      calls.push(id);
-      activeCalls += 1;
-      maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
-      await Promise.resolve();
-      activeCalls -= 1;
-      if (id === 'groq') throw new Error('Credential Manager indisponível');
-      return id === 'openai';
-    });
+    const result = await loadSavedCredentialProviderIds(
+      ['openai', 'groq', 'gemini'],
+      async (id) => {
+        calls.push(id);
+        activeCalls += 1;
+        maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
+        await Promise.resolve();
+        activeCalls -= 1;
+        if (id === 'groq') throw new Error('Credential Manager indisponível');
+        return id === 'openai';
+      },
+    );
 
     expect(calls).toEqual(['openai', 'groq', 'gemini']);
     expect(maxActiveCalls).toBe(1);
-    expect(result.connectedIds).toEqual(new Set(['openai']));
+    expect(result.credentialIds).toEqual(new Set(['openai']));
     expect(result.failedIds).toEqual(new Set(['groq']));
   });
 
@@ -48,7 +52,6 @@ describe('diretório de provedores', () => {
       'gemini',
       'mistral',
       'groq',
-      'cerebras',
       'openrouter',
     ]);
     expect(
@@ -58,6 +61,28 @@ describe('diretório de provedores', () => {
     expect(filterProviderDirectory(AI_PROVIDERS, 'all', '', connected)).toHaveLength(
       AI_PROVIDERS.length,
     );
+  });
+
+  it('só classifica credencial como conectada depois de teste aprovado', () => {
+    expect(isProviderConnected('openai', true, undefined, false)).toBe(false);
+    expect(isProviderConnected('openai', true, 'failed', false)).toBe(false);
+    expect(isProviderConnected('openai', true, 'partial', false)).toBe(false);
+    expect(isProviderConnected('openai', true, 'passed', false)).toBe(true);
+    expect(isProviderConnected('openai', false, 'passed', false)).toBe(false);
+  });
+
+  it('classifica serviço local online independentemente da credencial opcional', () => {
+    expect(isProviderConnected('local', false, undefined, true)).toBe(true);
+    expect(isProviderConnected('local', false, undefined, false)).toBe(false);
+  });
+
+  it('não anuncia Cerebras como plano gratuito por causa de crédito promocional', () => {
+    expect(AI_PROVIDERS.find((provider) => provider.id === 'cerebras')?.freePlan).toBeUndefined();
+    expect(
+      AI_PROVIDERS.filter((provider) => provider.freePlan?.status === 'verified').map(
+        (provider) => provider.id,
+      ),
+    ).toEqual(['gemini', 'mistral', 'groq', 'openrouter']);
   });
 
   it('só mostra gerenciamento nos cartões conectados da aba Conectados', () => {
@@ -121,8 +146,8 @@ describe('diretório de provedores', () => {
     expect(disabled.fallbackProviderIds).not.toContain('groq');
   });
 
-  it('remove da lista conectada após a credencial ser removida', () => {
-    expect([...removeConnectedProvider(connected, 'groq')]).toEqual(['openai']);
+  it('remove o provedor dos IDs com credenciais salvas após remoção', () => {
+    expect([...removeSavedCredentialProviderId(connected, 'groq')]).toEqual(['openai']);
   });
 
   it('só atualiza a lista depois que a remoção da credencial confirma sucesso', async () => {

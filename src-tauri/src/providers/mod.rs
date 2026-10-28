@@ -46,18 +46,25 @@ use cancellation::cancellable_request;
 const MAX_CREDENTIAL_BYTES: usize = 4096;
 const MAX_MESSAGE_BYTES: usize = 1_000_000;
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelOption {
     pub id: String,
     pub name: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalModelOption {
     pub base_url: String,
     pub model: ModelOption,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalModelDiscovery {
+    pub online_endpoints: Vec<String>,
+    pub models: Vec<LocalModelOption>,
 }
 
 #[derive(Serialize)]
@@ -246,39 +253,50 @@ pub async fn discover_local_models(
     caller: tauri::WebviewWindow,
     state: State<'_, ProviderRequests>,
     security: State<'_, crate::security::SecurityState>,
-) -> Result<Vec<LocalModelOption>, String> {
+) -> Result<LocalModelDiscovery, String> {
     super::require_main(&caller)?;
     cancellable_request(&state, &security, async {
         let mut found = Vec::new();
-        let mut server_responded = false;
+        let mut online_endpoints = Vec::new();
         let mut invalid_response = false;
         for base_url in ["http://127.0.0.1:11434/v1", "http://127.0.0.1:8080/v1"] {
             match fetch_models_with_auth("local", base_url, false).await {
                 Ok(models) => {
-                    server_responded = true;
+                    online_endpoints.push(base_url.to_string());
                     found.extend(models.into_iter().map(|model| LocalModelOption {
                         base_url: base_url.to_string(),
                         model,
                     }));
                 }
                 Err(message) if !message.contains("conectar") && !message.contains("demorou") => {
-                    server_responded = true;
                     invalid_response = true;
                 }
                 Err(_) => {}
             }
         }
-        if !server_responded {
-            return Err("Servidor local não encontrado nas portas padrão (11434 e 8080).".into());
-        }
-        if invalid_response && found.is_empty() {
-            return Err("O servidor local respondeu com dados inválidos ou não compatíveis com a API OpenAI.".into());
-        }
-        if found.is_empty() {
-            return Err("Servidor local encontrado, mas nenhum modelo está carregado. Carregue um modelo e tente novamente.".into());
-        }
-        Ok(found)
-    }).await
+        finish_local_discovery(online_endpoints, found, invalid_response)
+    })
+    .await
+}
+
+fn finish_local_discovery(
+    online_endpoints: Vec<String>,
+    models: Vec<LocalModelOption>,
+    invalid_response: bool,
+) -> Result<LocalModelDiscovery, String> {
+    if online_endpoints.is_empty() && invalid_response {
+        return Err(
+            "O servidor local respondeu com dados inválidos ou não compatíveis com a API OpenAI."
+                .into(),
+        );
+    }
+    if online_endpoints.is_empty() {
+        return Err("Servidor local não encontrado nas portas padrão (11434 e 8080).".into());
+    }
+    Ok(LocalModelDiscovery {
+        online_endpoints,
+        models,
+    })
 }
 
 async fn fetch_models(provider_id: &str, base_url: &str) -> Result<Vec<ModelOption>, String> {
@@ -1420,6 +1438,22 @@ mod tests {
             parse_model_options(json!({"data":[{"id":"qwen-local"}]}), Some("data")).unwrap();
         assert_eq!(models[0].id, "qwen-local");
         assert!(parse_model_options(json!({"models": []}), Some("data")).is_err());
+    }
+
+    #[test]
+    fn local_discovery_separates_online_service_from_loaded_models() {
+        let empty =
+            finish_local_discovery(vec!["http://127.0.0.1:11434/v1".into()], Vec::new(), false)
+                .unwrap();
+        assert_eq!(empty.online_endpoints.len(), 1);
+        assert!(empty.models.is_empty());
+
+        assert!(finish_local_discovery(Vec::new(), Vec::new(), false)
+            .unwrap_err()
+            .contains("não encontrado"));
+        assert!(finish_local_discovery(Vec::new(), Vec::new(), true)
+            .unwrap_err()
+            .contains("dados inválidos"));
     }
 
     #[tokio::test]

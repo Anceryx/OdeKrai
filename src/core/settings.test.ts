@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadSettings, loadSettingsWithWarnings, saveSettings } from './settings';
+import { defaultSettings, loadSettings, loadSettingsWithWarnings, saveSettings } from './settings';
 
 describe('preferências persistidas', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -32,6 +32,36 @@ describe('preferências persistidas', () => {
     expect(migrated.providers.openai.model).toBe('local');
     saveSettings(migrated);
     expect(JSON.parse(storage.get('odekrai.settings.v2') ?? '{}')).not.toHaveProperty('provider');
+  });
+
+  it('preserva o resultado sanitizado do último teste do conector ao carregar preferências', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) =>
+        key === 'odekrai.settings.v2'
+          ? JSON.stringify({
+              ...defaultSettings,
+              activeProviderId: 'groq',
+              providers: {
+                groq: {
+                  providerId: 'groq',
+                  name: 'Groq',
+                  baseUrl: 'https://api.groq.com/openai/v1',
+                  model: 'mock-model',
+                  authMode: 'bearer',
+                  enabled: true,
+                  lastTest: {
+                    status: 'passed',
+                    at: '2026-10-28T12:00:00.000Z',
+                    message: 'Teste de conexão aprovado.',
+                  },
+                },
+              },
+            })
+          : null,
+      setItem: () => undefined,
+    });
+
+    expect(loadSettings().providers.groq.lastTest).toMatchObject({ status: 'passed' });
   });
 
   it('salva somente preferências e recupera a posição da ilha', () => {

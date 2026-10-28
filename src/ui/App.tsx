@@ -75,7 +75,7 @@ import { SkillsScreen } from './SkillsScreen';
 import { PETS } from '../core/pets';
 import { navigationItems, SidebarNavigation } from './SidebarNavigation';
 import {
-  loadConnectedProviderIds,
+  loadSavedCredentialProviderIds,
   setPrimaryProviderSettings,
   toggleProviderSettings,
 } from '../core/provider-directory';
@@ -355,11 +355,11 @@ function MainApp() {
         settings.providers[providerId]?.enabled !== false &&
         Boolean(settings.providers[providerId]?.model),
     );
-    const { connectedIds } = await loadConnectedProviderIds(candidates, (providerId) =>
+    const { credentialIds } = await loadSavedCredentialProviderIds(candidates, (providerId) =>
       invoke<boolean>('has_provider_credential', { providerId }),
     );
     const available = candidates.find(
-      (providerId) => providerId === 'local' || connectedIds.has(providerId),
+      (providerId) => providerId === 'local' || credentialIds.has(providerId),
     );
     if (available) setUsedProviderId(available);
     setKeySavedForSession(Boolean(available));
@@ -1082,7 +1082,6 @@ function MainApp() {
               {section === 'providers' && (
                 <ProvidersScreen
                   settings={settings}
-                  keySaved={keySavedForSession}
                   selectedId={selectedProviderId}
                   onSelect={selectProvider}
                   onSetPrimary={setPrimaryProvider}
@@ -1093,14 +1092,11 @@ function MainApp() {
                       providers: { ...current.providers, [provider.providerId]: provider },
                     }));
                     if (provider.providerId === settings.activeProviderId)
-                      setKeySavedForSession(true);
+                      setKeySavedForSession(provider.providerId !== 'local');
                   }}
                   onChat={beginChat}
                   onCredentialRemoved={(providerId) => {
-                    if (settings.activeProviderId === providerId) {
-                      setSettings((current) => ({ ...current, activeProviderId: '' }));
-                      setKeySavedForSession(false);
-                    }
+                    if (settings.activeProviderId === providerId) setKeySavedForSession(false);
                   }}
                 />
               )}

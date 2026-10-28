@@ -17,7 +17,12 @@ export type AiProvider = {
   logo?: string;
   color: string;
   region?: boolean;
-  freePlan?: { limitsUrl: string; note?: string };
+  freePlan?: {
+    limitsUrl: string;
+    note?: string;
+    verifiedAt: string;
+    status: 'verified' | 'unverified';
+  };
 };
 
 export type ProviderCatalogEntry = {
@@ -114,7 +119,9 @@ const providerDefinitions: AiProvider[] = [
     color: '#8E75B2',
     freePlan: {
       limitsUrl: 'https://ai.google.dev/gemini-api/docs/rate-limits',
-      note: 'O acesso gratuito depende do modelo selecionado.',
+      note: 'Há modelos no modo gratuito; disponibilidade e limites variam por modelo e conta.',
+      verifiedAt: '2026-10-28',
+      status: 'verified',
     },
   },
   {
@@ -148,7 +155,9 @@ const providerDefinitions: AiProvider[] = [
     color: '#FA520F',
     freePlan: {
       limitsUrl: 'https://docs.mistral.ai/admin/billing-usage/usage-limits',
-      note: 'O modo gratuito tem limites de uso.',
+      note: 'O modo Free inclui uso mensal limitado, conforme a organização.',
+      verifiedAt: '2026-10-28',
+      status: 'verified',
     },
   },
   {
@@ -182,7 +191,9 @@ const providerDefinitions: AiProvider[] = [
     color: '#F5F5F5',
     freePlan: {
       limitsUrl: 'https://console.groq.com/docs/rate-limits',
-      note: 'Os limites variam conforme o modelo e a conta.',
+      note: 'Os limites do nível gratuito variam por modelo e organização.',
+      verifiedAt: '2026-10-28',
+      status: 'verified',
     },
   },
   {
@@ -233,10 +244,6 @@ const providerDefinitions: AiProvider[] = [
     requirements: ['Chave de API Cerebras', 'Modelo habilitado na conta'],
     logo: 'cerebras',
     color: '#F5F5F5',
-    freePlan: {
-      limitsUrl: 'https://inference-docs.cerebras.ai/support/pricing',
-      note: 'O plano gratuito tem limites próprios de uso.',
-    },
   },
   {
     id: 'together',
@@ -269,7 +276,9 @@ const providerDefinitions: AiProvider[] = [
     color: '#94A3B8',
     freePlan: {
       limitsUrl: 'https://openrouter.ai/pricing',
-      note: 'Modelos com sufixo :free e limites menores.',
+      note: 'O catálogo inclui modelos gratuitos com limites; confira preços e condições atuais.',
+      verifiedAt: '2026-10-28',
+      status: 'verified',
     },
   },
   {
