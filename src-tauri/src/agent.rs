@@ -148,6 +148,13 @@ pub trait AgentBackend {
     ) -> Pin<Box<dyn Future<Output = Result<ToolExecution, String>> + Send + 'a>>;
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ProviderFailure {
+    pub kind: &'static str,
+    pub message: &'static str,
+    pub technical_details: &'static str,
+}
+
 pub async fn run_agent<B: AgentBackend>(
     backend: &mut B,
     messages: &mut Vec<Message>,
@@ -188,8 +195,8 @@ pub async fn run_agent<B: AgentBackend>(
                 match result {
                     Ok(Ok(reply)) => reply,
                     Ok(Err(error)) => {
-                        let (kind, message, details) = classify_provider_error(&error);
-                        return fail_with_details(&mut emit, kind, message, Some(details.into()));
+                        let failure = classify_provider_error(&error);
+                        return fail_with_details(&mut emit, failure.kind, failure.message, Some(failure.technical_details.into()));
                     }
                     Err(_) => return fail(&mut emit, "timeout", "O tempo limite da execu\u{00e7}\u{00e3}o foi atingido."),
                 }
@@ -284,8 +291,8 @@ pub async fn run_agent<B: AgentBackend>(
             };
             let (execution, execution_failed) = match execution_result {
                 Ok(Ok(result)) => (result, false),
-                Ok(Err(_)) => (ToolExecution { content: "A ferramenta falhou. Revise os par\u{00e2}metros ou tente outro caminho seguro.".into(), audit_id: None, denied: false, external_communication: false, untrusted: true }, true),
-                Err(_) => (ToolExecution { content: "A ferramenta excedeu o tempo limite.".into(), audit_id: None, denied: false, external_communication: false, untrusted: true }, true),
+                Ok(Err(_)) => return fail(&mut emit, "tool_execution", "A ferramenta falhou e a execu\u{00e7}\u{00e3}o foi interrompida. Confira a pasta e as permiss\u{00f5}es antes de tentar novamente."),
+                Err(_) => return fail(&mut emit, "tool_timeout", "A ferramenta excedeu o tempo limite. Confira a pasta e tente novamente."),
             };
             let content = bounded_result(&execution.content);
             emit(AgentEvent::ToolResult {
@@ -406,7 +413,39 @@ fn fail_with_details(
     Err(message.into())
 }
 
-pub(crate) fn classify_provider_error(error: &str) -> (&'static str, &'static str, &'static str) {
+pub(crate) fn classify_provider_error(error: &str) -> ProviderFailure {
+    let normalized = error.to_ascii_lowercase();
+    if normalized.contains("http 404")
+        || normalized.contains("model not found")
+        || normalized.contains("modelo n\u{00e3}o foi encontrado")
+    {
+        return ProviderFailure { kind: "model_not_found", message: "O modelo ou endpoint não foi encontrado. Confira o identificador em Conectores de IA.", technical_details: "Etapa: resposta do provedor; status HTTP: 404." };
+    }
+    if normalized.contains("http 400")
+        || normalized.contains("resposta inv\u{00e1}lida")
+        || (normalized.contains("resposta") && normalized.contains("inv"))
+        || (normalized.contains("payload") && normalized.contains("inv"))
+        || normalized.contains("formato inesperado")
+        || normalized.contains("argumentos de ferramenta inv\u{00e1}lidos")
+    {
+        return ProviderFailure { kind: "invalid_response", message: "O provedor rejeitou a solicitação ou retornou uma resposta inválida. Confira o modelo e escolha um compatível com ferramentas.", technical_details: "Etapa: validação da solicitação ou resposta; status HTTP: 400 ou payload inválido." };
+    }
+    if normalized.contains("http 408") {
+        return ProviderFailure { kind: "timeout", message: "O provedor demorou para responder. Tente novamente ou escolha outro provedor conectado.", technical_details: "Etapa: resposta do provedor; status HTTP: 408." };
+    }
+    if let Some(status) = (500..=599).find(|status| normalized.contains(&format!("http {status}")))
+    {
+        return ProviderFailure { kind: "provider_unavailable", message: "O serviço do provedor está indisponível. Tente novamente ou use outro provedor conectado.", technical_details: match status { 500 => "Etapa: resposta do provedor; status HTTP: 500.", 501 => "Etapa: resposta do provedor; status HTTP: 501.", 502 => "Etapa: resposta do provedor; status HTTP: 502.", 503 => "Etapa: resposta do provedor; status HTTP: 503.", 504 => "Etapa: resposta do provedor; status HTTP: 504.", _ => "Etapa: resposta do provedor; status HTTP: 5xx." } };
+    }
+    let (kind, message, technical_details) = classify_provider_error_legacy(error);
+    ProviderFailure {
+        kind,
+        message,
+        technical_details,
+    }
+}
+
+fn classify_provider_error_legacy(error: &str) -> (&'static str, &'static str, &'static str) {
     let normalized = error.to_ascii_lowercase();
     if normalized.contains("limite diário") || normalized.contains("daily token limit") {
         return (
@@ -576,13 +615,39 @@ mod tests {
             ),
         ];
         for (technical, expected_kind, expected_message) in cases {
-            let (kind, message, details) = classify_provider_error(technical);
-            assert_eq!(kind, expected_kind);
-            assert!(message.contains(expected_message), "{message}");
+            let failure = classify_provider_error(technical);
+            assert_eq!(failure.kind, expected_kind);
             assert!(
-                !details.contains(technical),
+                failure.message.contains(expected_message),
+                "{}",
+                failure.message
+            );
+            assert!(
+                !failure.technical_details.contains(technical),
                 "details must not echo raw provider text"
             );
+        }
+        for (technical, expected_kind, status) in [
+            (
+                "O endpoint ou modelo n\u{00e3}o foi encontrado (HTTP 404).",
+                "model_not_found",
+                "404",
+            ),
+            (
+                "O provedor rejeitou os par\u{00e2}metros (HTTP 400).",
+                "invalid_response",
+                "400",
+            ),
+            (
+                "O provedor retornou uma resposta inv\u{00e1}lida.",
+                "invalid_response",
+                "payload inv\u{00e1}lido",
+            ),
+        ] {
+            let failure = classify_provider_error(technical);
+            assert_eq!(failure.kind, expected_kind);
+            assert!(failure.technical_details.contains(status));
+            assert!(!failure.technical_details.contains("pedido privado"));
         }
     }
 
@@ -1164,5 +1229,64 @@ mod tests {
         assert!(validate_tool_call(&invalid, &tools).is_err());
         invalid.args = json!({"path":"a.txt"});
         assert!(validate_tool_call(&invalid, &tools).is_ok());
+    }
+
+    struct FailedToolBackend {
+        model_calls: usize,
+    }
+
+    impl AgentBackend for FailedToolBackend {
+        fn model_turn<'a>(
+            &'a mut self,
+            _: &'a [Message],
+            _: &'a [ToolDef],
+            _: &'a CancellationToken,
+        ) -> Pin<Box<dyn Future<Output = Result<ProviderReply, String>> + Send + 'a>> {
+            Box::pin(async move {
+                self.model_calls += 1;
+                Ok(reply("", vec![call("workspace.read_file")]))
+            })
+        }
+        fn execute_tool<'a>(
+            &'a mut self,
+            _: &'a ToolCall,
+            _: bool,
+            _: &'a CancellationToken,
+        ) -> Pin<Box<dyn Future<Output = Result<ToolExecution, String>> + Send + 'a>> {
+            Box::pin(async { Err("private path and contents must not be exposed".into()) })
+        }
+    }
+
+    #[tokio::test]
+    async fn failed_tool_stops_loop_without_false_final_response_or_retry() {
+        let mut backend = FailedToolBackend { model_calls: 0 };
+        let mut messages = vec![Message {
+            role: "user".into(),
+            blocks: vec![Block::Text {
+                text: "private request".into(),
+            }],
+        }];
+        let mut events = Vec::new();
+        let error = run_agent(
+            &mut backend,
+            &mut messages,
+            &tool_definitions(),
+            AgentLimits::default(),
+            &CancellationToken::new(),
+            |event| events.push(event),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(backend.model_calls, 1);
+        assert!(error.contains("interrompida"));
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, AgentEvent::FinalResponse { .. })));
+        assert!(events.iter().any(
+            |event| matches!(event, AgentEvent::Error { kind, .. } if kind == "tool_execution")
+        ));
+        assert!(!events
+            .iter()
+            .any(|event| format!("{event:?}").contains("private path")));
     }
 }

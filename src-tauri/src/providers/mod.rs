@@ -899,6 +899,7 @@ async fn request_provider(
         _ => ChatCompletionsProvider {
             capabilities: chat_capabilities,
             include_usage: provider_id == "openai",
+            reasoning_effort: None,
         }
         .capabilities(),
     };
@@ -937,6 +938,11 @@ async fn request_provider(
             ChatCompletionsProvider {
                 capabilities: chat_capabilities,
                 include_usage: provider_id == "openai",
+                reasoning_effort: openai_reasoning_effort(
+                    provider_id,
+                    &request_data.model,
+                    !request_data.tools.is_empty(),
+                ),
             }
             .chat_stream(&client, endpoint, provider_id, &credential, &request_data)
             .await?
@@ -993,6 +999,14 @@ async fn request_provider(
         .await
         .map_err(|_| "O provedor retornou uma resposta inválida.".to_string())?;
     parse_provider_reply(provider_id, &payload)
+}
+
+fn openai_reasoning_effort(
+    provider_id: &str,
+    model: &str,
+    tools_requested: bool,
+) -> Option<&'static str> {
+    (provider_id == "openai" && model == "gpt-6-luna" && tools_requested).then_some("none")
 }
 
 pub(crate) async fn agent_model_turn(
@@ -1655,6 +1669,17 @@ mod tests {
             assert!(!message.contains("test-secret"));
         }
         assert!(provider_http_error(429).contains("limite de uso"));
+    }
+
+    #[test]
+    fn openai_gpt_6_luna_requests_tool_compatible_reasoning_only_for_tools() {
+        assert_eq!(
+            openai_reasoning_effort("openai", "gpt-6-luna", true),
+            Some("none")
+        );
+        assert_eq!(openai_reasoning_effort("openai", "gpt-6-luna", false), None);
+        assert_eq!(openai_reasoning_effort("local", "gpt-6-luna", true), None);
+        assert_eq!(openai_reasoning_effort("openai", "other-model", true), None);
     }
 
     #[test]

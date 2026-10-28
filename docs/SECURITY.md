@@ -2,6 +2,8 @@
 
 ## Loop de agente
 
+Falhas do provedor são convertidas em categorias internas e mensagens seguras antes de chegar à interface ou ao `diagnostic.log`. A classificação distingue credencial negada (401/403), limite (429), modelo/endpoint ausente (404), solicitação/resposta inválida (400 ou payload inválido), transporte e indisponibilidade 5xx. Para OpenAI `gpt-6-luna`, o adaptador inclui `reasoning_effort: none` somente quando envia ferramentas, conforme a exigência publicada para function calling no Chat Completions. Os detalhes técnicos registram somente etapa e status conhecidos; corpo da resposta, conversa, credencial e request ID não são registrados. Quando uma ferramenta falha ou excede o tempo, o loop termina sem pedir ao modelo uma resposta final que possa aparentar sucesso.
+
 `agent_run` é chamado pela tela de Conversas através de um canal Tauri. O loop usa as habilidades ativas do registro Rust, schemas fechados, limites por execução, truncamento e cancelamento. O modelo fornece somente nome e parâmetros; o Rust calcula risco, modo e decisão. A origem permanece `Model`; taint é estado separado mantido pelo Rust e força aprovação para efeitos colaterais após resultados de ferramentas.
 
 O provedor principal e os fallbacks são armazenados com a conversa. O roteador exige credencial, adaptador compatível e tool calling verificado ou opt-in nativo. O failover só ocorre em falha transitória antes de qualquer saída observada; chamadas de ferramenta só são executadas após a resposta completa e não são repetidas pelo failover. O limite por execução inclui turnos, duração, tokens, quantidade de ferramentas e chamadas repetidas.

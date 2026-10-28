@@ -51,6 +51,7 @@ impl LlmProvider for AnthropicProvider {
 pub(crate) struct ChatCompletionsProvider {
     pub(crate) capabilities: ProviderCapabilities,
     pub(crate) include_usage: bool,
+    pub(crate) reasoning_effort: Option<&'static str>,
 }
 
 impl LlmProvider for ChatCompletionsProvider {
@@ -59,7 +60,7 @@ impl LlmProvider for ChatCompletionsProvider {
     }
 
     fn request_body(&self, request: &ChatRequest) -> Value {
-        chat_completions::chat_request_body(request, self.include_usage)
+        chat_completions::chat_request_body(request, self.include_usage, self.reasoning_effort)
     }
 }
 

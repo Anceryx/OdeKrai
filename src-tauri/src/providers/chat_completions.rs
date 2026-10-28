@@ -1,8 +1,15 @@
 use super::ChatRequest;
 use serde_json::{json, Value};
 
-pub(super) fn chat_request_body(request: &ChatRequest, include_usage: bool) -> Value {
+pub(super) fn chat_request_body(
+    request: &ChatRequest,
+    include_usage: bool,
+    reasoning_effort: Option<&str>,
+) -> Value {
     let mut body = request_body_neutral(request);
+    if let Some(reasoning_effort) = reasoning_effort {
+        body["reasoning_effort"] = json!(reasoning_effort);
+    }
     if !request.tools.is_empty() {
         body["tools"] = Value::Array(
             request
@@ -135,11 +142,12 @@ mod tests {
             streaming: true,
         };
 
-        let body = chat_request_body(&request, true);
+        let body = chat_request_body(&request, true, Some("none"));
         assert_eq!(body["tools"][0]["function"]["name"], "lookup");
         assert_eq!(body["messages"][0]["tool_calls"][0]["id"], "call-1");
         assert_eq!(body["messages"][1]["tool_call_id"], "call-1");
         assert_eq!(body["messages"][2]["tool_call_id"], "call-2");
         assert_eq!(body["stream_options"]["include_usage"], true);
+        assert_eq!(body["reasoning_effort"], "none");
     }
 }

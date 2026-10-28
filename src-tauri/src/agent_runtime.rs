@@ -317,7 +317,23 @@ impl AgentBackend for RuntimeBackend<'_> {
                     &mut on_approval,
                     &mut on_output,
                 )
-                .await?;
+                .await;
+            let result = match result {
+                Ok(result) => result,
+                Err(_) => {
+                    card.decision = if approved_by_user.load(Ordering::SeqCst) {
+                        "aprovada".into()
+                    } else {
+                        "automática".into()
+                    };
+                    card.status = "Falhou".into();
+                    card.result_summary =
+                        "A ferramenta falhou; nenhum resultado foi confirmado.".into();
+                    crate::history::save_agent_action_card(&self.app, &conversation_id, &card)?;
+                    let _ = self.events.send(AgentEvent::ActionCard { card });
+                    return Err("A ferramenta falhou durante a execução.".into());
+                }
+            };
             let status = result.status.clone();
             card.decision = if approved_by_user.load(Ordering::SeqCst) {
                 if result.message.contains("expir") {
@@ -431,6 +447,7 @@ pub async fn agent_run(
     on_event: Channel<AgentEvent>,
 ) -> Result<String, String> {
     crate::require_main(&caller)?;
+    let error_emitted = Arc::new(AtomicBool::new(false));
     let result = agent_run_inner(
         app.clone(),
         &state,
@@ -438,11 +455,15 @@ pub async fn agent_run(
         message,
         daily_token_limit,
         on_event.clone(),
+        error_emitted.clone(),
     )
     .await;
     match result {
         Ok(answer) => Ok(answer),
         Err(error) => {
+            if error_emitted.load(Ordering::SeqCst) || error == "Execu\u{00e7}\u{00e3}o parada." {
+                return Err(error);
+            }
             let (kind, message, technical_details) = classify_agent_error(&error);
             crate::diagnostics::log_agent_error(&app, kind, technical_details);
             let _ = on_event.send(AgentEvent::Error {
@@ -462,6 +483,7 @@ async fn agent_run_inner(
     message: String,
     daily_token_limit: u64,
     on_event: Channel<AgentEvent>,
+    error_emitted: Arc<AtomicBool>,
 ) -> Result<String, String> {
     if message.trim().is_empty() || message.len() > 1_000_000 {
         return Err("Informe uma mensagem válida para o agente.".into());
@@ -540,9 +562,22 @@ async fn agent_run_inner(
         get_agent_limits_inner(&app)?.runtime_limits(),
         &token,
         |event| {
-            if !matches!(event, AgentEvent::Error { .. }) {
-                let _ = on_event.send(event);
+            if let AgentEvent::Error {
+                ref kind,
+                ref technical_details,
+                ..
+            } = event
+            {
+                error_emitted.store(true, Ordering::SeqCst);
+                crate::diagnostics::log_agent_error(
+                    &app,
+                    kind,
+                    technical_details
+                        .as_deref()
+                        .unwrap_or("Falha classificada sem detalhe técnico."),
+                );
             }
+            let _ = on_event.send(event);
         },
     )
     .await;
@@ -558,6 +593,13 @@ async fn agent_run_inner(
 
 fn classify_agent_error(error: &str) -> (&'static str, &'static str, &'static str) {
     let normalized = error.to_ascii_lowercase();
+    if normalized.contains("ferramenta falhou") {
+        return (
+            "tool_execution",
+            "A ferramenta não concluiu a ação. Confira a pasta e as permissões antes de tentar novamente.",
+            "Etapa: execução da ferramenta; resultado não confirmado.",
+        );
+    }
     if normalized.contains("pasta configurada foi movida")
         || normalized.contains("configure a pasta")
         || normalized.contains("pasta e a identidade")
@@ -589,7 +631,8 @@ fn classify_agent_error(error: &str) -> (&'static str, &'static str, &'static st
             "Bloqueio local: limite de tokens por execução.",
         );
     }
-    crate::agent::classify_provider_error(error)
+    let failure = crate::agent::classify_provider_error(error);
+    (failure.kind, failure.message, failure.technical_details)
 }
 
 #[cfg(test)]
