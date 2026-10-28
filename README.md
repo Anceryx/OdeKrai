@@ -1,48 +1,65 @@
-# OdeKrai
+![Banner do OdeKrai](banner.png)
 
 [Português (Brasil)](README.md) · [English](README.en.md)
 
-![Banner do OdeKrai](banner.png)
+**Um assistente de IA para o seu Windows, com um mascote que fica ao seu lado.**
 
-Aplicativo OdeKrai para Windows, desenvolvido com React, TypeScript e Tauri 2. O projeto está em desenvolvimento: o build do frontend e os testes automatizados não comprovam a inspeção visual nem a validação dos adaptadores com contas reais.
+O OdeKrai conversa com o provedor de IA que você configurar e pode executar habilidades no computador dentro das permissões definidas por você. A interface reúne conversas, configurações e um mascote que acompanha o uso do aplicativo.
 
-## Recursos implementados
+> Projeto em pré-lançamento (versão 0.14.0), para Windows.
 
-- Habilidades locais em Rust para ler arquivos e criar eventos `.ics`, documentos Markdown/texto e CSV em pastas permitidas. Eventos são abertos no calendário padrão para confirmação; não há integração com Google Calendar nem OAuth.
+## Destaques
 
-- Aplicativo com visão geral, conversas, catálogo de 17 provedores e configurações do assistente.
-- Uma janela nativa do Tauri para os modos Ilha e Livre do pet, com posição, tamanho e modo persistidos.
-- Preferências locais sem chaves de API.
-- Armazenamento de credenciais via Gerenciador de Credenciais do Windows e envio de mensagens pelo processo Rust.
-- Histórico de conversas em SQLite local, com retomada da conversa e respostas incrementais para Anthropic e adaptadores Chat Completions. A Perplexity ainda retorna a resposta completa.
-- Pasta pessoal escolhida na primeira execução, identidade `ODEKRAI.md` e memória manual editáveis. O histórico pode ser apagado na interface. O motor de permissões em Rust inclui aprovação nativa, auditoria encadeada, kill switch, habilidades de arquivos e exportação de calendário, documentos e CSV.
-- Perfil local em SQLite, com avatar reprocessado no Rust e nunca enviado aos provedores.
-- Instância única, CSP de produção restrita e permissões separadas para as janelas auxiliares.
-- Inicialização tolerante a falhas, modo seguro após interrupção e registro local de diagnóstico sem conteúdo de conversas.
-- Adaptadores para 13 APIs Chat Completions remotas, Anthropic Messages, Perplexity Agent API e conexão local OpenAI compatível. Vertex AI continua como guia pendente de ADC/OAuth.
-- Conector IA local para servidores Ollama ou llama.cpp já iniciados, com seleção de modelos e conversa por streaming; não baixa modelos nem inicia servidores.
-- A tela “Seu computador” mostra RAM, espaço livre para modelos, CPU e adaptadores DXGI; a recomendação é indicativa. O catálogo Qwen registra metadados de arquivos GGUF consultados no Hugging Face, enquanto requisitos mínimos e contexto permanecem não verificados. A escolha não baixa nem executa modelos.
-- Pet 2D com 12 personagens CC0 renderizados em 512×512, escolha persistida no SQLite e animações
-  CSS.
+- **Escolha a sua IA:** provedores de nuvem, opções com plano gratuito sinalizado e conexão com servidor local compatível.
+- **Um mascote com nome:** 12 personagens com animações e modos Ilha e Livre.
+- **Habilidades locais:** o agente pode executar ações registradas no aplicativo, sujeitas às permissões do Rust.
+- **Você no controle:** modos de permissão, aprovações, registro de atividade e kill switch.
+- **Configurações locais:** credenciais de provedores são armazenadas pelo Rust no Gerenciador de Credenciais do Windows.
 
-## Requisitos e execução
+## O que o OdeKrai faz
 
-- Windows 10/11 x64, Node.js 20.19+ ou 22.12+, Rust estável, MSVC Build Tools, Windows SDK e WebView2 Runtime.
-- `npm install`, `npm run dev`, `npm run build`, `npm test`.
-- `npm run tauri:dev` inicia o aplicativo; `npm run tauri:build` gera os artefatos Windows.
+### Conversas e provedores
 
-No catálogo, cada provedor mantém seu endpoint e modelo. A validação de endpoint acontece antes de salvar a credencial; a listagem de modelos só aparece quando documentada para esse endpoint. **Testar conexão** usa essa listagem sem enviar um prompt de geração; para provedores sem listagem, o resultado é parcial. Vertex AI e autenticação AWS IAM/SigV4 não estão integrados.
+O catálogo inclui OpenAI, Anthropic, Google Gemini, xAI, Mistral, Cohere, Groq, DeepSeek, Perplexity, Cerebras, Together AI, OpenRouter, Fireworks AI, Azure OpenAI e AWS Bedrock. Vertex AI aparece como guia de integração, sem autenticação integrada. A conexão local é compatível com servidores como Ollama e llama.cpp já iniciados.
+
+O catálogo sinaliza opções gratuitas para Google Gemini, Mistral, Groq, Cerebras e OpenRouter; disponibilidade e limites dependem do provedor, modelo e conta. É possível configurar um provedor principal e reservas. O failover é limitado a falhas transitórias antes de haver saída observada; chamadas de ferramentas não são repetidas pelo failover.
+
+As conversas são mantidas no histórico SQLite local. Para responder, o conteúdo enviado é encaminhado ao provedor configurado. O aplicativo também oferece respostas em streaming quando suportadas pelo adaptador, busca no histórico e abertura de links externos com confirmação por domínio.
+
+### Agente e habilidades
+
+Ative o modo agente em uma conversa para permitir que o modelo solicite habilidades registradas no Rust. As habilidades disponíveis incluem operações de leitura e organização de arquivos em pastas permitidas; criação de arquivos de calendário `.ics`, Markdown, texto e CSV; abertura de links, arquivos e configurações do Windows; notificações, área de transferência, informações do sistema, volume e controles de mídia; rascunhos de e-mail; envio aprovado por webhook do Discord; leitura de páginas web; e delegação de código ao Codex CLI ou Claude Code.
+
+As habilidades começam desativadas e podem ser habilitadas na tela Habilidades. Os resultados de conteúdo externo são tratados como não confiáveis, e ações com efeitos colaterais podem exigir aprovação conforme a política aplicada pelo Rust.
+
+### Permissões e segurança
+
+- **Aprovar por mim**, **Sempre perguntar** e **Controle total** são os modos disponíveis; bloqueios fixos continuam valendo em todos eles.
+- Aprovações são apresentadas em janela própria. O atalho global configurado aciona o kill switch, que interrompe execuções e bloqueia novas ações até ser retomado.
+- O registro de auditoria local encadeia entradas e bloqueia ações se uma gravação ou verificação falhar.
+- O Rust valida habilidades, riscos, caminhos e permissões. O WebView apresenta o estado e encaminha decisões do usuário.
+
+### Identidade, mascote e sons
+
+O aplicativo oferece uma pasta pessoal, identidade `ODEKRAI.md` aprovada pelo usuário, notas de memória editáveis e perfil local. O mascote tem 12 personagens e animações associadas aos estados do aplicativo. Pode aparecer nos modos Ilha e Livre, com posição persistida. Há sons de interface configuráveis e opção para minimizar para a bandeja ao fechar a janela.
+
+### Privacidade
+
+Credenciais de provedores são guardadas pelo backend Rust no Gerenciador de Credenciais do Windows. O histórico, perfil e preferências usam armazenamento local; isso não significa que o banco local ou backups sejam criptografados. O conteúdo enviado em uma conversa vai ao provedor escolhido. Os logs de diagnóstico não incluem o conteúdo das conversas.
+
+## Instalação e desenvolvimento
+
+O projeto está em pré-lançamento. O bundle Windows configurado é NSIS. Para desenvolvimento, são necessários Windows, Node.js 22.12 ou superior, Rust e as ferramentas C++ da Microsoft, Windows SDK e WebView2 Runtime.
+
+```powershell
+npm ci
+npm run tauri:dev
+```
 
 ## Capturas de tela
 
-Não há capturas verificadas desta revisão. Para capturá-las, consulte [docs/TESTING.md](docs/TESTING.md) e registre as telas do aplicativo, catálogo, ilha e modo livre depois de executar o build atualizado. Não use imagens conceituais como evidência de execução.
+As capturas ficam em `docs/screenshots/`.
 
-## Documentação
+## Licenças e créditos
 
-- [Arquitetura](docs/ARCHITECTURE.md) · [Segurança](docs/SECURITY.md) · [Privacidade](docs/PRIVACY.md)
-- [Provedores](docs/AI-PROVIDERS.md) · [Desenvolvimento](docs/DEVELOPMENT.md) · [Testes](docs/TESTING.md)
-- [Assets](docs/ASSET-GUIDE.md) · [Áudio](docs/AUDIO-ASSETS.md) · [Status](docs/IMPLEMENTATION-STATUS.md) · [Continuação](docs/CONTINUATION.md)
-
-## Licenças
-
-O código original está sob MIT. Essa licença não concede direitos sobre a marca ou arquivos oficiais do mascote. Consulte [LICENSE-ASSETS.md](LICENSE-ASSETS.md) e [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Não distribua os assets privados.
+Consulte `LICENSE`, `THIRD_PARTY_NOTICES.md` e `LICENSE-ASSETS.md` para os termos do código, dependências e assets. Não distribua assets privados do proprietário.

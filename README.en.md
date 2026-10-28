@@ -1,39 +1,65 @@
-# OdeKrai
+![OdeKrai banner](banner.png)
 
 [Português (Brasil)](README.md) · [English](README.en.md)
 
-![OdeKrai banner](banner.png)
+**An AI assistant for your Windows PC, with a mascot by your side.**
 
-A personal AI assistant for Windows, built with React, TypeScript, and Tauri 2. The application is named **OdeKrai**. This project is under development: a frontend build and automated tests do not prove visual inspection or live provider validation.
+OdeKrai chats with the AI provider you configure and can run skills on your computer within the permissions you set. The interface brings together conversations, settings, and a mascot that accompanies you while using the app.
 
-## Implemented features
+> Pre-release project (version 0.14.0), for Windows.
 
-- App with overview, chat, a catalog of 16 providers, and assistant settings.
-- Native Tauri windows for the floating island and free mascot mode.
-- Local preferences without API keys.
-- Credential storage through Windows Credential Manager and message requests through the Rust process.
-- A Rust permission engine with native, one-time approvals, chained local audit logs, and a global kill switch. Only simulated tools are available in this phase.
-- Adapters for 12 Chat Completions APIs, Anthropic Messages, and Perplexity Agent API. Vertex AI remains a guide pending ADC/OAuth integration.
-- 2D pet with 12 CC0 characters rendered at 512×512, a saved selection, and CSS animations.
+## Highlights
 
-## Requirements and development
+- **Choose your AI:** cloud providers, options flagged with a free plan, and connections to compatible local servers.
+- **A named mascot:** 12 characters with animations and Island and Free modes.
+- **Local skills:** the agent can run actions registered by the app, subject to Rust-enforced permissions.
+- **You stay in control:** permission modes, approvals, activity records, and a kill switch.
+- **Local settings:** provider credentials are stored by Rust in Windows Credential Manager.
 
-- Windows 10/11 x64, Node.js 20.19+ or 22.12+, stable Rust, MSVC Build Tools, Windows SDK, and WebView2 Runtime.
-- `npm install`, `npm run dev`, `npm run build`, `npm test`.
-- `npm run tauri:dev` starts the app; `npm run tauri:build` creates Windows artifacts.
+## What OdeKrai does
 
-In the catalog, enter an allowed endpoint, model ID, and credential. Saving does not validate access. **Test connection** sends a real request and may incur charges. Supported credentials are stored in Windows Credential Manager. Model lists appear only where the provider documents support. Vertex AI and AWS IAM/SigV4 authentication are not integrated.
+### Conversations and providers
+
+The catalog includes OpenAI, Anthropic, Google Gemini, xAI, Mistral, Cohere, Groq, DeepSeek, Perplexity, Cerebras, Together AI, OpenRouter, Fireworks AI, Azure OpenAI, and AWS Bedrock. Vertex AI appears as an integration guide, without integrated authentication. Local connections support compatible servers such as Ollama and llama.cpp that are already running.
+
+The catalog flags free options for Google Gemini, Mistral, Groq, Cerebras, and OpenRouter; availability and limits depend on the provider, model, and account. You can configure a primary provider and backups. Failover is limited to transient failures before any output is observed; tool calls are not repeated by failover.
+
+Conversations are kept in local SQLite history. To generate a reply, submitted content is sent to the configured provider. The app also offers streaming responses when supported by the adapter, searchable history, and external links that require confirmation by domain.
+
+### Agent and skills
+
+Turn on agent mode in a conversation to let the model request skills registered in Rust. Available skills include reading and organizing files in allowed folders; creating `.ics` calendar, Markdown, text, and CSV files; opening links, files, and Windows settings; notifications, clipboard, system information, volume, and media controls; email drafts; approved Discord webhook messages; reading web pages; and code delegation to Codex CLI or Claude Code.
+
+Skills start disabled and can be enabled on the Skills screen. Results from external content are treated as untrusted, and actions with side effects may require approval under the policy enforced by Rust.
+
+### Permissions and security
+
+- **Approve for me**, **Always ask**, and **Full control** are the available modes; fixed blocks apply in every mode.
+- Approvals appear in a dedicated window. The configured global shortcut triggers the kill switch, which stops runs and blocks new actions until resumed.
+- The local audit log chains entries and blocks actions if a write or verification fails.
+- Rust validates skills, risks, paths, and permissions. The WebView displays state and relays user decisions.
+
+### Identity, mascot, and sounds
+
+The app provides a personal folder, user-approved `ODEKRAI.md` identity, editable memory notes, and a local profile. The mascot has 12 characters and animations associated with app states. It can appear in Island and Free modes, with its position saved. The app has configurable interface sounds and an option to minimize to the tray when the window closes.
+
+### Privacy
+
+Provider credentials are stored by the Rust backend in Windows Credential Manager. History, profile, and preferences use local storage; this does not mean the local database or backups are encrypted. Conversation content is sent to the provider you choose. Diagnostic logs do not include conversation content.
+
+## Installation and development
+
+The project is in pre-release. The configured Windows bundle is NSIS. Development requires Windows, Node.js 22.12 or newer, Rust, the Microsoft C++ build tools, Windows SDK, and WebView2 Runtime.
+
+```powershell
+npm ci
+npm run tauri:dev
+```
 
 ## Screenshots
 
-No verified screenshots are available for this revision. See [docs/TESTING.md](docs/TESTING.md) for capture steps, then record the app, provider catalog, island, and free-mode windows after running the updated build. Do not present concept images as runtime evidence.
+Screenshots live in `docs/screenshots/`.
 
-## Documentation
+## Licenses and credits
 
-- [Architecture](docs/ARCHITECTURE.md) · [Security](docs/SECURITY.md) · [Privacy](docs/PRIVACY.md)
-- [AI providers](docs/AI-PROVIDERS.md) · [Development](docs/DEVELOPMENT.md) · [Testing](docs/TESTING.md)
-- [Assets](docs/ASSET-GUIDE.md) · [Audio](docs/AUDIO-ASSETS.md) · [Implementation status](docs/IMPLEMENTATION-STATUS.md) · [Continuation](docs/CONTINUATION.md)
-
-## Licensing
-
-Original code is MIT licensed. This license does not grant rights to the brand or official mascot files. See [LICENSE-ASSETS.md](LICENSE-ASSETS.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Do not distribute private assets.
+See `LICENSE`, `THIRD_PARTY_NOTICES.md`, and `LICENSE-ASSETS.md` for the terms covering the code, dependencies, and assets. Do not distribute the owner's private assets.
