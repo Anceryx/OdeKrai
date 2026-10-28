@@ -77,6 +77,54 @@ pub fn discord_list(
         .map_err(|_| "Não foi possível listar os webhooks.".into())
 }
 
+pub fn discord_is_configured(app: &tauri::AppHandle) -> Result<bool, String> {
+    let db = crate::security::database(app)?;
+    let mut stmt = db
+        .prepare("SELECT id FROM discord_webhooks")
+        .map_err(|_| "Não foi possível verificar a configuração do Discord.".to_string())?;
+    let ids = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|_| "Não foi possível verificar a configuração do Discord.".to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| "Não foi possível verificar a configuração do Discord.".to_string())?;
+    Ok(ids.into_iter().any(|id| {
+        credential(&id)
+            .and_then(|entry| entry.get_password().map_err(|_| "indisponível".to_string()))
+            .is_ok_and(|url| validate_webhook_url(&url).is_ok())
+    }))
+}
+
+fn connection_status(status: reqwest::StatusCode) -> Result<(), String> {
+    match status.as_u16() {
+        200..=299 => Ok(()),
+        401 | 403 | 404 => {
+            Err("Discord recusou a credencial: webhook inválido ou revogado.".into())
+        }
+        429 => Err("Discord limitou a frequência (429). Aguarde antes de tentar novamente.".into()),
+        code => Err(format!(
+            "Discord respondeu com HTTP {code} ao testar a conexão."
+        )),
+    }
+}
+
+#[tauri::command]
+pub async fn discord_test_connection(
+    caller: tauri::WebviewWindow,
+    url: String,
+) -> Result<(), String> {
+    crate::require_main(&caller)?;
+    validate_webhook_url(&url)?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|_| "Não foi possível preparar o teste seguro.".to_string())?;
+    let response = client.get(&url).send().await.map_err(|_| {
+        "Falha de conexão com o Discord; a URL e a credencial foram omitidas.".to_string()
+    })?;
+    connection_status(response.status())
+}
+
 #[tauri::command]
 pub fn discord_save(
     app: tauri::AppHandle,
@@ -131,6 +179,13 @@ pub fn discord_remove(
     })?;
     db.execute("DELETE FROM discord_webhooks WHERE id=?1", [&id])
         .map_err(|_| "Não foi possível remover o webhook.".to_string())?;
+    if !discord_is_configured(&app)? {
+        db.execute(
+            "UPDATE skill_settings SET enabled=0 WHERE skill_id='discord.send'",
+            [],
+        )
+        .map_err(|_| "Não foi possível desativar a habilidade do Discord.".to_string())?;
+    }
     Ok(())
 }
 
@@ -232,6 +287,18 @@ mod tests {
         )
         .is_ok());
         for url in ["https://evil.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz", "https://discord.com.evil.test/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz", "https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz/extra", "http://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz"] { assert!(validate_webhook_url(url).is_err()); }
+    }
+
+    #[test]
+    fn connection_status_reports_success_and_safe_failures() {
+        assert!(connection_status(reqwest::StatusCode::OK).is_ok());
+        assert_eq!(
+            connection_status(reqwest::StatusCode::NOT_FOUND).unwrap_err(),
+            "Discord recusou a credencial: webhook inválido ou revogado."
+        );
+        assert!(connection_status(reqwest::StatusCode::TOO_MANY_REQUESTS)
+            .unwrap_err()
+            .contains("429"));
     }
 
     #[test]

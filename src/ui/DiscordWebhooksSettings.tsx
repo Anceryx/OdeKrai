@@ -2,13 +2,21 @@ import { useCallback, useEffect, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { Button } from './DesignSystem';
 import { Icon } from './Icon';
+import {
+  revokeDiscordIntegration,
+  saveDiscordIntegration,
+  testDiscordConnection,
+} from '../core/discord-integration';
 
 type DiscordWebhook = { id: string; name: string };
 
-export function DiscordWebhooksSettings() {
+export function DiscordWebhooksSettings({ onChanged }: { onChanged?: () => Promise<void> }) {
   const [webhooks, setWebhooks] = useState<DiscordWebhook[]>([]);
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
+  const [authorized, setAuthorized] = useState(false);
+  const [connectionTested, setConnectionTested] = useState(false);
+  const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -29,10 +37,30 @@ export function DiscordWebhooksSettings() {
   async function save() {
     setBusy(true);
     try {
-      await invoke('discord_save', { name, url });
+      await saveDiscordIntegration(name, url, authorized, connectionTested, invoke);
       setName('');
       setUrl('');
+      setAuthorized(false);
+      setConnectionTested(false);
+      setNotice('Integração configurada. A URL não será exibida novamente.');
       await refresh();
+      await onChanged?.();
+    } catch (cause) {
+      setError(String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function testConnection() {
+    setBusy(true);
+    setConnectionTested(false);
+    setNotice('');
+    try {
+      await testDiscordConnection(url, authorized, invoke);
+      setConnectionTested(true);
+      setNotice('Conexão confirmada. Nenhuma mensagem foi enviada.');
+      setError('');
     } catch (cause) {
       setError(String(cause));
     } finally {
@@ -43,8 +71,9 @@ export function DiscordWebhooksSettings() {
   async function remove(webhook: DiscordWebhook) {
     setBusy(true);
     try {
-      await invoke('discord_remove', { webhookId: webhook.id });
+      await revokeDiscordIntegration(webhook.id, invoke);
       await refresh();
+      await onChanged?.();
     } catch (cause) {
       setError(String(cause));
     } finally {
@@ -53,37 +82,77 @@ export function DiscordWebhooksSettings() {
   }
 
   return (
-    <section className="settings-panel settings-section allowed-folders-section">
-      <h2>Webhooks do Discord</h2>
+    <section
+      className="settings-panel settings-section allowed-folders-section"
+      aria-labelledby="discord-integration-heading"
+    >
+      <h3 id="discord-integration-heading">Discord · webhook de saída</h3>
       <p className="settings-description">
-        Cadastre um nome e a URL recebida do Discord. A URL fica no Gerenciador de Credenciais do
-        Windows e não volta a ser exibida.
+        Permite enviar mensagens ao canal associado ao webhook, sempre após aprovação da ação. Não
+        há escopos OAuth nem acesso de leitura ao Discord. Ao remover esta integração, apagamos a
+        credencial deste app; para revogá-la no Discord, exclua o webhook nas configurações do
+        servidor.
       </p>
       {error && (
         <div className="error-banner" role="alert">
           {error}
         </div>
       )}
-      <label>
+      {notice && (
+        <div role="status" className="success-banner">
+          {notice}
+        </div>
+      )}
+      <label className="discord-secret-field">
         Nome do webhook
-        <input value={name} maxLength={60} onChange={(event) => setName(event.target.value)} />
+        <input
+          value={name}
+          maxLength={60}
+          autoComplete="off"
+          onChange={(event) => {
+            setName(event.target.value);
+            setConnectionTested(false);
+          }}
+        />
       </label>
-      <label>
+      <label className="discord-secret-field">
         URL do webhook
         <input
           type="password"
           autoComplete="new-password"
           value={url}
-          onChange={(event) => setUrl(event.target.value)}
+          onChange={(event) => {
+            setUrl(event.target.value);
+            setConnectionTested(false);
+          }}
         />
       </label>
-      <Button
-        variant="secondary"
-        disabled={busy || !isTauri() || !name.trim() || !url}
-        onClick={() => void save()}
-      >
-        Salvar webhook
-      </Button>
+      <label className="discord-consent">
+        <input
+          type="checkbox"
+          checked={authorized}
+          onChange={(event) => setAuthorized(event.target.checked)}
+        />
+        Autorizo enviar a credencial ao Discord para validar o webhook, salvá-la no Gerenciador de
+        Credenciais do Windows e permitir mensagens ao canal configurado, sujeitas à aprovação de
+        cada ação.
+      </label>
+      <div className="folder-shortcuts">
+        <Button
+          variant="secondary"
+          disabled={busy || !isTauri() || !url || !authorized}
+          onClick={() => void testConnection()}
+        >
+          Testar conexão
+        </Button>
+        <Button
+          variant="secondary"
+          disabled={busy || !isTauri() || !name.trim() || !url || !authorized || !connectionTested}
+          onClick={() => void save()}
+        >
+          Autorizar e salvar
+        </Button>
+      </div>
       <ul className="allowed-folder-list">
         {webhooks.map((webhook) => (
           <li key={webhook.id}>

@@ -505,7 +505,9 @@ async fn agent_run_inner(
     let mut messages = crate::history::load_agent_context(&app, &conversation_id)?.4;
     let mut active_skills = Vec::new();
     for skill in security::skills::registry() {
-        if security::skills::is_skill_enabled(&app, skill.id)? {
+        if security::skills::skill_available(skill.id)
+            && security::skills::is_skill_enabled(&app, skill.id)?
+        {
             active_skills.push(skill);
         }
     }

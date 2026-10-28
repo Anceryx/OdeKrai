@@ -2,6 +2,17 @@ import { useCallback, useEffect, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { desktopDir, documentDir, downloadDir, pictureDir } from '@tauri-apps/api/path';
 import { open } from '@tauri-apps/plugin-dialog';
+import {
+  canEnableSkill,
+  filterSkills,
+  groupEnableTarget,
+  groupSkills,
+  setSkillEnabledCommand,
+  setSkillGroupEnabledCommand,
+  type SkillCategory,
+  type SkillStatus,
+} from '../core/skills-catalog';
+import { DiscordWebhooksSettings } from './DiscordWebhooksSettings';
 import { Icon } from './Icon';
 import { Button, PageHeader, SelectInput, Toggle } from './DesignSystem';
 
@@ -20,6 +31,9 @@ type Skill = {
   enabled: boolean;
   morePermissive: boolean;
   fixedBlocked: boolean;
+  category: SkillCategory;
+  status: SkillStatus;
+  configurationRequired: boolean;
 };
 type Folder = { path: string; access: 'read_only' | 'read_write'; workspace: boolean };
 type AllowedApp = { id: string; name: string; path: string };
@@ -39,6 +53,7 @@ export function SkillsScreen() {
   const [access, setAccess] = useState<'read_only' | 'read_write'>('read_only');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState('');
 
   const refresh = useCallback(async () => {
     if (!isTauri()) return;
@@ -64,7 +79,22 @@ export function SkillsScreen() {
   async function setEnabled(skill: Skill, enabled: boolean) {
     setBusy(true);
     try {
-      await invoke('set_skill_enabled', { skillId: skill.id, enabled });
+      await setSkillEnabledCommand(skill.id, enabled, invoke);
+      await refresh();
+    } catch (cause) {
+      setError(String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setGroupEnabled(category: SkillCategory) {
+    const members = groupSkills(skills, category);
+    const target = groupEnableTarget(members, true);
+    if (target === undefined) return;
+    setBusy(true);
+    try {
+      await setSkillGroupEnabledCommand(category, target, invoke);
       await refresh();
     } catch (cause) {
       setError(String(cause));
@@ -170,104 +200,162 @@ export function SkillsScreen() {
     }
   }
 
-  const workspaceSkills = skills.filter(
-    ({ id }) => id.startsWith('workspace.') || id.startsWith('files.'),
-  );
-  const simulatedSkills = skills.filter(({ id }) => id.startsWith('simulated.'));
-  const productivitySkills = skills.filter(({ id }) =>
-    [
-      'calendar.',
-      'reminder.',
-      'doc.',
-      'sheet.',
-      'memory.',
-      'discord.',
-      'system.',
-      'audio.',
-      'media.',
-      'settings.',
-      'notification.',
-      'app.',
-      'clipboard.',
-    ].some((prefix) => id.startsWith(prefix)),
-  );
+  const filteredSkills = filterSkills(skills, query);
+  const localSkills = groupSkills(filteredSkills, 'local');
+  const integrationSkills = groupSkills(filteredSkills, 'integration');
+  const statusLabels: Record<SkillStatus, string> = {
+    installed: 'INSTALADO',
+    available: 'DISPONÍVEL',
+    configuration_required: 'REQUER CONFIGURAÇÃO',
+    unavailable: 'INDISPONÍVEL',
+  };
+
+  function renderGroup(category: SkillCategory, items: Skill[]) {
+    if (query.trim() && items.length === 0) return null;
+    const allMembers = groupSkills(skills, category);
+    const configured = !allMembers.some((skill) => skill.status === 'configuration_required');
+    const target = groupEnableTarget(allMembers, configured);
+    return (
+      <section
+        className="settings-section skills-catalog-group"
+        aria-labelledby={`skills-${category}-heading`}
+      >
+        <div className="section-heading-row">
+          <div>
+            <h2 id={`skills-${category}-heading`}>
+              {category === 'local' ? 'Habilidades locais' : 'Integrações'}
+            </h2>
+            <p>
+              {category === 'local'
+                ? 'Arquivos, sistema, agenda, lembretes, memória, áudio e mídia neste computador.'
+                : 'Serviços externos disponíveis no registro do aplicativo. Integrações novas exigem atualização do OdeKrai.'}
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            disabled={busy || !isTauri() || target === undefined || items.length === 0}
+            aria-label={`${target ? 'Ativar' : 'Desativar'} todas as ${category === 'local' ? 'habilidades locais' : 'integrações disponíveis'}`}
+            onClick={() => void setGroupEnabled(category)}
+          >
+            {target ? 'Ativar todas do grupo' : 'Desativar grupo'}
+          </Button>
+        </div>
+        {items.length === 0 ? (
+          <p className="skills-empty">Nenhuma capacidade corresponde à pesquisa.</p>
+        ) : (
+          items.map((skill) => (
+            <article className="skill-card" key={skill.id}>
+              <div>
+                <div className="skill-title-row">
+                  <h3>{skill.name}</h3>
+                  <span className={`skill-status skill-status--${skill.status}`}>
+                    {statusLabels[skill.status]}
+                  </span>
+                </div>
+                <p>{skill.description}</p>
+                <small>Risco: {riskLabels[skill.risk]}</small>
+              </div>
+              <div className="skill-switch">
+                <label htmlFor={`skill-${skill.id}`}>Ativar capacidade</label>
+                <Toggle
+                  id={`skill-${skill.id}`}
+                  checked={skill.enabled}
+                  label={`Ativar ${skill.name}`}
+                  disabled={
+                    busy ||
+                    !isTauri() ||
+                    !canEnableSkill(skill, skill.status !== 'configuration_required')
+                  }
+                  onClick={() => void setEnabled(skill, !skill.enabled)}
+                />
+              </div>
+              <details className="skill-advanced">
+                <summary>Detalhes avançados e permissões</summary>
+                <p>
+                  Identificador: <code>{skill.id}</code>. Resultados externos podem conter
+                  instruções maliciosas e são tratados como dados, nunca como autorização.
+                </p>
+                {!skill.fixedBlocked && skill.status !== 'unavailable' && (
+                  <div className="skill-switch">
+                    <label htmlFor={`override-${skill.id}`}>
+                      Permitir modo mais permissivo para esta ferramenta
+                    </label>
+                    <Toggle
+                      id={`override-${skill.id}`}
+                      checked={skill.morePermissive}
+                      label={`Permitir modo mais permissivo para ${skill.name}`}
+                      disabled={busy || !isTauri()}
+                      onClick={() => void setOverride(skill, !skill.morePermissive)}
+                    />
+                  </div>
+                )}
+                {skill.status === 'unavailable' && (
+                  <p>
+                    Esta entrada existe apenas para informar que a capacidade não está implementada
+                    e não pode ser ativada.
+                  </p>
+                )}
+              </details>
+            </article>
+          ))
+        )}
+      </section>
+    );
+  }
 
   return (
     <div className="page subpage skills-page">
       <PageHeader
-        eyebrow="AUTOMAÇÃO LOCAL"
+        eyebrow="CAPACIDADES DO APLICATIVO"
         title="Habilidades"
-        subtitle="Escolha quais capacidades podem ser oferecidas ao assistente."
+        subtitle="Pesquise o registro Rust do aplicativo, confira os riscos e escolha o que pode ser oferecido ao assistente."
       />
       {error && (
         <div className="error-banner" role="alert">
           {error}
         </div>
       )}
-      <section className="settings-section">
-        <h2>Arquivos e pastas</h2>
-        {workspaceSkills.map((skill) => (
-          <article className="skill-card" key={skill.id}>
-            <div>
-              <h3>{skill.name}</h3>
-              <p>{skill.description}</p>
-              <small>Risco: {riskLabels[skill.risk]}</small>
-            </div>
-            <div className="skill-switch">
-              <span>Ativar</span>
-              <Toggle
-                checked={skill.enabled}
-                label={`Ativar ${skill.name}`}
-                disabled={busy || !isTauri()}
-                onClick={() => void setEnabled(skill, !skill.enabled)}
-              />
-            </div>
-            {!skill.fixedBlocked && (
-              <div className="skill-switch">
-                <span>Usar modo mais permissivo</span>
-                <Toggle
-                  checked={skill.morePermissive}
-                  label={`Usar modo mais permissivo para ${skill.name}`}
-                  disabled={busy || !isTauri()}
-                  onClick={() => void setOverride(skill, !skill.morePermissive)}
-                />
-              </div>
-            )}
-          </article>
-        ))}
+      <section className="settings-section skills-search-section">
+        <label htmlFor="skills-search">Pesquisar capacidades</label>
+        <input
+          id="skills-search"
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Ex.: agenda, arquivos, Discord"
+        />
+        <p role="status" aria-live="polite">
+          {filteredSkills.length} capacidades encontradas
+        </p>
+        <p>
+          INSTALADO está ativo para o assistente; DISPONÍVEL existe no aplicativo e pode ser
+          ativado; REQUER CONFIGURAÇÃO depende de concluir o assistente da integração; INDISPONÍVEL
+          não pode ser ativado nesta versão.
+        </p>
       </section>
-      <section className="settings-section">
-        <h2>Aplicativos e sistema</h2>
-        {productivitySkills.map((skill) => (
-          <article className="skill-card" key={skill.id}>
-            <div>
-              <h3>{skill.name}</h3>
-              <p>{skill.description}</p>
-              <small>Risco: {riskLabels[skill.risk]}</small>
-            </div>
-            <div className="skill-switch">
-              <span>Ativar</span>
-              <Toggle
-                checked={skill.enabled}
-                label={`Ativar ${skill.name}`}
-                disabled={busy || !isTauri()}
-                onClick={() => void setEnabled(skill, !skill.enabled)}
-              />
-            </div>
-            {!skill.fixedBlocked && (
-              <div className="skill-switch">
-                <span>Usar modo mais permissivo</span>
-                <Toggle
-                  checked={skill.morePermissive}
-                  label={`Usar modo mais permissivo para ${skill.name}`}
-                  disabled={busy || !isTauri()}
-                  onClick={() => void setOverride(skill, !skill.morePermissive)}
-                />
-              </div>
-            )}
-          </article>
-        ))}
-      </section>
+      {filteredSkills.length === 0 && query.trim() ? (
+        <p className="skills-empty" role="status">
+          Nenhuma capacidade corresponde à pesquisa.
+        </p>
+      ) : null}
+      {renderGroup('local', localSkills)}
+      {!query.trim() && (
+        <p className="skills-empty">
+          Captura de tela: indisponível nesta versão; não há ferramenta registrada para essa
+          capacidade.
+        </p>
+      )}
+      {renderGroup('integration', integrationSkills)}
+      {!query.trim() && (
+        <p className="skills-empty">
+          Servidores MCP: indisponíveis nesta versão. Há um módulo de enquadramento de mensagens,
+          mas faltam cliente de transporte, cadastro, credenciais e encaminhamento de ferramentas. O
+          suporte exige atualização do aplicativo.
+        </p>
+      )}
+      {integrationSkills.some(({ id }) => id === 'discord.send') && (
+        <DiscordWebhooksSettings onChanged={refresh} />
+      )}
       <section className="settings-section allowed-folders-section">
         <div className="section-heading-row">
           <div>
@@ -298,41 +386,6 @@ export function SkillsScreen() {
             </li>
           ))}
         </ul>
-      </section>
-      <section className="settings-section">
-        <h2>Simulações</h2>
-        {simulatedSkills.map((skill) => (
-          <article className="skill-card" key={skill.id}>
-            <div>
-              <h3>{skill.name}</h3>
-              <p>{skill.description}</p>
-              <small>
-                Risco: {riskLabels[skill.risk]} · Resultado:{' '}
-                {skill.resultTrust === 'local' ? 'local' : 'não confiável'}
-              </small>
-            </div>
-            <div className="skill-switch">
-              <span>Ativar</span>
-              <Toggle
-                checked={skill.enabled}
-                label={`Ativar ${skill.name}`}
-                disabled={busy || !isTauri()}
-                onClick={() => void setEnabled(skill, !skill.enabled)}
-              />
-            </div>
-            {!skill.fixedBlocked && (
-              <div className="skill-switch">
-                <span>Usar modo mais permissivo</span>
-                <Toggle
-                  checked={skill.morePermissive}
-                  label={`Usar modo mais permissivo para ${skill.name}`}
-                  disabled={busy || !isTauri()}
-                  onClick={() => void setOverride(skill, !skill.morePermissive)}
-                />
-              </div>
-            )}
-          </article>
-        ))}
       </section>
       <section className="settings-section allowed-folders-section">
         <div className="section-heading-row">

@@ -6,7 +6,6 @@ import { moveFallbackProvider, setFallbackProviderIds } from '../../core/provide
 import { PageHeader, Toggle } from '../DesignSystem';
 import { HistoryDeletionSettings } from '../HistoryDeletionSettings';
 import { normalizeTrustedLinkDomain } from '../../core/markdown';
-import { DiscordWebhooksSettings } from '../DiscordWebhooksSettings';
 import { CodeDelegationSettings } from '../CodeDelegationSettings';
 
 type BuildInfo = {
@@ -279,7 +278,6 @@ export function SettingsScreen({
           </button>
         </div>
       </section>
-      <DiscordWebhooksSettings />
       <CodeDelegationSettings />
       <section className="settings-panel settings-section" aria-labelledby="trusted-links-heading">
         <h2 id="trusted-links-heading">Links externos</h2>

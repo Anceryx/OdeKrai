@@ -44,6 +44,9 @@ impl Skill {
         on_approval: &mut (dyn FnMut(String) + Send),
         on_output: &mut (dyn FnMut(String) + Send),
     ) -> Result<ActionResult, String> {
+        if !skill_available(self.id) {
+            return Err("Esta habilidade não está disponível nesta versão.".into());
+        }
         if !is_skill_enabled(&app, self.id)? {
             return Err("Esta habilidade está desativada.".into());
         }
@@ -727,7 +730,7 @@ fn model_tools_for(
 ) -> Vec<crate::providers::ToolDef> {
     skills
         .iter()
-        .filter(|skill| enabled.contains(skill.id))
+        .filter(|skill| skill_available(skill.id) && enabled.contains(skill.id))
         .map(|skill| crate::providers::ToolDef {
             name: skill.id.into(),
             description: skill.model_description.into(),
@@ -759,6 +762,63 @@ pub struct SkillView {
     pub enabled: bool,
     pub more_permissive: bool,
     pub fixed_blocked: bool,
+    pub category: String,
+    pub status: String,
+    pub configuration_required: bool,
+}
+
+fn skill_category(id: &str) -> &'static str {
+    match id {
+        "discord.send" | "mail.draft" | "web.fetch" => "integration",
+        _ => "local",
+    }
+}
+
+pub(crate) fn skill_available(id: &str) -> bool {
+    !id.starts_with("simulated.")
+}
+
+fn group_skill_ids(category: &str, discord_configured: bool, enabled: bool) -> Vec<&'static str> {
+    registry()
+        .into_iter()
+        .filter(|skill| skill_category(skill.id) == category)
+        .filter(|skill| skill_available(skill.id))
+        .filter(|skill| skill.id != "discord.send" || discord_configured || !enabled)
+        .map(|skill| skill.id)
+        .collect()
+}
+
+#[tauri::command]
+pub fn set_skill_group_enabled(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    category: String,
+    enabled: bool,
+) -> Result<(), String> {
+    crate::require_main(&caller)?;
+    if !matches!(category.as_str(), "local" | "integration") {
+        return Err("Grupo de habilidades desconhecido.".into());
+    }
+    let ids = group_skill_ids(
+        &category,
+        crate::discord::discord_is_configured(&app)?,
+        enabled,
+    );
+    let mut db = database(&app)?;
+    let tx = db
+        .transaction()
+        .map_err(|_| "Não foi possível iniciar a atualização do grupo.".to_string())?;
+    for id in ids {
+        tx.execute(
+            "INSERT INTO skill_settings(skill_id,enabled) VALUES (?1,?2) ON CONFLICT(skill_id) DO UPDATE SET enabled=excluded.enabled",
+            params![id, enabled as i64],
+        )
+        .map_err(|_| "Não foi possível atualizar o grupo de habilidades.".to_string())?;
+    }
+    tx.commit()
+        .map_err(|_| "Não foi possível concluir a atualização do grupo.".to_string())?;
+    let _ = app.emit("skills-updated", ());
+    Ok(())
 }
 
 #[tauri::command]
@@ -788,9 +848,30 @@ pub fn get_skills(
                 description: skill.description.into(),
                 risk: skill.risk(&params)?,
                 result_trust: skill.result_trust,
-                enabled: is_skill_enabled(&app, skill.id)?,
+                enabled: skill_available(skill.id) && is_skill_enabled(&app, skill.id)?,
                 more_permissive: super::override_enabled(&app, skill.id)?,
                 fixed_blocked: matches!(skill.id, "simulated.payment" | "discord.send"),
+                category: skill_category(skill.id).into(),
+                status: if !skill_available(skill.id) {
+                    "unavailable"
+                } else if skill.id == "discord.send" {
+                    if crate::discord::discord_is_configured(&app)? {
+                        if is_skill_enabled(&app, skill.id)? {
+                            "installed"
+                        } else {
+                            "available"
+                        }
+                    } else {
+                        "configuration_required"
+                    }
+                } else if is_skill_enabled(&app, skill.id)? {
+                    "installed"
+                } else {
+                    "available"
+                }
+                .into(),
+                configuration_required: skill.id == "discord.send"
+                    && !crate::discord::discord_is_configured(&app)?,
             })
         })
         .collect()
@@ -806,6 +887,14 @@ pub fn set_skill_enabled(
     crate::require_main(&caller)?;
     if !registry().iter().any(|skill| skill.id == skill_id) {
         return Err("Habilidade desconhecida.".into());
+    }
+    if enabled && !skill_available(&skill_id) {
+        return Err("Esta habilidade não está disponível nesta versão.".into());
+    }
+    if skill_id == "discord.send" && enabled && !crate::discord::discord_is_configured(&app)? {
+        return Err(
+            "Configure e teste um webhook do Discord antes de ativar esta habilidade.".into(),
+        );
     }
     database(&app)?.execute("INSERT INTO skill_settings(skill_id,enabled) VALUES (?1,?2) ON CONFLICT(skill_id) DO UPDATE SET enabled=excluded.enabled", params![skill_id, enabled as i64]).map_err(|_| "Não foi possível salvar a habilidade.".to_string())?;
     let _ = app.emit("skills-updated", ());
@@ -1156,6 +1245,23 @@ mod tests {
         let calendar_tools = model_tools_for(&skills, &calendar_enabled);
         assert_eq!(calendar_tools.len(), 1);
         assert_eq!(calendar_tools[0].name, "calendar.create_event");
+        let legacy_simulated_enabled = std::collections::HashSet::from(["simulated.send_message"]);
+        assert!(model_tools_for(&skills, &legacy_simulated_enabled).is_empty());
+    }
+
+    #[test]
+    fn catalog_groups_are_registered_and_unavailable_entries_cannot_be_bulk_enabled() {
+        let local = group_skill_ids("local", false, true);
+        let integrations = group_skill_ids("integration", false, true);
+        assert!(local.contains(&"calendar.create_event"));
+        assert!(local.contains(&"memory.search"));
+        assert!(!local.contains(&"simulated.send_message"));
+        assert!(integrations.contains(&"web.fetch"));
+        assert!(integrations.contains(&"mail.draft"));
+        assert!(!integrations.contains(&"discord.send"));
+        assert!(group_skill_ids("integration", true, true).contains(&"discord.send"));
+        assert!(group_skill_ids("integration", false, false).contains(&"discord.send"));
+        assert!(group_skill_ids("unknown", true, true).is_empty());
     }
 
     #[test]

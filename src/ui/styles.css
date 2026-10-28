@@ -1005,11 +1005,105 @@ select:focus-visible {
 }
 .skill-card {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(130px, auto) minmax(210px, auto);
+  grid-template-columns: minmax(180px, 1fr) minmax(150px, auto);
   align-items: center;
   gap: 18px;
   padding: 16px 0;
   border-bottom: 1px solid var(--line);
+}
+.skill-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.skill-status {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.skill-status--installed {
+  color: #91d9ad;
+}
+.skill-status--available {
+  color: #a9c9ff;
+}
+.skill-status--configuration_required {
+  color: #f2cf86;
+}
+.skill-status--unavailable {
+  color: #e9a2a2;
+}
+.skills-search-section label,
+.skills-search-section input {
+  display: block;
+  width: 100%;
+}
+.skills-search-section label {
+  margin-bottom: 7px;
+  font-size: 12px;
+}
+.skills-search-section input,
+.discord-secret-field input {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--surface-raised, #211d14);
+  color: var(--color-text);
+}
+.skills-search-section p,
+.skills-empty {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+.skills-search-section p {
+  margin: 7px 0 0;
+}
+.skills-catalog-group .section-heading-row {
+  margin-bottom: 8px;
+}
+.skill-advanced {
+  grid-column: 1 / -1;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+.skill-advanced summary {
+  width: fit-content;
+  cursor: pointer;
+}
+.skill-advanced p {
+  margin: 9px 0;
+}
+.skill-advanced code {
+  overflow-wrap: anywhere;
+}
+.discord-secret-field {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  font-size: 12px;
+}
+.discord-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 12px 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.discord-consent input {
+  margin-top: 2px;
+}
+.success-banner {
+  margin: 10px 0;
+  color: #91d9ad;
+  font-size: 12px;
 }
 .skill-card h3 {
   margin: 0 0 5px;
@@ -1084,10 +1178,13 @@ select:focus-visible {
 }
 @media (max-width: 850px) {
   .skill-card {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
   .skill-card > div:first-child {
-    grid-column: 1 / -1;
+    grid-column: auto;
+  }
+  .skill-advanced {
+    grid-column: auto;
   }
   .section-heading-row {
     align-items: start;

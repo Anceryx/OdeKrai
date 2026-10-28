@@ -11,6 +11,14 @@ Atualizado em 24/10/2026 após a verificação de fechamento da Fase 3. Requisit
 - Não há integração Google Calendar nem agendador A6 conectado; alertas são registrados como pendentes. A data/hora local atual e o fuso entram no prompt de cada execução do agente. A interpretação de linguagem natural de “amanhã” depende do modelo e não substitui a confirmação da duração ausente.
 - Testes automatizados cobrem gravação repetida com SQLite temporário, recusa de evento sem fim, importação/parsing iCalendar, relógio injetado e a exigência de aprovação para exclusão. A validação visual e do calendário padrão do Windows permanece pendente.
 
+## Catálogo de habilidades e integrações
+
+- A tela Habilidades lista as entradas devolvidas por `security::skills::registry()` através do comando `get_skills`; grupo, estado de disponibilidade e bloqueios são informados pelo Rust. A ativação em grupo usa comando Rust transacional e as exceções de risco permanecem no backend.
+- Capacidades locais implementadas incluem arquivos, Agenda e lembretes, memória manual, áudio, mídia e controles do sistema. Discord, leitura web e rascunho de e-mail são integrações com limites distintos; o envio ao Discord sempre exige aprovação.
+- O assistente do Discord salva a URL somente no Gerenciador de Credenciais do Windows. O teste de conexão usa [Get Webhook with Token](https://docs.discord.com/developers/resources/webhook#get-webhook-with-token) por GET e não publica mensagem. Esse webhook não usa escopos OAuth nem concede leitura de mensagens. Remover a credencial no OdeKrai não revoga o webhook no servidor; para revogar remotamente, exclua-o no Discord.
+- MCP não está disponível: o módulo atual trata enquadramento JSON-RPC, mas não inclui transporte, cadastro de servidores, credenciais nem encaminhamento ao executor de habilidades. Novos plugins/capacidades precisam de atualização do aplicativo. Captura de tela não está registrada nesta versão.
+- Registro de habilidades, estados de ativação, autorização e fluxo de webhook foram verificados no código e por testes automatizados locais; teste real de rede, Credential Manager e UI em Windows permanecem pendentes.
+
 ## Fase 4
 
 **Implementado com limites.** `agent_runtime::agent_run` prepara a execução e `agent::run_agent` coordena chamadas de modelo e ferramentas, respeitando limites, cancelamento e respostas de aprovação. `security::skills::model_tools` oferece somente habilidades ativadas; o dispatcher aplica schemas, política e executor Rust. Os adaptadores e modelos não têm suporte uniforme a tools, e não há roteador geral entre provedores. Os testes em `agent.rs`, `agent_runtime.rs` e `security/` cobrem a continuidade e os bloqueios. A matriz de evidências está em [`TRACEABILITY.md`](TRACEABILITY.md).
