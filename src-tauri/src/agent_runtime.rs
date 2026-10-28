@@ -443,6 +443,7 @@ pub async fn agent_run(
     state: State<'_, SecurityState>,
     conversation_id: String,
     message: String,
+    image_base64: Option<String>,
     daily_token_limit: u64,
     on_event: Channel<AgentEvent>,
 ) -> Result<String, String> {
@@ -453,6 +454,7 @@ pub async fn agent_run(
         &state,
         conversation_id,
         message,
+        image_base64,
         daily_token_limit,
         on_event.clone(),
         error_emitted.clone(),
@@ -481,6 +483,7 @@ async fn agent_run_inner(
     state: &SecurityState,
     conversation_id: String,
     message: String,
+    image_base64: Option<String>,
     daily_token_limit: u64,
     on_event: Channel<AgentEvent>,
     error_emitted: Arc<AtomicBool>,
@@ -488,6 +491,19 @@ async fn agent_run_inner(
     if message.trim().is_empty() || message.len() > 1_000_000 {
         return Err("Informe uma mensagem válida para o agente.".into());
     }
+    let image = image_base64
+        .map(|encoded| {
+            if encoded.len() > crate::screen_capture::MAX_SCREENSHOT_BYTES * 2 {
+                return Err("A captura excede o limite permitido.".to_string());
+            }
+            use base64::Engine as _;
+            let decoded = base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .map_err(|_| "A captura temporária é inválida.".to_string())?;
+            let (jpeg, _, _) = crate::screen_capture::normalize_image(&decoded)?;
+            Ok(base64::engine::general_purpose::STANDARD.encode(jpeg))
+        })
+        .transpose()?;
     if state.is_halted() {
         return Err("O agente está parado pelo kill switch.".into());
     }
@@ -496,6 +512,11 @@ async fn agent_run_inner(
     if !enabled {
         return Err("Modo agente indisponível: ele está desativado nesta conversa. Ative-o nas configurações da conversa.".into());
     }
+    if image.is_some() && !crate::providers::supports_vision_model(&provider_id, &model) {
+        return Err(
+            "O provedor e o modelo desta conversa não têm suporte a imagens verificado.".into(),
+        );
+    }
     if crate::agent_home::system_prompt(&app)?.is_none() {
         return Err(
             "Modo agente indisponível: configure a pasta e a identidade aprovada do agente.".into(),
@@ -503,6 +524,17 @@ async fn agent_run_inner(
     }
     crate::history::save_agent_user_message(&app, &conversation_id, &message)?;
     let mut messages = crate::history::load_agent_context(&app, &conversation_id)?.4;
+    if let Some(data_base64) = image {
+        let user_message = messages
+            .iter_mut()
+            .rev()
+            .find(|entry| entry.role == "user")
+            .ok_or("Não foi possível anexar a captura à mensagem temporária.")?;
+        user_message.blocks.push(Block::Image {
+            media_type: "image/jpeg".into(),
+            data_base64,
+        });
+    }
     let mut active_skills = Vec::new();
     for skill in security::skills::registry() {
         if security::skills::skill_available(skill.id)

@@ -17,6 +17,10 @@ pub enum Block {
     Text {
         text: String,
     },
+    Image {
+        media_type: String,
+        data_base64: String,
+    },
     ToolCall {
         id: String,
         name: String,

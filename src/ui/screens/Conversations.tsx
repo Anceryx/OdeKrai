@@ -11,6 +11,7 @@ import { initials, type ProfileData } from '../Profile';
 import { ResizeHandle } from '../ResizeHandle';
 import { providerById } from '../../core/providers';
 import { AgentActionCard, AgentControls, type AgentActionCardData } from '../AgentControls';
+import { ScreenCapture } from '../ScreenCapture';
 
 export function ConversationsScreen({
   messages,
@@ -51,6 +52,7 @@ export function ConversationsScreen({
   onToggleAgent,
   onStopAgent,
   onConfigureAgent,
+  onAnalyzeCapture,
 }: {
   messages: ChatMessage[];
   conversations: ConversationSummary[];
@@ -90,6 +92,7 @@ export function ConversationsScreen({
   onToggleAgent: (enabled: boolean) => void;
   onStopAgent: () => void;
   onConfigureAgent: () => void;
+  onAnalyzeCapture: (prompt: string, imageBase64: string) => Promise<boolean>;
 }) {
   const [search, setSearch] = useState('');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -422,6 +425,14 @@ export function ConversationsScreen({
           />
           <div className="composer-bottom">
             <span>Enter envia · Shift + Enter quebra linha</span>
+            <ScreenCapture
+              providerId={providerId}
+              providerModel={providerModel}
+              agentEnabled={agentEnabled}
+              agentAvailable={!agentUnavailableReason}
+              disabled={busy}
+              onAnalyze={onAnalyzeCapture}
+            />
             <button
               className={`send-button ${busy ? 'stop-button' : ''}`}
               type={busy ? 'button' : 'submit'}

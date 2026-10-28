@@ -545,6 +545,7 @@ fn block_bytes(block: &crate::providers::Block) -> usize {
         crate::providers::Block::ToolCall { id, name, args } => {
             id.len() + name.len() + args.to_string().len()
         }
+        crate::providers::Block::Image { data_base64, .. } => data_base64.len(),
     }
 }
 

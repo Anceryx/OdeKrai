@@ -102,6 +102,7 @@ mod productivity;
 mod profile;
 mod providers;
 mod reminders;
+mod screen_capture;
 mod security;
 mod spreadsheets;
 mod system_actions;
@@ -917,6 +918,8 @@ pub fn run() -> Result<(), tauri::Error> {
             calendar::calendar_export_ics,
             calendar::calendar_get_default,
             calendar::calendar_set_default,
+            screen_capture::capture_screen_preview,
+            screen_capture::save_screen_capture,
             security::get_permission_settings,
             security::get_trusted_external_domains,
             security::trust_external_domain,

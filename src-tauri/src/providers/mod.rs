@@ -38,6 +38,110 @@ use stream::consume_stream_response;
 pub use types::{
     Block, ChatRequest, Message, ProviderCapabilities, ProviderEvent, ToolCall, ToolDef, Usage,
 };
+
+pub(crate) fn supports_vision_model(provider_id: &str, model: &str) -> bool {
+    match provider_id {
+        // The official OpenAI vision guide demonstrates this exact Chat Completions model ID.
+        "openai" => model == "gpt-6-astra",
+        // Anthropic's current model overview confirms image input for its current models;
+        // the explicit list keeps arbitrary IDs and compatible proxies disabled.
+        "anthropic" => matches!(
+            model,
+            "claude-opus-5-5" | "claude-sonnet-5-5" | "claude-haiku-5-5" | "claude-fable-5-1"
+        ),
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod vision_model_tests {
+    use super::*;
+    use base64::Engine as _;
+
+    fn jpeg_message(data: &[u8]) -> Message {
+        Message {
+            role: "user".into(),
+            blocks: vec![Block::Image {
+                media_type: "image/jpeg".into(),
+                data_base64: base64::engine::general_purpose::STANDARD.encode(data),
+            }],
+        }
+    }
+
+    fn test_jpeg() -> Vec<u8> {
+        let image = image::DynamicImage::ImageRgb8(image::ImageBuffer::from_pixel(
+            2,
+            2,
+            image::Rgb([30, 60, 90]),
+        ));
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        image
+            .write_to(&mut bytes, image::ImageFormat::Jpeg)
+            .unwrap();
+        bytes.into_inner()
+    }
+
+    #[test]
+    fn vision_requires_an_explicitly_documented_provider_and_exact_model_id() {
+        assert!(supports_vision_model("openai", "gpt-6-astra"));
+        assert!(supports_vision_model("anthropic", "claude-sonnet-5-5"));
+        assert!(!supports_vision_model("openai", "gpt-6-luna"));
+        assert!(!supports_vision_model(
+            "anthropic",
+            "claude-custom-proxy-model"
+        ));
+        assert!(!supports_vision_model("local", "gpt-6-astra"));
+    }
+
+    #[test]
+    fn images_are_limited_to_one_valid_jpeg_user_block() {
+        let image = jpeg_message(&test_jpeg()).blocks.remove(0);
+        let valid = Message {
+            role: "user".into(),
+            blocks: vec![image.clone()],
+        };
+        assert!(valid_messages(&[valid]));
+        assert!(!valid_messages(&[Message {
+            role: "assistant".into(),
+            blocks: vec![image.clone()],
+        }]));
+        assert!(!valid_messages(&[Message {
+            role: "user".into(),
+            blocks: vec![image.clone(), image],
+        }]));
+        assert!(!valid_messages(&[Message {
+            role: "user".into(),
+            blocks: vec![Block::Image {
+                media_type: "image/png".into(),
+                data_base64: base64::engine::general_purpose::STANDARD.encode(test_jpeg()),
+            }],
+        }]));
+    }
+
+    #[test]
+    fn image_request_is_decoded_resized_and_reencoded_before_provider_use() {
+        let message = jpeg_message(&test_jpeg());
+        let normalized = normalize_request_images(vec![message]).unwrap();
+        let Block::Image { data_base64, .. } = &normalized[0].blocks[0] else {
+            panic!("imagem normalizada esperada")
+        };
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(data_base64)
+            .unwrap();
+        assert!(bytes.len() <= crate::screen_capture::MAX_SCREENSHOT_BYTES);
+        assert_eq!(
+            image::guess_format(&bytes).unwrap(),
+            image::ImageFormat::Jpeg
+        );
+    }
+
+    #[test]
+    fn image_request_rejects_invalid_and_oversized_data_before_provider_use() {
+        assert!(normalize_request_images(vec![jpeg_message(b"invalid")]).is_err());
+        let oversized = vec![0; crate::screen_capture::MAX_SCREENSHOT_BYTES + 1];
+        assert!(normalize_request_images(vec![jpeg_message(&oversized)]).is_err());
+    }
+}
 static INTERNAL_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 pub use cancellation::cancel_all;
 #[cfg(test)]
@@ -686,6 +790,7 @@ async fn send_message_inner(
     if model.trim().is_empty() || model.len() > 200 {
         return Err("Informe um ID de modelo válido.".into());
     }
+    let messages = normalize_request_images(messages)?;
     if !valid_messages(&messages) || !valid_tools(&tools) {
         return Err("A conversa está vazia ou excede o limite permitido.".into());
     }
@@ -853,13 +958,38 @@ fn valid_messages(messages: &[Message]) -> bool {
         ) {
             return false;
         }
+        let mut image_count = 0usize;
         for block in &message.blocks {
             let size = match block {
                 Block::Text { text } | Block::ToolResult { content: text, .. } => text.len(),
                 Block::ToolCall { id, name, args } => {
                     id.len() + name.len() + args.to_string().len()
                 }
+                Block::Image {
+                    media_type,
+                    data_base64,
+                } => {
+                    image_count += 1;
+                    if message.role != "user"
+                        || media_type != "image/jpeg"
+                        || data_base64.is_empty()
+                        || data_base64.len() > crate::screen_capture::MAX_SCREENSHOT_BYTES * 2
+                    {
+                        return false;
+                    }
+                    use base64::Engine as _;
+                    if base64::engine::general_purpose::STANDARD
+                        .decode(data_base64)
+                        .is_err()
+                    {
+                        return false;
+                    }
+                    data_base64.len()
+                }
             };
+            if image_count > 1 {
+                return false;
+            }
             if size > MAX_MESSAGE_BYTES {
                 return false;
             }
@@ -870,6 +1000,36 @@ fn valid_messages(messages: &[Message]) -> bool {
         }
     }
     true
+}
+
+fn normalize_request_images(mut messages: Vec<Message>) -> Result<Vec<Message>, String> {
+    use base64::Engine as _;
+    for message in &mut messages {
+        for block in &mut message.blocks {
+            if let Block::Image {
+                media_type,
+                data_base64,
+            } = block
+            {
+                if media_type != "image/jpeg"
+                    || data_base64.len() > crate::screen_capture::MAX_SCREENSHOT_BYTES * 2
+                {
+                    return Err(
+                        "A imagem excede o limite permitido ou tem formato inválido.".into(),
+                    );
+                }
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(data_base64.as_str())
+                    .map_err(|_| "A imagem temporária é inválida.".to_string())?;
+                if bytes.len() > crate::screen_capture::MAX_SCREENSHOT_BYTES {
+                    return Err("A imagem excede o limite de 512 KiB.".into());
+                }
+                let (normalized, _, _) = crate::screen_capture::normalize_image(&bytes)?;
+                *data_base64 = base64::engine::general_purpose::STANDARD.encode(normalized);
+            }
+        }
+    }
+    Ok(messages)
 }
 
 fn valid_tools(tools: &[ToolDef]) -> bool {
@@ -895,6 +1055,17 @@ async fn request_provider(
     on_chunk: Option<EventSink>,
     observed_output: Option<Arc<AtomicBool>>,
 ) -> Result<ProviderReply, String> {
+    if request_data.messages.iter().any(|message| {
+        message
+            .blocks
+            .iter()
+            .any(|block| matches!(block, Block::Image { .. }))
+    }) && !supports_vision_model(provider_id, &request_data.model)
+    {
+        return Err(
+            "O provedor e o modelo selecionados não têm suporte a imagens verificado.".into(),
+        );
+    }
     let endpoint = provider_endpoint(provider_id, base_url)?;
     let entry = credential_entry(provider_id)?;
     let credential = entry.get_password().map_err(|error| match error {
@@ -1048,7 +1219,15 @@ pub(crate) async fn agent_model_turn(
             model: target.model,
         })
         .collect();
-    let targets = eligible_provider_targets(app, targets, true)?;
+    let mut targets = eligible_provider_targets(app, targets, true)?;
+    if messages.iter().any(|message| {
+        message
+            .blocks
+            .iter()
+            .any(|block| matches!(block, Block::Image { .. }))
+    }) {
+        targets.retain(|target| supports_vision_model(&target.provider_id, &target.model));
+    }
     if targets.is_empty() {
         return Err("Modo agente indisponível: nenhum provedor configurado tem ferramentas verificadas e credencial válida.".into());
     }

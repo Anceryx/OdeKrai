@@ -26,6 +26,13 @@ pub(super) fn chat_request_body(request: &ChatRequest) -> Value {
                 Block::Text { text } if !text.is_empty() => {
                     content.push(json!({ "type": "text", "text": text }));
                 }
+                Block::Image {
+                    media_type,
+                    data_base64,
+                } => content.push(json!({
+                    "type":"image",
+                    "source":{"type":"base64","media_type":media_type,"data":data_base64}
+                })),
                 Block::ToolCall { id, name, args } => content.push(json!({
                     "type": "tool_use",
                     "id": id,
@@ -139,5 +146,31 @@ mod tests {
         assert_eq!(body["messages"][1]["content"][0]["type"], "tool_result");
         assert_eq!(body["messages"][1]["content"][0]["tool_use_id"], "toolu-1");
         assert_eq!(body["messages"][1]["content"][1]["type"], "text");
+    }
+
+    #[test]
+    fn serializes_anthropic_base64_image_content_block() {
+        let request = ChatRequest {
+            model: "claude-opus-5-5".into(),
+            messages: vec![super::super::Message {
+                role: "user".into(),
+                blocks: vec![super::super::Block::Image {
+                    media_type: "image/jpeg".into(),
+                    data_base64: "aGVsbG8=".into(),
+                }],
+            }],
+            tools: Vec::new(),
+            streaming: false,
+        };
+        let body = chat_request_body(&request);
+        assert_eq!(body["messages"][0]["content"][0]["type"], "image");
+        assert_eq!(
+            body["messages"][0]["content"][0]["source"]["type"],
+            "base64"
+        );
+        assert_eq!(
+            body["messages"][0]["content"][0]["source"]["media_type"],
+            "image/jpeg"
+        );
     }
 }

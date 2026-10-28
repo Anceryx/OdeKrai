@@ -1,5 +1,9 @@
 # Estado da implementação
 
+## Captura de tela e análise visual
+
+- Implementação em [`SCREEN-CAPTURE-AND-VISION.md`](SCREEN-CAPTURE-AND-VISION.md): captura local com prévia obrigatória, salvamento separado, análise explicitamente confirmada e allowlist de modelos com visão documentada. A captura física e a interface no executável Windows ainda precisam de validação manual.
+
 Atualizado em 24/10/2026 após a verificação de fechamento da Fase 3. Requisitos e limites estão detalhados em [`TRACEABILITY.md`](TRACEABILITY.md).
 
 ## Agenda local

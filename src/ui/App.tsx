@@ -375,20 +375,28 @@ function MainApp() {
     setChatMode(true);
   }
 
-  async function sendMessage(rawText: string, reuseLastUserMessage = false) {
+  async function sendMessage(
+    rawText: string,
+    reuseLastUserMessage = false,
+    imageBase64?: string,
+  ): Promise<boolean> {
     const text = rawText.trim();
-    if (!text || busy) return;
+    if (!text || busy) return false;
     if (agentEnabled && !agentAvailability.available) {
       setError(
         `Modo agente indisponível: ${agentAvailability.reason ?? 'verifique as configurações do agente.'}`,
       );
       setLastFailedPrompt('');
-      return;
+      return false;
+    }
+    if (imageBase64 && (!agentEnabled || !agentAvailability.available)) {
+      setError('Ative o agente antes de enviar uma imagem para análise.');
+      return false;
     }
     if (!isTauri() || !(await hasConfiguredChatProvider())) {
       setError('Configure um provedor de IA em Conectores para enviar mensagens.');
       setLastFailedPrompt('');
-      return;
+      return false;
     }
     const activeId = conversationId ?? crypto.randomUUID();
     const sentAt = Math.floor(Date.now() / 1000);
@@ -555,6 +563,7 @@ function MainApp() {
         const answer = await invoke<string>('agent_run', {
           conversationId: activeId,
           message: text,
+          imageBase64: imageBase64 ?? null,
           dailyTokenLimit: settings.dailyTokenLimit,
           onEvent,
         });
@@ -565,11 +574,12 @@ function MainApp() {
         setConversations((items) =>
           items.map((item) => (item.id === activeId ? { ...item, preview: answer } : item)),
         );
-        const cards = await invoke<AgentActionCardData[]>('load_agent_action_cards', {
+        void invoke<AgentActionCardData[]>('load_agent_action_cards', {
           conversationId: activeId,
-        });
-        setAgentActionCards(cards);
-        return;
+        })
+          .then(setAgentActionCards)
+          .catch(() => setAgentActionCards([]));
+        return true;
       }
       const onChunk = new Channel<
         | { type: 'textDelta'; text: string }
@@ -669,6 +679,7 @@ function MainApp() {
           1100,
         );
       }
+      return true;
     } catch (cause) {
       const stopped =
         typeof cause === 'string' &&
@@ -676,7 +687,7 @@ function MainApp() {
           cause.toLocaleLowerCase('pt-BR').includes('cancel'));
       if (!stopped) {
         setMessages(next);
-        setLastFailedPrompt(text);
+        setLastFailedPrompt(imageBase64 ? '' : text);
         setError(
           typeof cause === 'string'
             ? cause
@@ -695,6 +706,7 @@ function MainApp() {
         setMessages(next);
         setLastFailedPrompt('');
       }
+      return false;
     } finally {
       setBusy(false);
       request.current = null;
@@ -1053,6 +1065,7 @@ function MainApp() {
               agentRunning={agentRunning}
               agentAwaitingApproval={agentAwaitingApproval}
               agentActionCards={agentActionCards}
+              onAnalyzeCapture={(prompt, imageBase64) => sendMessage(prompt, false, imageBase64)}
               onToggleAgent={(enabled) => void setConversationAgentMode(enabled)}
               onStopAgent={cancelRequest}
               onConfigureAgent={() => {

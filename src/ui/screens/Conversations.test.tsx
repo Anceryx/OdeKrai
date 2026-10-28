@@ -44,6 +44,7 @@ describe('ConversationsScreen', () => {
         onToggleAgent={() => undefined}
         onStopAgent={() => undefined}
         onConfigureAgent={() => undefined}
+        onAnalyzeCapture={async () => false}
       />,
     );
     expect(markup).toContain('Nova conversa');
@@ -106,6 +107,7 @@ describe('ConversationsScreen', () => {
         onToggleAgent={() => undefined}
         onStopAgent={() => undefined}
         onConfigureAgent={() => undefined}
+        onAnalyzeCapture={async () => false}
       />,
     );
     expect(markup).toContain('Modelo usado nesta conversa');
@@ -153,6 +155,7 @@ describe('ConversationsScreen', () => {
         onToggleAgent={() => undefined}
         onStopAgent={() => undefined}
         onConfigureAgent={() => undefined}
+        onAnalyzeCapture={async () => false}
       />,
     );
     expect(markup).toContain('conversation-sidebar-collapsed');
