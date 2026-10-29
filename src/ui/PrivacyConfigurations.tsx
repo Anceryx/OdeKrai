@@ -373,80 +373,88 @@ export function PrivacyConfigurations({
           disponíveis ao assistente. O programa cadastrado será executado no seu computador com os
           privilégios da sua conta.
         </p>
-        <div className="mcp-settings-grid">
-          <label>
-            Nome
-            <input
-              value={serverName}
-              onChange={(event) => setServerName(event.target.value)}
-              maxLength={80}
-            />
-          </label>
-          <label>
-            Comando ou caminho do programa
-            <input
-              value={serverCommand}
-              onChange={(event) => setServerCommand(event.target.value)}
-            />
-          </label>
-          <label>
-            Argumentos (um por linha)
-            <textarea
-              value={serverArgs}
-              onChange={(event) => setServerArgs(event.target.value)}
-              rows={3}
-            />
-          </label>
-          <label>
-            Nomes das variáveis de ambiente (um por linha)
-            <textarea
-              value={serverEnvNames}
-              onChange={(event) => setServerEnvNames(event.target.value)}
-              rows={3}
-            />
-          </label>
-          {serverEnvNames
-            .split('\n')
-            .map((key) => key.trim())
-            .filter(Boolean)
-            .map((key) => (
-              <label key={key}>
-                {key} (opcional; salvo no Gerenciador de Credenciais)
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  value={serverSecrets[key] ?? ''}
-                  onChange={(event) =>
-                    setServerSecrets((secrets) => ({ ...secrets, [key]: event.target.value }))
-                  }
-                />
-              </label>
-            ))}
-        </div>
-        <p>
-          Comando que será executado:{' '}
-          <code>
-            {[serverCommand, ...serverArgs.split('\n').filter(Boolean)]
-              .map((part) => `"${part.replaceAll('"', '\\"')}"`)
-              .join(' ') || '—'}
-          </code>
-        </p>
-        <label className="skill-switch">
-          <input
-            type="checkbox"
-            checked={serverConfirmed}
-            onChange={(event) => setServerConfirmed(event.target.checked)}
-          />{' '}
-          Confirmo que entendo que o programa cadastrado será executado com os privilégios da minha
-          conta.
-        </label>
-        <Button
-          variant="secondary"
-          disabled={busy || !isTauri() || !serverConfirmed}
-          onClick={() => void addServer()}
+        <form
+          className="mcp-server-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void addServer();
+          }}
         >
-          Adicionar servidor local
-        </Button>
+          <div className="mcp-settings-grid">
+            <label>
+              Nome
+              <input
+                value={serverName}
+                onChange={(event) => setServerName(event.target.value)}
+                maxLength={80}
+              />
+            </label>
+            <label>
+              Comando ou caminho do programa
+              <input
+                value={serverCommand}
+                onChange={(event) => setServerCommand(event.target.value)}
+              />
+            </label>
+            <label>
+              Argumentos (um por linha)
+              <textarea
+                value={serverArgs}
+                onChange={(event) => setServerArgs(event.target.value)}
+                rows={3}
+              />
+            </label>
+            <label>
+              Nomes das variáveis de ambiente (um por linha)
+              <textarea
+                value={serverEnvNames}
+                onChange={(event) => setServerEnvNames(event.target.value)}
+                rows={3}
+              />
+            </label>
+            {serverEnvNames
+              .split('\n')
+              .map((key) => key.trim())
+              .filter(Boolean)
+              .map((key) => (
+                <label key={key}>
+                  {key} (opcional; salvo no Gerenciador de Credenciais)
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    value={serverSecrets[key] ?? ''}
+                    onChange={(event) =>
+                      setServerSecrets((secrets) => ({ ...secrets, [key]: event.target.value }))
+                    }
+                  />
+                </label>
+              ))}
+          </div>
+          <p>
+            Comando que será executado:{' '}
+            <code>
+              {[serverCommand, ...serverArgs.split('\n').filter(Boolean)]
+                .map((part) => `"${part.replaceAll('"', '\\"')}"`)
+                .join(' ') || '—'}
+            </code>
+          </p>
+          <label className="skill-switch">
+            <input
+              type="checkbox"
+              checked={serverConfirmed}
+              onChange={(event) => setServerConfirmed(event.target.checked)}
+            />{' '}
+            Confirmo que entendo que o programa cadastrado será executado com os privilégios da
+            minha conta.
+          </label>
+          <Button
+            variant="secondary"
+            type="submit"
+            disabled={busy || !isTauri() || !serverConfirmed}
+          >
+            Adicionar servidor local
+          </Button>
+        </form>
         <ul className="allowed-folder-list">
           {servers.length === 0 && <li>Parado · Nenhum servidor local cadastrado.</li>}
           {servers.map((server) => {
@@ -474,9 +482,19 @@ export function PrivacyConfigurations({
                     <p role="alert">Detalhes: {server.error ?? state.error}</p>
                   )}
                   {server.envNames.map((key) => (
-                    <label className="mcp-env-field" key={key}>
-                      {key} · credencial (opcional)
+                    <form
+                      className="mcp-env-field"
+                      key={key}
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void saveServerSecret(server, key);
+                      }}
+                    >
+                      <label htmlFor={`mcp-secret-${server.id}-${key}`}>
+                        {key} · credencial (opcional)
+                      </label>
                       <input
+                        id={`mcp-secret-${server.id}-${key}`}
                         type="password"
                         autoComplete="new-password"
                         value={serverSecrets[`${server.id}:${key}`] ?? ''}
@@ -489,12 +507,12 @@ export function PrivacyConfigurations({
                       />
                       <Button
                         variant="secondary"
+                        type="submit"
                         disabled={busy || !serverSecrets[`${server.id}:${key}`]}
-                        onClick={() => void saveServerSecret(server, key)}
                       >
                         Salvar credencial
                       </Button>
-                    </label>
+                    </form>
                   ))}
                   {state.tools !== undefined && (
                     <pre aria-label="Ferramentas e formatos não confiáveis">

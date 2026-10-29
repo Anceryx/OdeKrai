@@ -1011,7 +1011,13 @@ export function ProviderCatalog({
               </ul>
             </div>
             {selected.integration !== 'guide' ? (
-              <div className="provider-form">
+              <form
+                className="provider-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void configure(false);
+                }}
+              >
                 {selected.id === 'local' && (
                   <p className="provider-key-note">
                     <strong>Local</strong> · A conversa não sai do seu computador.
@@ -1247,7 +1253,7 @@ export function ProviderCatalog({
                       <input
                         type={showKey ? 'text' : 'password'}
                         value={secret}
-                        autoComplete="off"
+                        autoComplete="new-password"
                         onChange={(event) => setSecret(event.target.value)}
                         placeholder={
                           credentialAvailable
@@ -1268,13 +1274,14 @@ export function ProviderCatalog({
                 </p>
                 <button
                   className="primary-button provider-connect"
+                  type="submit"
                   disabled={!readyToSave || busy}
-                  onClick={() => void configure(false)}
                 >
                   {busy ? 'Aguarde…' : 'Salvar configuração'}
                 </button>
                 <button
                   className="secondary-button provider-chat-button"
+                  type="button"
                   disabled={!readyToTest || busy}
                   onClick={() => void configure(true)}
                 >
@@ -1283,6 +1290,7 @@ export function ProviderCatalog({
                 {selected.id !== 'perplexity' && selected.id !== 'local' && (
                   <button
                     className="text-button"
+                    type="button"
                     disabled={!credentialAvailable || !draft.model.trim() || busy}
                     onClick={() => void ping()}
                     title="Envia um teste curto ao provedor. Pode gerar cobrança."
@@ -1293,6 +1301,7 @@ export function ProviderCatalog({
                 {credentialAvailable && (
                   <button
                     className="text-button"
+                    type="button"
                     disabled={busy}
                     onClick={() => void removeCredential(selected.id)}
                   >
@@ -1348,7 +1357,7 @@ export function ProviderCatalog({
                     <code>{technicalError.slice(0, 500)}</code>
                   </details>
                 )}
-              </div>
+              </form>
             ) : (
               <div className="provider-unavailable">
                 <span className="guide-mark">

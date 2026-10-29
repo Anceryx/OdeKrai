@@ -773,7 +773,24 @@ function GoogleCalendarConnection({
           Acessos autorizados: {status.scopes.join(', ')}
         </p>
       ) : (
-        <div className="skills-google-fields">
+        <form
+          className="skills-google-fields"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setBusy(true);
+            void invoke<GoogleOAuthStatus>('google_oauth_connect', {
+              clientId,
+              clientSecret: clientSecret || null,
+              scopes: scopes.trim().split(/\s+/),
+            })
+              .then((nextStatus) => {
+                onStatusChange(nextStatus);
+                setClientSecret('');
+              })
+              .catch((cause) => onError(String(cause)))
+              .finally(() => setBusy(false));
+          }}
+        >
           <label htmlFor="google-client-id">Identificador do cliente Google</label>
           <input
             id="google-client-id"
@@ -803,26 +820,10 @@ function GoogleCalendarConnection({
             https://www.googleapis.com/auth/calendar.events.owned. Aplicativos de computador não
             conseguem manter uma chave de cliente em segredo.
           </p>
-          <Button
-            disabled={busy || !isTauri() || !clientId.trim() || !scopes.trim()}
-            onClick={() => {
-              setBusy(true);
-              void invoke<GoogleOAuthStatus>('google_oauth_connect', {
-                clientId,
-                clientSecret: clientSecret || null,
-                scopes: scopes.trim().split(/\s+/),
-              })
-                .then((nextStatus) => {
-                  onStatusChange(nextStatus);
-                  setClientSecret('');
-                })
-                .catch((cause) => onError(String(cause)))
-                .finally(() => setBusy(false));
-            }}
-          >
+          <Button type="submit" disabled={busy || !isTauri() || !clientId.trim() || !scopes.trim()}>
             Conectar conta Google
           </Button>
-        </div>
+        </form>
       )}
       {status.connected && (
         <Button
