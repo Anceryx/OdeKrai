@@ -63,4 +63,4 @@ Screenshots live in `docs/screenshots/`.
 
 ## Licenses and credits
 
-See `LICENSE`, `THIRD_PARTY_NOTICES.md`, and `LICENSE-ASSETS.md` for the terms covering the code, dependencies, and assets. Do not distribute the owner's private assets.
+See [LICENSE](LICENSE), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and [LICENSE-ASSETS.md](LICENSE-ASSETS.md) for the terms covering the code, dependencies, and assets. Do not distribute the owner's private assets.
