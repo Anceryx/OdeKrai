@@ -592,6 +592,39 @@ export function ProviderCatalog({
               const primary = settings.activeProviderId === provider.id;
               const lastTest = settings.providers[provider.id]?.lastTest;
               const freePlanVerified = provider.freePlan?.status === 'verified';
+              const badges = [
+                connected && { label: 'Conectado', tone: 'connected' },
+                !connected &&
+                  !credentialSaved &&
+                  provider.id !== 'local' &&
+                  provider.integration !== 'guide' && {
+                    label: 'Desconectado',
+                    tone: 'disconnected',
+                  },
+                credentialSaved && { label: 'Credencial salva', tone: 'credential' },
+                lastTest && {
+                  label: `Teste ${
+                    lastTest.status === 'passed'
+                      ? 'aprovado'
+                      : lastTest.status === 'partial'
+                        ? 'parcial'
+                        : 'reprovado'
+                  }`,
+                  tone: lastTest.status === 'passed' ? 'approved' : 'test-warning',
+                },
+                primary && { label: 'Principal', tone: 'primary' },
+                { label: enabled ? 'Habilitado' : 'Desativado', tone: 'enabled' },
+                freePlanVerified && { label: 'Plano gratuito verificado', tone: 'free' },
+                provider.id === 'local' && { label: 'Local', tone: 'local' },
+                provider.id === 'local' && {
+                  label: localServiceOnline
+                    ? 'Serviço local online'
+                    : localServiceChecked
+                      ? 'Serviço local offline'
+                      : 'Serviço local não verificado',
+                  tone: localServiceOnline ? 'connected' : 'disconnected',
+                },
+              ].filter((badge): badge is { label: string; tone: string } => Boolean(badge));
               return (
                 <article className="provider-card" key={provider.id}>
                   <button
@@ -610,32 +643,11 @@ export function ProviderCatalog({
                       <small>{providerApiType(provider)}</small>
                     </span>
                     <span className="provider-badges">
-                      {[
-                        connected && 'Conectado',
-                        credentialSaved && 'Credencial salva',
-                        lastTest &&
-                          `Teste ${
-                            lastTest.status === 'passed'
-                              ? 'aprovado'
-                              : lastTest.status === 'partial'
-                                ? 'parcial'
-                                : 'reprovado'
-                          }`,
-                        primary && 'Principal',
-                        enabled ? 'Habilitado' : 'Desativado',
-                        freePlanVerified && 'Plano gratuito verificado',
-                        provider.id === 'local' && 'Local',
-                        provider.id === 'local' &&
-                          (localServiceOnline
-                            ? 'Serviço local online'
-                            : localServiceChecked
-                              ? 'Serviço local offline'
-                              : 'Serviço local não verificado'),
-                      ]
-                        .filter(Boolean)
-                        .map((badge) => (
-                          <span key={badge as string}>{badge}</span>
-                        ))}
+                      {badges.map((badge) => (
+                        <span className={`provider-badge--${badge.tone}`} key={badge.label}>
+                          {badge.label}
+                        </span>
+                      ))}
                     </span>
                   </button>
                   {provider.id === 'local' && (

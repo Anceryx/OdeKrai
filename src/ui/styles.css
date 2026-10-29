@@ -3731,15 +3731,14 @@ html.island-window-html {
 }
 .provider-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
   gap: 10px;
   align-items: stretch;
-  grid-auto-rows: minmax(236px, 1fr);
+  grid-auto-rows: 1fr;
 }
 .provider-card {
   display: flex;
   flex-direction: column;
-  min-height: 236px;
   min-width: 0;
   overflow: visible;
   border: 1px solid #ffffff12;
@@ -3749,12 +3748,14 @@ html.island-window-html {
 .provider-card .provider-tile {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto;
   align-content: start;
-  align-items: center;
-  flex: 1;
+  align-items: start;
+  flex: 0 0 auto;
   width: 100%;
   min-height: 0;
+  gap: 10px 12px;
+  padding: 12px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -3772,7 +3773,7 @@ html.island-window-html {
   grid-column: 1 / -1;
   flex-wrap: wrap;
   gap: 4px;
-  min-height: 20px;
+  min-height: 0;
 }
 .provider-badges span,
 .provider-badge {
@@ -3782,10 +3783,30 @@ html.island-window-html {
   color: #c7c3ca;
   font-size: 0.75rem;
   line-height: 1.2;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
-.provider-badges span:nth-child(2) {
+.provider-badges .provider-badge--connected,
+.provider-badges .provider-badge--approved {
+  background: #22c55e20;
+  color: #86efac;
+}
+.provider-badges .provider-badge--disconnected {
+  background: #ffffff0d;
+  color: #aaa7af;
+}
+.provider-badges .provider-badge--credential,
+.provider-badges .provider-badge--primary,
+.provider-badges .provider-badge--free {
   color: #fdba74;
+}
+.provider-badges .provider-badge--local {
+  background: #7c7cf520;
+  color: #b9b9ff;
+}
+.provider-badges .provider-badge--test-warning {
+  background: #f59e0b20;
+  color: #fcd34d;
 }
 .provider-tile-copy small {
   white-space: normal;
@@ -3797,6 +3818,7 @@ html.island-window-html {
   overflow-wrap: anywhere;
   text-overflow: clip;
   white-space: normal;
+  word-break: normal;
 }
 .provider-card-controls {
   display: flex;
@@ -3804,8 +3826,9 @@ html.island-window-html {
   align-items: center;
   justify-content: flex-start;
   gap: 7px;
-  min-height: 48px;
-  padding: 8px 10px 10px;
+  margin-top: auto;
+  min-height: 0;
+  padding: 7px 10px 8px;
   border-top: 1px solid #ffffff10;
 }
 .provider-local-action {
@@ -4011,10 +4034,7 @@ html.island-window-html {
 }
 @media (max-width: 760px) {
   .provider-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .provider-card {
-    min-height: 250px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   }
 }
 @media (max-width: 1200px) {
