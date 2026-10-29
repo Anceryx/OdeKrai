@@ -28,6 +28,23 @@ export interface NavigationSnapshot {
   section: Section;
 }
 
+export interface NavigationView extends NavigationSnapshot {
+  settingsOpen: boolean;
+}
+
+export function resolveLegacySettingsNavigation(
+  destination: Section,
+  current: NavigationView,
+): NavigationView | null {
+  const settingsSection = LEGACY_SETTINGS_SECTIONS[destination];
+  if (!settingsSection) return null;
+  return {
+    route: { page: current.route.page, settingsSection },
+    section: current.section,
+    settingsOpen: true,
+  };
+}
+
 export function resolveNavigation(destination: Section | AppRoute): NavigationSnapshot {
   if (typeof destination === 'string') {
     const settingsSection = LEGACY_SETTINGS_SECTIONS[destination];
@@ -71,6 +88,40 @@ export function readLastPage(storage?: Pick<Storage, 'getItem'>): Page {
     return value && isPage(value) ? value : 'overview';
   } catch {
     return 'overview';
+  }
+}
+
+export function readLastSettingsSection(storage?: Pick<Storage, 'getItem'>): SettingsSection {
+  try {
+    const value = (storage ?? window.localStorage).getItem('odekrai:last-settings-section');
+    return SETTINGS_SECTIONS.includes(value as SettingsSection)
+      ? (value as SettingsSection)
+      : 'geral';
+  } catch {
+    return 'geral';
+  }
+}
+
+export const SETTINGS_SECTIONS: SettingsSection[] = [
+  'geral',
+  'perfil-memoria',
+  'assistente',
+  'computador',
+  'habilidades',
+  'conectores',
+  'privacidade',
+  'atividade',
+  'sobre',
+];
+
+export function persistSettingsSection(
+  section: SettingsSection,
+  storage?: Pick<Storage, 'setItem'>,
+): void {
+  try {
+    (storage ?? window.localStorage).setItem('odekrai:last-settings-section', section);
+  } catch {
+    // A seção continua selecionada enquanto o aplicativo estiver aberto.
   }
 }
 

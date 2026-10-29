@@ -32,4 +32,19 @@ describe('SettingsScreen', () => {
     expect(markup).toContain('Copiar informações');
     expect(markup).toContain('Abrir pasta de logs');
   });
+
+  it('limita a seção Sobre ao painel de informações quando embutida', () => {
+    const markup = renderToStaticMarkup(
+      <SettingsScreen
+        settings={defaultSettings}
+        update={() => undefined}
+        onDeleteAllHistory={async () => false}
+        onOpenPermissions={() => undefined}
+        embedded
+        embeddedSection="about"
+      />,
+    );
+    expect(markup).toContain('settings-embedded-content about-only');
+    expect(markup).toContain('id="settings-about"');
+  });
 });

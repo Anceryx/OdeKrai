@@ -86,6 +86,7 @@ import { externalLinkDomain, safeMarkdownUrl } from '../core/markdown';
 
 import { useAppState } from './hooks/useAppState';
 import { useNavigation } from './hooks/useNavigation';
+import { SettingsModal } from './SettingsModal';
 import { resolveAgentReason, resolveConfigurationReason } from '../core/navigation';
 import { ScreenErrorBoundary } from './ScreenErrorBoundary';
 import { ResizeHandle } from './ResizeHandle';
@@ -113,7 +114,8 @@ export function App() {
 
 function MainApp() {
   const appState = useAppState();
-  const { section, navigate } = useNavigation();
+  const { section, route, navigate, settingsOpen, closeSettings, selectSettingsSection } =
+    useNavigation();
   const [usedProviderId, setUsedProviderId] = useState<string | null>(null);
   const [agentAvailability, setAgentAvailability] = useState<{
     available: boolean;
@@ -1161,6 +1163,24 @@ function MainApp() {
           {toast}
         </div>
       )}
+      <SettingsModal
+        open={settingsOpen}
+        section={route.settingsSection ?? 'geral'}
+        onClose={closeSettings}
+        onSelectSection={selectSettingsSection}
+        settings={settings}
+        update={setSettings}
+        profile={profile}
+        setProfile={setProfile}
+        petVisible={petVisible}
+        setPetVisible={setPetVisible}
+        selectedPet={selectedPet}
+        onSelectPet={(petId) => void choosePet(petId)}
+        onError={setToast}
+        onDeleteAllHistory={deleteAllConversations}
+        onOpenPage={(page) => navigate(page)}
+        onAgentStatus={() => reportDiagnostic('agent_home_status', '')}
+      />
     </div>
   );
 }

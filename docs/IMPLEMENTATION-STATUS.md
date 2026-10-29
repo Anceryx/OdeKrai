@@ -8,6 +8,10 @@
 
 - `useNavigation` mantém a seção legada exibida e o modelo de rota `{ page, settingsSection? }`, com histórico simples de retorno e persistência da última página. Os IDs antigos de perfil/memória, assistente, configurações, permissões, atividade e computador são associados às seções futuras sem alterar as telas atuais. Roteamentos por motivo de disponibilidade do agente e de configuração permanecem cobertos por testes unitários.
 
+## Configurações em modal
+
+- Os IDs de navegação legados abrem Configurações sobre a página ativa; o chat continua montado por baixo. O modal mostra as nove categorias com componentes existentes em modo embutido, mantém uma única fonte em `AppSettings` e perfil, lembra a última categoria e pesquisa pelo índice único `src/core/settings-navigation.ts`. Habilidades e Conectores exibem apenas preferências globais e um atalho para suas páginas completas. A validação visual em larguras estreitas e no Windows continua pendente.
+
 ## Captura de tela e análise visual
 
 - Implementação em [`SCREEN-CAPTURE-AND-VISION.md`](SCREEN-CAPTURE-AND-VISION.md): captura local com prévia obrigatória, salvamento separado, análise explicitamente confirmada e allowlist de modelos com visão documentada. A captura física e a interface no executável Windows ainda precisam de validação manual.

@@ -34,6 +34,7 @@ export function AssistantScreen({
   onError,
   selectedPet,
   onSelectPet,
+  embedded = false,
 }: {
   settings: AppSettings;
   update: (settings: AppSettings) => void;
@@ -42,6 +43,7 @@ export function AssistantScreen({
   onError: (message: string) => void;
   selectedPet: string;
   onSelectPet: (petId: string) => void;
+  embedded?: boolean;
 }) {
   const [petState, setPetState] = useState<PetAnimationState>('idle');
   const [petError, setPetError] = useState('');
@@ -133,14 +135,16 @@ export function AssistantScreen({
     }
   }
   return (
-    <div className="page subpage">
+    <div className={embedded ? 'settings-embedded-content' : 'page subpage'}>
       <PetActionError message={petError} onRetry={retryPetAction ?? (() => undefined)} />
-      <PageHeader
-        eyebrow="PERSONALIZAÇÃO"
-        title="Assistente do OdeKrai"
-        subtitle="Uma presença leve para acompanhar você na área de trabalho."
-      />
-      <section className="settings-panel pet-picker-panel">
+      {!embedded && (
+        <PageHeader
+          eyebrow="PERSONALIZAÇÃO"
+          title="Assistente do OdeKrai"
+          subtitle="Uma presença leve para acompanhar você na área de trabalho."
+        />
+      )}
+      <section id="assistant-pet" className="settings-panel pet-picker-panel">
         <div className="panel-heading">
           <div>
             <h3>Escolha seu mascote</h3>
@@ -205,7 +209,7 @@ export function AssistantScreen({
           <p>OdeKrai pronto para acompanhar sua área de trabalho.</p>
         </div>
       </div>
-      <section className="settings-panel compact-panel">
+      <section id="assistant-behavior" className="settings-panel compact-panel">
         <div className="panel-heading">
           <div>
             <h3>Pet na área de trabalho</h3>

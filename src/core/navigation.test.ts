@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   LEGACY_SETTINGS_SECTIONS,
   persistPage,
+  persistSettingsSection,
   readLastPage,
+  readLastSettingsSection,
   resolveAgentReason,
   resolveConfigurationReason,
+  resolveLegacySettingsNavigation,
   resolveNavigation,
 } from './navigation';
 import type { Section } from '../ui/screens/types';
@@ -45,6 +48,26 @@ describe('modelo de navegação', () => {
   });
 
   it.each([
+    ['agent', 'perfil-memoria'],
+    ['companion', 'assistente'],
+    ['settings', 'geral'],
+    ['permissions', 'privacidade'],
+    ['activity', 'atividade'],
+    ['computer', 'computador'],
+  ] as const)('abre o modal por %s sem trocar a página atual', (id, settingsSection) => {
+    const current = {
+      route: { page: 'chat' as const },
+      section: 'chat' as const,
+      settingsOpen: false,
+    };
+    expect(resolveLegacySettingsNavigation(id, current)).toEqual({
+      route: { page: 'chat', settingsSection },
+      section: 'chat',
+      settingsOpen: true,
+    });
+  });
+
+  it.each([
     ['pasta ausente', 'agent'],
     ['identidade pendente', 'agent'],
     ['habilidade indisponível', 'skills'],
@@ -76,5 +99,18 @@ describe('modelo de navegação', () => {
     expect(readLastPage(storage)).toBe('calendar');
     values.set('odekrai:last-page', 'agent');
     expect(readLastPage(storage)).toBe('overview');
+  });
+
+  it('lembra apenas seções de configurações válidas', () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    };
+    expect(readLastSettingsSection(storage)).toBe('geral');
+    persistSettingsSection('sobre', storage);
+    expect(readLastSettingsSection(storage)).toBe('sobre');
+    values.set('odekrai:last-settings-section', 'computer');
+    expect(readLastSettingsSection(storage)).toBe('geral');
   });
 });

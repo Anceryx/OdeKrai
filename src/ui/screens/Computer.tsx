@@ -19,7 +19,7 @@ const groups = [
   { profile: 'pesado', title: 'Pesado', accepts: ['pesado'] },
 ];
 
-export function ComputerScreen() {
+export function ComputerScreen({ embedded = false }: { embedded?: boolean }) {
   const [hardware, setHardware] = useState<HardwareProfile | null>(null);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState('');
@@ -103,12 +103,19 @@ export function ComputerScreen() {
   }
 
   return (
-    <div className="page subpage local-model-page">
-      <PageHeader
-        eyebrow="IA LOCAL"
-        title="Seu computador"
-        subtitle="Confira os recursos disponíveis e escolha um modelo. A escolha é sua; nada será baixado automaticamente."
-      />
+    <div
+      id="computer-resources"
+      className={
+        embedded ? 'settings-embedded-content local-model-page' : 'page subpage local-model-page'
+      }
+    >
+      {!embedded && (
+        <PageHeader
+          eyebrow="IA LOCAL"
+          title="Seu computador"
+          subtitle="Confira os recursos disponíveis e escolha um modelo. A escolha é sua; nada será baixado automaticamente."
+        />
+      )}
       {error && (
         <div className="ui-banner ui-banner--warning" role="status">
           {error} Você ainda pode escolher um modelo manualmente; a execução e os requisitos mínimos

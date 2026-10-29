@@ -52,12 +52,14 @@ export function AgentHome({
   initialNickname = '',
   profileValue,
   onProfileChange,
+  embedded = false,
 }: {
   onStatus?: (status: HomeStatus) => void;
   initialName?: string;
   initialNickname?: string;
   profileValue: ProfileData;
   onProfileChange: (profile: ProfileData) => void;
+  embedded?: boolean;
 }) {
   const [status, setStatus] = useState<HomeStatus | null>(null);
   const [path, setPath] = useState('');
@@ -256,12 +258,14 @@ export function AgentHome({
   }
   if (!isTauri()) return <p>A pasta pessoal está disponível no aplicativo Windows.</p>;
   return (
-    <div className="page settings-page">
-      <PageHeader
-        eyebrow="IDENTIDADE LOCAL"
-        title="Identidade e memória"
-        subtitle="Defina como o OdeKrai conversa com você e edite suas notas locais."
-      />
+    <div className={embedded ? 'settings-embedded-content' : 'page settings-page'}>
+      {!embedded && (
+        <PageHeader
+          eyebrow="IDENTIDADE LOCAL"
+          title="Identidade e memória"
+          subtitle="Defina como o OdeKrai conversa com você e edite suas notas locais."
+        />
+      )}
       {error && (
         <Banner tone="danger" role="alert">
           {error}
@@ -507,12 +511,14 @@ export function AgentHome({
         </form>
       ) : (
         <>
-          <Profile
-            value={profileValue}
-            onChange={onProfileChange}
-            onBeforeSave={approveProfileChange}
-          />
-          <Card className="settings-card identity-section">
+          <div id="identity-profile">
+            <Profile
+              value={profileValue}
+              onChange={onProfileChange}
+              onBeforeSave={approveProfileChange}
+            />
+          </div>
+          <Card id="identity-conversation" className="settings-card identity-section">
             <h2>Como o OdeKrai fala com você</h2>
             <div className="identity-fields">
               <label>
@@ -583,7 +589,7 @@ export function AgentHome({
               Salvar preferências
             </Button>
           </Card>
-          <Card className="settings-card identity-section">
+          <Card id="identity-memory" className="settings-card identity-section">
             <h2>Memória</h2>
             <p>Suas notas ficam visíveis para você e podem ser alteradas a qualquer momento.</p>
             <div className="memory-file-list">

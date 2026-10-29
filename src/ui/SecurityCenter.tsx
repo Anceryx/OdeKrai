@@ -96,7 +96,13 @@ function decision(mode: Mode, risk: RiskLevel): string {
   return 'Permitir (origem externa sempre pede aprovação)';
 }
 
-export function SecurityCenter({ page }: { page: 'permissions' | 'activity' }) {
+export function SecurityCenter({
+  page,
+  embedded = false,
+}: {
+  page: 'permissions' | 'activity';
+  embedded?: boolean;
+}) {
   const [settings, setSettings] = useState<PermissionSettings | null>(null);
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [verified, setVerified] = useState<boolean | null>(null);
@@ -202,19 +208,26 @@ export function SecurityCenter({ page }: { page: 'permissions' | 'activity' }) {
   );
 
   return (
-    <div className="page subpage security-page">
-      <PageHeader
-        eyebrow="SEGURANÇA LOCAL"
-        title={page === 'permissions' ? 'Permissões' : 'Atividade'}
-        subtitle="Acompanhe as confirmações e os registros de segurança do OdeKrai."
-        actions={
-          settings && (
-            <span className={`state-chip ${settings.halted ? 'warning' : 'connected'}`}>
-              {settings.halted ? 'PARADO' : `MODO ${settings.mode.toUpperCase()}`}
-            </span>
-          )
-        }
-      />
+    <div
+      id={page === 'activity' ? 'activity-log' : undefined}
+      className={
+        embedded ? 'settings-embedded-content security-page' : 'page subpage security-page'
+      }
+    >
+      {!embedded && (
+        <PageHeader
+          eyebrow="SEGURANÇA LOCAL"
+          title={page === 'permissions' ? 'Permissões' : 'Atividade'}
+          subtitle="Acompanhe as confirmações e os registros de segurança do OdeKrai."
+          actions={
+            settings && (
+              <span className={`state-chip ${settings.halted ? 'warning' : 'connected'}`}>
+                {settings.halted ? 'PARADO' : `MODO ${settings.mode.toUpperCase()}`}
+              </span>
+            )
+          }
+        />
+      )}
       {error && (
         <div className="security-notice" role="status">
           {error}
@@ -227,7 +240,7 @@ export function SecurityCenter({ page }: { page: 'permissions' | 'activity' }) {
       )}
       {page === 'permissions' && settings && (
         <>
-          <section className="settings-panel">
+          <section id="permissions-mode" className="settings-panel">
             <div className="panel-heading">
               <div>
                 <h3>Modo global</h3>
@@ -247,7 +260,7 @@ export function SecurityCenter({ page }: { page: 'permissions' | 'activity' }) {
                 </SelectableCard>
               ))}
             </div>
-            <div className="permission-matrix">
+            <div id="permissions-matrix" className="permission-matrix">
               <table>
                 <thead>
                   <tr>
@@ -310,7 +323,7 @@ export function SecurityCenter({ page }: { page: 'permissions' | 'activity' }) {
               );
             })}
           </section>
-          <section className="settings-panel">
+          <section id="permissions-shortcut" className="settings-panel">
             <div className="panel-heading">
               <div>
                 <h3>Parada de emergência</h3>

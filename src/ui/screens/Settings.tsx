@@ -37,11 +37,15 @@ export function SettingsScreen({
   update,
   onDeleteAllHistory,
   onOpenPermissions,
+  embedded = false,
+  embeddedSection = 'general',
 }: {
   settings: AppSettings;
   update: (next: AppSettings) => void;
   onDeleteAllHistory: () => Promise<boolean>;
   onOpenPermissions: () => void;
+  embedded?: boolean;
+  embeddedSection?: 'general' | 'about';
 }) {
   const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null);
   const [usage, setUsage] = useState<ProviderUsage[]>([]);
@@ -130,13 +134,17 @@ export function SettingsScreen({
   }
 
   return (
-    <div className="page subpage">
-      <PageHeader
-        eyebrow="PREFERÊNCIAS"
-        title="Configurações"
-        subtitle="Ajuste como o OdeKrai se comporta neste dispositivo."
-      />
-      <section className="settings-panel settings-section">
+    <div
+      className={`${embedded ? 'settings-embedded-content' : 'page subpage'}${embedded && embeddedSection === 'about' ? ' about-only' : ''}`}
+    >
+      {!embedded && (
+        <PageHeader
+          eyebrow="PREFERÊNCIAS"
+          title="Configurações"
+          subtitle="Ajuste como o OdeKrai se comporta neste dispositivo."
+        />
+      )}
+      <section id="settings-language" className="settings-panel settings-section">
         <h2>Geral</h2>
         <div className="panel-heading">
           <div>
@@ -153,7 +161,7 @@ export function SettingsScreen({
           </select>
         </div>
       </section>
-      <section className="settings-panel settings-section">
+      <section id="settings-window" className="settings-panel settings-section">
         <h2>Janela</h2>
         <div className="preference-row">
           <div>
@@ -175,7 +183,7 @@ export function SettingsScreen({
           </select>
         </div>
       </section>
-      <section className="settings-panel settings-section">
+      <section id="settings-appearance" className="settings-panel settings-section">
         <h2>Aparência</h2>
         <div className="preference-row">
           <div>
@@ -206,6 +214,7 @@ export function SettingsScreen({
         </div>
       </section>
       <section
+        id="settings-audio"
         className="settings-panel settings-section"
         aria-labelledby="microphone-settings-heading"
       >
@@ -308,7 +317,11 @@ export function SettingsScreen({
           <output htmlFor="speech-volume">{Math.round(settings.speechVolume * 100)}%</output>
         </div>
       </section>
-      <section className="settings-panel settings-section" aria-labelledby="agent-settings-heading">
+      <section
+        id="settings-agent"
+        className="settings-panel settings-section"
+        aria-labelledby="agent-settings-heading"
+      >
         <h2 id="agent-settings-heading">Agente</h2>
         <p className="settings-description">
           Os limites são aplicados pelo Rust em cada execução e ficam salvos neste dispositivo.
@@ -393,7 +406,11 @@ export function SettingsScreen({
         </div>
       </section>
       <CodeDelegationSettings />
-      <section className="settings-panel settings-section" aria-labelledby="trusted-links-heading">
+      <section
+        id="settings-links"
+        className="settings-panel settings-section"
+        aria-labelledby="trusted-links-heading"
+      >
         <h2 id="trusted-links-heading">Links externos</h2>
         <p className="settings-description">
           Na primeira abertura de cada domínio, o OdeKrai pede sua confirmação. Os domínios
@@ -471,6 +488,7 @@ export function SettingsScreen({
         </ul>
       </section>
       <section
+        id="settings-fallbacks"
         className="settings-panel settings-section"
         aria-labelledby="provider-fallback-heading"
       >
@@ -572,7 +590,11 @@ export function SettingsScreen({
           <p className="settings-description">Nenhum provedor alternativo configurado.</p>
         )}
       </section>
-      <section className="settings-panel settings-section" aria-labelledby="usage-heading">
+      <section
+        id="settings-usage"
+        className="settings-panel settings-section"
+        aria-labelledby="usage-heading"
+      >
         <h2 id="usage-heading">Uso de tokens</h2>
         <p role="status" aria-live="polite">
           Estado: {usageStatus}
@@ -622,7 +644,7 @@ export function SettingsScreen({
           )}
         </ul>
       </section>
-      <section className="settings-panel settings-section">
+      <section id="settings-data" className="settings-panel settings-section">
         <h2>Dados e privacidade</h2>
         <p className="settings-description">
           Preferências ficam neste dispositivo. Perfil e conversas são salvos no banco de dados
@@ -642,7 +664,11 @@ export function SettingsScreen({
       <div className="provider-footnote">
         <p>A restauração volta ao padrão Encerrar e não remove perfil, histórico ou credenciais.</p>
       </div>
-      <section className="settings-panel settings-section" aria-labelledby="about-heading">
+      <section
+        id="settings-about"
+        className="settings-panel settings-section"
+        aria-labelledby="about-heading"
+      >
         <h2 id="about-heading">Sobre</h2>
         <dl className="about-table">
           <div>
