@@ -183,6 +183,8 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
     if skill_id.starts_with("system.")
         || skill_id.starts_with("audio.")
         || skill_id.starts_with("media.")
+        || skill_id.starts_with("wallpaper.")
+        || skill_id == "power.lock"
         || skill_id == "settings.open"
         || skill_id == "notification.show"
         || skill_id == "app.launch"
@@ -357,6 +359,8 @@ pub(crate) fn preview(skill_id: &str, params: &Value, root: &Path) -> Result<Str
     if skill_id.starts_with("system.")
         || skill_id.starts_with("audio.")
         || skill_id.starts_with("media.")
+        || skill_id.starts_with("wallpaper.")
+        || skill_id == "power.lock"
         || skill_id == "settings.open"
         || skill_id == "notification.show"
         || skill_id == "app.launch"
@@ -476,6 +480,8 @@ pub(crate) fn execute(
     if skill_id.starts_with("system.")
         || skill_id.starts_with("audio.")
         || skill_id.starts_with("media.")
+        || skill_id.starts_with("wallpaper.")
+        || skill_id == "power.lock"
         || skill_id == "settings.open"
         || skill_id == "notification.show"
         || skill_id == "app.launch"

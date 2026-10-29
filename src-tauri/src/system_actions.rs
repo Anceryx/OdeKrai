@@ -22,9 +22,11 @@ const SETTINGS_PAGES: &[(&str, &str)] = &[
 pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
     let object = params.as_object().ok_or("Parâmetros inválidos.")?;
     let expected: &[&str] = match skill_id {
-        "audio.get_volume" | "media.play_pause" | "media.next" | "media.previous" => &[],
+        "audio.get_volume" | "media.play_pause" | "media.next" | "media.previous"
+        | "wallpaper.restore" | "power.lock" => &[],
         "audio.set_volume" => &["volume"],
         "audio.mute" => &["muted"],
+        "wallpaper.set" => &["path"],
         "system.open_url" => &["url"],
         "system.open_path" | "system.reveal_in_folder" => &["path"],
         "settings.open" => &["page"],
@@ -40,7 +42,22 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
         return Err("Os parâmetros não correspondem à habilidade permitida.".into());
     }
     match skill_id {
-        "audio.get_volume" | "media.play_pause" | "media.next" | "media.previous" => {}
+        "audio.get_volume" | "media.play_pause" | "media.next" | "media.previous"
+        | "wallpaper.restore" | "power.lock" => {}
+        "wallpaper.set" => {
+            let path = bounded_string(object, "path", 32767)?;
+            if Path::new(path)
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_none_or(|ext| {
+                    !["png", "jpg", "bmp"]
+                        .iter()
+                        .any(|valid| ext.eq_ignore_ascii_case(valid))
+                })
+            {
+                return Err("Formato inválido. Use uma imagem PNG, JPG ou BMP.".into());
+            }
+        }
         "audio.set_volume" => {
             if object
                 .get("volume")
@@ -119,6 +136,9 @@ pub(crate) fn preview(skill_id: &str, params: &Value, root: &Path) -> Result<Str
         "media.play_pause" => "Enviar tecla de reproduzir/pausar para o Windows.".into(),
         "media.next" => "Enviar tecla de próxima faixa para o Windows.".into(),
         "media.previous" => "Enviar tecla de faixa anterior para o Windows.".into(),
+        "wallpaper.set" => format!("Alterar o papel de parede para {}.", params["path"].as_str().unwrap_or("")),
+        "wallpaper.restore" => "Restaurar o papel de parede anterior.".into(),
+        "power.lock" => "Solicitar o bloqueio da sessão do Windows.".into(),
         "system.open_url" => format!(
             "Abrir no navegador padrão: {}",
             params["url"].as_str().unwrap()
@@ -179,6 +199,9 @@ pub(crate) fn execute(
     match skill_id {
         "audio.get_volume" | "audio.set_volume" | "audio.mute" | "media.play_pause"
         | "media.next" | "media.previous" => crate::system_controls::execute(skill_id, params),
+        "wallpaper.set" | "wallpaper.restore" | "power.lock" => {
+            Err("Esta habilidade precisa ser despachada com contexto de segurança.".into())
+        }
         "system.open_url" => {
             let normalized =
                 crate::external_links::validate_external_url(params["url"].as_str().unwrap())
@@ -260,6 +283,79 @@ pub(crate) fn execute(
         }
         "system.info" => system_information(app),
         _ => Err("Habilidade do sistema desconhecida.".into()),
+    }
+}
+
+pub(crate) fn execute_managed_control(
+    app: &tauri::AppHandle,
+    skill_id: &str,
+    params: &Value,
+    origin: &str,
+) -> Result<String, String> {
+    validate(skill_id, params)?;
+    let db = crate::security::database(app)?;
+    db.execute_batch("CREATE TABLE IF NOT EXISTS wallpaper_history (id INTEGER PRIMARY KEY, previous_path TEXT, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER)")
+        .map_err(|_| "Não foi possível preparar o histórico do papel de parede.".to_string())?;
+    let mut roots = vec![crate::agent_home::workspace_path(app)?];
+    let mut statement = db
+        .prepare("SELECT path FROM allowed_folders ORDER BY path")
+        .map_err(|_| "Não foi possível consultar as pastas permitidas.".to_string())?;
+    let folders = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|_| "Não foi possível consultar as pastas permitidas.".to_string())?;
+    roots.extend(folders.filter_map(Result::ok).map(PathBuf::from));
+    crate::system_controls::execute_managed(skill_id, params, &db, &roots, origin)
+}
+
+pub(crate) fn preview_managed_control(
+    app: &tauri::AppHandle,
+    skill_id: &str,
+    params: &Value,
+) -> Result<String, String> {
+    validate(skill_id, params)?;
+    let db = crate::security::database(app)?;
+    db.execute_batch("CREATE TABLE IF NOT EXISTS wallpaper_history (id INTEGER PRIMARY KEY, previous_path TEXT, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER)")
+        .map_err(|_| "Não foi possível preparar o histórico do papel de parede.".to_string())?;
+    let mut roots = vec![crate::agent_home::workspace_path(app)?];
+    let mut statement = db
+        .prepare("SELECT path FROM allowed_folders ORDER BY path")
+        .map_err(|_| "Não foi possível consultar as pastas permitidas.".to_string())?;
+    let folders = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|_| "Não foi possível consultar as pastas permitidas.".to_string())?;
+    roots.extend(folders.filter_map(Result::ok).map(PathBuf::from));
+    match skill_id {
+        "wallpaper.set" => {
+            let path = crate::system_controls::validate_wallpaper_path(
+                params["path"]
+                    .as_str()
+                    .ok_or("Informe o caminho da imagem.")?,
+                &roots,
+            )?;
+            Ok(format!(
+                "Alterar o papel de parede para {}.",
+                path.display()
+            ))
+        }
+        "wallpaper.restore" => {
+            let available: bool = db
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM wallpaper_history WHERE restored_at IS NULL)",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(|_| {
+                    "Não foi possível consultar o histórico do papel de parede.".to_string()
+                })?;
+            if !available {
+                return Err("Não há papel de parede anterior para restaurar.".into());
+            }
+            Ok("Restaurar o papel de parede anterior.".into())
+        }
+        "power.lock" => {
+            Ok("Solicitar o bloqueio da sessão do Windows; a aprovação é obrigatória.".into())
+        }
+        _ => Err("Habilidade de controle local desconhecida.".into()),
     }
 }
 

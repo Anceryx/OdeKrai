@@ -103,7 +103,8 @@ pub(super) fn action_metadata(
             | "clipboard.read"
             | "system.info" => skill_id,
             "audio.get_volume" | "audio.set_volume" | "audio.mute" | "media.play_pause"
-            | "media.next" | "media.previous" => skill_id,
+            | "media.next" | "media.previous" | "wallpaper.set" | "wallpaper.restore"
+            | "power.lock" => skill_id,
             _ => "productivity",
         },
         _ => tool.name(),
@@ -129,7 +130,11 @@ fn is_workspace_skill(skill_id: &str) -> bool {
 }
 
 fn require_batch_approval(action: &SimulatedAction, decision: Decision) -> Decision {
-    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "memory.propose_note")
+    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "power.lock")
+        && matches!(decision, Decision::Allow(_))
+    {
+        Decision::AskUser("power_lock_requires_approval")
+    } else if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "memory.propose_note")
         && matches!(decision, Decision::Allow(_))
     {
         Decision::AskUser("memory_proposal_requires_approval")
@@ -139,6 +144,21 @@ fn require_batch_approval(action: &SimulatedAction, decision: Decision) -> Decis
         Decision::AskUser("batch_requires_approval")
     } else {
         decision
+    }
+}
+
+fn enforce_power_lock_origin(
+    action: &SimulatedAction,
+    origin: &Origin,
+    tainted: bool,
+    fixed: Option<&'static str>,
+) -> Option<&'static str> {
+    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "power.lock")
+        && (tainted || origin.is_tainted())
+    {
+        Some("power_lock_external_origin")
+    } else {
+        fixed
     }
 }
 
@@ -169,6 +189,36 @@ mod explicit_approval_tests {
                 Decision::AskUser(_)
             ));
         }
+    }
+
+    #[test]
+    fn power_lock_always_asks_for_approval_and_external_origin_is_denied() {
+        let action = SimulatedAction::Productivity {
+            skill_id: "power.lock".into(),
+            params: serde_json::json!({}),
+        };
+        assert!(matches!(
+            require_batch_approval(&action, Decision::Allow("mode_total")),
+            Decision::AskUser("power_lock_requires_approval")
+        ));
+        let fixed = enforce_power_lock_origin(
+            &action,
+            &Origin::ExternalContent("página".into()),
+            false,
+            None,
+        );
+        let external = policy::decide(
+            Mode::ControleTotal,
+            Risk::EscritaReversivel,
+            &Origin::ExternalContent("página".into()),
+            false,
+            fixed,
+            true,
+        );
+        assert!(matches!(
+            external,
+            Decision::Deny("power_lock_external_origin")
+        ));
     }
 
     #[test]
@@ -313,6 +363,12 @@ pub(super) fn preview_for(
                 params["webhook_id"].as_str().ok_or("Webhook inválido.")?,
                 params["text"].as_str().ok_or("Texto inválido.")?,
             );
+        }
+        if matches!(
+            skill_id.as_str(),
+            "wallpaper.set" | "wallpaper.restore" | "power.lock"
+        ) {
+            return crate::system_actions::preview_managed_control(app, skill_id, params);
         }
     }
     let workspace_action = match action {
@@ -473,6 +529,7 @@ async fn execute_action_with_timeout(
     action: &SimulatedAction,
     app: &tauri::AppHandle,
     timeout: Duration,
+    origin: &Origin,
     cancel: &tokio_util::sync::CancellationToken,
     on_output: &mut (dyn FnMut(String) + Send),
 ) -> Result<String, String> {
@@ -502,7 +559,7 @@ async fn execute_action_with_timeout(
     let tool = tool_for(&action);
     tokio::time::timeout(
         timeout,
-        tool.execute_with_app(&action, &workspace, app, cancel, on_output),
+        tool.execute_with_app(&action, &workspace, app, origin, cancel, on_output),
     )
     .await
     .map_err(|_| "A ferramenta excedeu o tempo limite.".to_string())?
@@ -576,6 +633,7 @@ pub(super) async fn submit_agent_action(
         return Err("A execução foi parada antes da ação.".into());
     }
     let (tool, risk, inside, fixed) = action_metadata(&action);
+    let fixed = enforce_power_lock_origin(&action, &origin, tainted, fixed);
     let id = id();
     let params = audit_params(&action);
     let preview = match validate_action(&action).and_then(|_| preview_for(app, &action)) {
@@ -683,7 +741,8 @@ pub(super) async fn submit_agent_action(
             "started",
             None,
         )?;
-        let result = execute_action_with_timeout(&action, app, timeout, cancel, on_output).await;
+        let result =
+            execute_action_with_timeout(&action, app, timeout, &origin, cancel, on_output).await;
         let error = result.as_ref().err().cloned();
         record(
             app,
@@ -861,7 +920,8 @@ pub(super) async fn submit_agent_action(
                 None,
             )?;
             let execution =
-                execute_action_with_timeout(&action, app, timeout, cancel, on_output).await;
+                execute_action_with_timeout(&action, app, timeout, &origin, cancel, on_output)
+                    .await;
             let error = execution.as_ref().err().cloned();
             record(
                 app,

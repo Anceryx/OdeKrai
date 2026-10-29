@@ -11,6 +11,7 @@ pub(super) trait Tool: Sync {
         action: &'a SimulatedAction,
         workspace: &'a Path,
         _app: &'a tauri::AppHandle,
+        _origin: &'a crate::policy::Origin,
         _cancel: &'a tokio_util::sync::CancellationToken,
         _on_output: &'a mut (dyn FnMut(String) + Send),
     ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
@@ -648,6 +649,7 @@ impl Tool for Productivity {
         action: &'a SimulatedAction,
         root: &'a Path,
         app: &'a tauri::AppHandle,
+        origin: &'a crate::policy::Origin,
         cancel: &'a tokio_util::sync::CancellationToken,
         on_output: &'a mut (dyn FnMut(String) + Send),
     ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
@@ -658,6 +660,22 @@ impl Tool for Productivity {
             let url = params["url"].as_str().unwrap_or("").to_string();
             let app = app.clone();
             return Box::pin(async move { crate::web_fetch::fetch(&app, &url).await });
+        }
+        if matches!(
+            skill_id.as_str(),
+            "wallpaper.set" | "wallpaper.restore" | "power.lock"
+        ) {
+            let skill_id = skill_id.clone();
+            let params = params.clone();
+            let app = app.clone();
+            let origin = match origin {
+                crate::policy::Origin::User => "user".to_string(),
+                crate::policy::Origin::Model => "model".to_string(),
+                crate::policy::Origin::ExternalContent(_) => "external_content".to_string(),
+            };
+            return Box::pin(async move {
+                crate::system_actions::execute_managed_control(&app, &skill_id, &params, &origin)
+            });
         }
         if skill_id.starts_with("calendar.")
             || skill_id.starts_with("reminder.")

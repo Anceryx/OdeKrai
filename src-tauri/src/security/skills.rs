@@ -138,7 +138,8 @@ fn action_id(action: &SimulatedAction) -> &str {
             | "app.launch" => skill_id,
             "clipboard.write" | "clipboard.read" => skill_id,
             "system.info" | "audio.get_volume" | "audio.set_volume" | "audio.mute"
-            | "media.play_pause" | "media.next" | "media.previous" => skill_id,
+            | "media.play_pause" | "media.next" | "media.previous" | "wallpaper.set"
+            | "wallpaper.restore" | "power.lock" => skill_id,
             _ => "",
         },
     }
@@ -174,6 +175,9 @@ fn parse_action(id: &str, params: &Value) -> Result<SimulatedAction, String> {
             | "media.play_pause"
             | "media.next"
             | "media.previous"
+            | "wallpaper.set"
+            | "wallpaper.restore"
+            | "power.lock"
             | "calendar.create_event"
             | "calendar.list_events"
             | "calendar.update_event"
@@ -232,7 +236,7 @@ pub(super) fn resolve_action_target(
     if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "web.fetch") {
         return Ok((std::path::PathBuf::new(), action.clone()));
     }
-    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "calendar.create_event" | "calendar.list_events" | "calendar.update_event" | "calendar.delete_event" | "system.open_url" | "settings.open" | "notification.show" | "app.launch" | "clipboard.read" | "clipboard.write" | "system.info" | "audio.get_volume" | "audio.set_volume" | "audio.mute" | "media.play_pause" | "media.next" | "media.previous"))
+    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "calendar.create_event" | "calendar.list_events" | "calendar.update_event" | "calendar.delete_event" | "system.open_url" | "settings.open" | "notification.show" | "app.launch" | "clipboard.read" | "clipboard.write" | "system.info" | "audio.get_volume" | "audio.set_volume" | "audio.mute" | "media.play_pause" | "media.next" | "media.previous" | "wallpaper.set" | "wallpaper.restore" | "power.lock"))
     {
         return Ok((std::path::PathBuf::new(), action.clone()));
     }
@@ -438,6 +442,9 @@ pub fn registry() -> Vec<Skill> {
         ("media.play_pause", "Reproduzir ou pausar mídia", "Envia a tecla de mídia reproduzir/pausar ao Windows.", "Reproduza ou pause a mídia ativa no Windows.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
         ("media.next", "Próxima faixa", "Envia a tecla de próxima faixa ao Windows.", "Avance para a próxima faixa.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
         ("media.previous", "Faixa anterior", "Envia a tecla de faixa anterior ao Windows.", "Volte para a faixa anterior.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
+        ("wallpaper.set", "Alterar papel de parede", "Define uma imagem PNG, JPG ou BMP em pasta permitida e permite restauração.", "Altere o papel de parede usando um caminho de imagem em pasta permitida.", json!({"type":"object","properties":{"path":{"type":"string","minLength":1,"maxLength":32767}},"required":["path"],"additionalProperties":false}), ResultTrust::Local),
+        ("wallpaper.restore", "Restaurar papel de parede", "Restaura o papel de parede salvo antes da última alteração.", "Restaure o papel de parede anterior.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
+        ("power.lock", "Bloquear estação", "Solicita o bloqueio da sessão do Windows; sempre exige aprovação.", "Bloqueie a sessão atual do Windows.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
         ("files.list", "Listar arquivos", "Lista arquivos e pastas em uma pasta permitida, com limites.", "Liste itens de uma pasta usando profundidade e limite explícitos.", json!({"type":"object","properties":{"path":{"type":"string"},"depth":{"type":"integer","minimum":1,"maximum":8},"limit":{"type":"integer","minimum":1,"maximum":500}},"required":["path","depth","limit"],"additionalProperties":false}), ResultTrust::Local),
         ("files.search", "Pesquisar arquivos", "Pesquisa nomes ou conteúdo textual com limites explícitos.", "Pesquise arquivos por nome ou trecho de texto. Informe pasta, modo, profundidade, tamanho máximo e limite de resultados.", json!({"type":"object","properties":{"path":{"type":"string"},"query":{"type":"string","minLength":1,"maxLength":256},"by":{"type":"string","enum":["name","text"]},"depth":{"type":"integer","minimum":1,"maximum":8},"max_file_bytes":{"type":"integer","minimum":1,"maximum":65536},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["path","query","by","depth","max_file_bytes","limit"],"additionalProperties":false}), ResultTrust::Local),
         ("files.read", "Ler arquivo de texto", "Lê texto UTF-8 ou Windows-1252 de até 64 KiB; recusa binários.", "Leia um arquivo textual de até 64 KiB em pasta permitida.", json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}), ResultTrust::Local),
@@ -692,12 +699,15 @@ fn action_example(id: &str) -> SimulatedAction {
             recipient: "sample".into(),
             message: String::new(),
         },
-        "audio.get_volume" | "media.play_pause" | "media.next" | "media.previous" => {
-            SimulatedAction::Productivity {
-                skill_id: id.into(),
-                params: json!({}),
-            }
-        }
+        "audio.get_volume" | "media.play_pause" | "media.next" | "media.previous"
+        | "wallpaper.restore" | "power.lock" => SimulatedAction::Productivity {
+            skill_id: id.into(),
+            params: json!({}),
+        },
+        "wallpaper.set" => SimulatedAction::Productivity {
+            skill_id: id.into(),
+            params: json!({"path":"C:\\wallpaper.png"}),
+        },
         "audio.set_volume" => SimulatedAction::Productivity {
             skill_id: id.into(),
             params: json!({"volume":50}),

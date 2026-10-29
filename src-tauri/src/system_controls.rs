@@ -1,4 +1,6 @@
+use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
+use std::path::{Path, PathBuf};
 
 /// Camada que separa a validação e o despacho dos efeitos nativos do Windows.
 pub(crate) trait SystemAdapter {
@@ -6,6 +8,9 @@ pub(crate) trait SystemAdapter {
     fn set_volume(&mut self, value: u8) -> Result<(), String>;
     fn mute(&mut self, muted: bool) -> Result<(), String>;
     fn media_key(&mut self, key: MediaKey) -> Result<(), String>;
+    fn wallpaper(&mut self) -> Result<Option<String>, String>;
+    fn set_wallpaper(&mut self, path: Option<&str>) -> Result<(), String>;
+    fn lock_workstation(&mut self) -> Result<(), String>;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,6 +61,14 @@ pub(crate) fn execute_with<A: SystemAdapter>(
             adapter.media_key(MediaKey::Previous)?;
             Ok("Comando de faixa anterior enviado.".into())
         }
+        "wallpaper.set" => {
+            Err("A habilidade requer validação de pasta e persistência SQLite.".into())
+        }
+        "wallpaper.restore" => Err("A habilidade requer persistência SQLite.".into()),
+        "power.lock" => {
+            adapter.lock_workstation()?;
+            Ok("Solicitação de bloqueio enviada ao Windows.".into())
+        }
         _ => Err("Habilidade de controle local desconhecida.".into()),
     }
 }
@@ -66,6 +79,8 @@ pub(crate) struct SimulatedAdapter {
     pub volume: u8,
     pub muted: bool,
     pub media_commands: Vec<MediaKey>,
+    pub current_wallpaper: Option<String>,
+    pub locked: bool,
 }
 
 #[cfg(test)]
@@ -85,10 +100,140 @@ impl SystemAdapter for SimulatedAdapter {
         self.media_commands.push(key);
         Ok(())
     }
+    fn wallpaper(&mut self) -> Result<Option<String>, String> {
+        Ok(self.current_wallpaper.clone())
+    }
+    fn set_wallpaper(&mut self, path: Option<&str>) -> Result<(), String> {
+        self.current_wallpaper = path.map(str::to_owned);
+        Ok(())
+    }
+    fn lock_workstation(&mut self) -> Result<(), String> {
+        self.locked = true;
+        Ok(())
+    }
 }
 
 pub(crate) fn execute(skill_id: &str, params: &Value) -> Result<String, String> {
     execute_with(&mut NativeAdapter, skill_id, params)
+}
+
+pub(crate) fn execute_managed(
+    skill_id: &str,
+    params: &Value,
+    db: &Connection,
+    allowed_roots: &[PathBuf],
+    origin: &str,
+) -> Result<String, String> {
+    execute_managed_with(
+        &mut NativeAdapter,
+        skill_id,
+        params,
+        db,
+        allowed_roots,
+        origin,
+    )
+}
+
+pub(crate) fn execute_managed_with<A: SystemAdapter>(
+    adapter: &mut A,
+    skill_id: &str,
+    args: &Value,
+    db: &Connection,
+    allowed_roots: &[PathBuf],
+    origin: &str,
+) -> Result<String, String> {
+    db.execute_batch("CREATE TABLE IF NOT EXISTS wallpaper_history (id INTEGER PRIMARY KEY, previous_path TEXT, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER)")
+        .map_err(|_| "Não foi possível preparar o histórico do papel de parede.".to_string())?;
+    match skill_id {
+        "wallpaper.set" => {
+            let raw = args["path"]
+                .as_str()
+                .ok_or("Informe o caminho da imagem.")?;
+            let path = validate_wallpaper_path(raw, allowed_roots)?;
+            let previous = adapter.wallpaper()?;
+            db.execute(
+                "INSERT INTO wallpaper_history(previous_path,created_at,origin) VALUES (?1,?2,?3)",
+                params![previous, unix_seconds(), origin],
+            )
+            .map_err(|_| "Não foi possível guardar o papel de parede anterior.".to_string())?;
+            adapter.set_wallpaper(Some(&path.to_string_lossy()))?;
+            Ok("Papel de parede alterado. Use wallpaper.restore para desfazer.".into())
+        }
+        "wallpaper.restore" => {
+            let previous: Option<Option<String>> = db
+                .query_row(
+                    "SELECT previous_path FROM wallpaper_history WHERE restored_at IS NULL ORDER BY id DESC LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|_| "Não foi possível consultar o papel de parede anterior.".to_string())?;
+            let previous = previous.ok_or("Não há papel de parede anterior para restaurar.")?;
+            adapter.set_wallpaper(previous.as_deref())?;
+            db.execute(
+                "UPDATE wallpaper_history SET restored_at=?1 WHERE id=(SELECT id FROM wallpaper_history WHERE restored_at IS NULL ORDER BY id DESC LIMIT 1)",
+                [unix_seconds()],
+            )
+            .map_err(|_| "Não foi possível registrar a restauração do papel de parede.".to_string())?;
+            Ok("Papel de parede anterior restaurado.".into())
+        }
+        _ => execute_with(adapter, skill_id, args),
+    }
+}
+
+pub(crate) fn validate_wallpaper_path(
+    raw: &str,
+    allowed_roots: &[PathBuf],
+) -> Result<PathBuf, String> {
+    let candidate = Path::new(raw);
+    if !candidate.is_absolute() || crate::security::workspace::has_reparse(candidate) {
+        return Err("O caminho da imagem precisa estar em uma pasta permitida.".into());
+    }
+    let canonical = candidate
+        .canonicalize()
+        .map_err(|_| "A imagem não existe ou não pôde ser validada.".to_string())?;
+    if crate::security::workspace::has_reparse(&canonical) || !canonical.is_file() {
+        return Err("O caminho precisa ser um arquivo de imagem comum.".into());
+    }
+    let extension = canonical
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("");
+    if !["png", "jpg", "bmp"]
+        .iter()
+        .any(|valid| extension.eq_ignore_ascii_case(valid))
+    {
+        return Err("Formato inválido. Use uma imagem PNG, JPG ou BMP.".into());
+    }
+    let mut file = std::fs::File::open(&canonical)
+        .map_err(|_| "Não foi possível ler a imagem selecionada.".to_string())?;
+    let mut header = [0_u8; 8];
+    let bytes_read = std::io::Read::read(&mut file, &mut header)
+        .map_err(|_| "Não foi possível validar o formato da imagem.".to_string())?;
+    let valid_signature = match extension.to_ascii_lowercase().as_str() {
+        "png" => bytes_read == 8 && header == [137, 80, 78, 71, 13, 10, 26, 10],
+        "jpg" => bytes_read >= 3 && header[..3] == [0xff, 0xd8, 0xff],
+        "bmp" => bytes_read >= 2 && header[..2] == *b"BM",
+        _ => false,
+    };
+    if !valid_signature {
+        return Err("O conteúdo do arquivo não corresponde a uma imagem PNG, JPG ou BMP.".into());
+    }
+    let permitted = allowed_roots
+        .iter()
+        .filter_map(|root| root.canonicalize().ok())
+        .any(|root| canonical.starts_with(root));
+    if !permitted {
+        return Err("O caminho da imagem não pertence a uma pasta permitida.".into());
+    }
+    Ok(canonical)
+}
+
+fn unix_seconds() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64
 }
 
 #[cfg(windows)]
@@ -141,6 +286,72 @@ impl SystemAdapter for NativeAdapter {
             Ok(())
         } else {
             Err("O Windows não aceitou o comando de mídia.".into())
+        }
+    }
+
+    fn wallpaper(&mut self) -> Result<Option<String>, String> {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            SystemParametersInfoW, SPI_GETDESKWALLPAPER,
+        };
+        let mut buffer = [0_u16; 260];
+        let ok = unsafe {
+            SystemParametersInfoW(
+                SPI_GETDESKWALLPAPER,
+                buffer.len() as u32,
+                buffer.as_mut_ptr().cast(),
+                0,
+            )
+        };
+        if ok == 0 {
+            return Err("Não foi possível consultar o papel de parede atual.".into());
+        }
+        let length = buffer
+            .iter()
+            .position(|unit| *unit == 0)
+            .unwrap_or(buffer.len());
+        if length == 0 {
+            Ok(None)
+        } else {
+            Ok(Some(String::from_utf16_lossy(&buffer[..length])))
+        }
+    }
+
+    fn set_wallpaper(&mut self, path: Option<&str>) -> Result<(), String> {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            SystemParametersInfoW, SPIF_SENDCHANGE, SPIF_UPDATEINIFILE, SPI_SETDESKWALLPAPER,
+        };
+        let mut wide: Vec<u16> = path
+            .map(std::ffi::OsStr::new)
+            .map(|path| path.encode_wide().collect())
+            .unwrap_or_default();
+        let parameter = if path.is_some() {
+            wide.push(0);
+            wide.as_mut_ptr().cast()
+        } else {
+            std::ptr::null_mut()
+        };
+        let ok = unsafe {
+            SystemParametersInfoW(
+                SPI_SETDESKWALLPAPER,
+                0,
+                parameter,
+                SPIF_UPDATEINIFILE | SPIF_SENDCHANGE,
+            )
+        };
+        if ok == 0 {
+            Err("O Windows não conseguiu alterar o papel de parede.".into())
+        } else {
+            Ok(())
+        }
+    }
+
+    fn lock_workstation(&mut self) -> Result<(), String> {
+        use windows_sys::Win32::System::Shutdown::LockWorkStation;
+        if unsafe { LockWorkStation() } == 0 {
+            Err("O Windows não aceitou a solicitação de bloqueio.".into())
+        } else {
+            Ok(())
         }
     }
 }
@@ -212,6 +423,15 @@ impl SystemAdapter for NativeAdapter {
     fn media_key(&mut self, _: MediaKey) -> Result<(), String> {
         Err("Os controles de mídia só estão disponíveis no Windows.".into())
     }
+    fn wallpaper(&mut self) -> Result<Option<String>, String> {
+        Err("O papel de parede só pode ser consultado no Windows.".into())
+    }
+    fn set_wallpaper(&mut self, _: Option<&str>) -> Result<(), String> {
+        Err("O papel de parede só pode ser alterado no Windows.".into())
+    }
+    fn lock_workstation(&mut self) -> Result<(), String> {
+        Err("O bloqueio só está disponível no Windows.".into())
+    }
 }
 
 #[cfg(test)]
@@ -238,6 +458,120 @@ mod tests {
     }
 
     #[test]
+    fn wallpaper_change_persists_previous_state_and_restores_it_with_audit_context() {
+        let folder = std::env::temp_dir().join(format!(
+            "odekrai-wallpaper-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&folder).unwrap();
+        let image = folder.join("new.png");
+        std::fs::write(&image, b"\x89PNG\r\n\x1a\ncontent").unwrap();
+        let canonical_image = image.canonicalize().unwrap();
+        let db = Connection::open_in_memory().unwrap();
+        let mut sim = SimulatedAdapter {
+            current_wallpaper: Some("C:\\old.bmp".into()),
+            ..Default::default()
+        };
+        execute_managed_with(
+            &mut sim,
+            "wallpaper.set",
+            &json!({"path":image}),
+            &db,
+            std::slice::from_ref(&folder),
+            "user",
+        )
+        .unwrap();
+        assert_eq!(
+            sim.current_wallpaper.as_deref(),
+            Some(canonical_image.to_string_lossy().as_ref())
+        );
+        let (previous, created_at, origin): (String, i64, String) = db
+            .query_row(
+                "SELECT previous_path,created_at,origin FROM wallpaper_history",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(previous, "C:\\old.bmp");
+        assert!(created_at > 0);
+        assert_eq!(origin, "user");
+        execute_managed_with(&mut sim, "wallpaper.restore", &json!({}), &db, &[], "model").unwrap();
+        assert_eq!(sim.current_wallpaper.as_deref(), Some("C:\\old.bmp"));
+        let restored: Option<i64> = db
+            .query_row("SELECT restored_at FROM wallpaper_history", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert!(restored.is_some());
+        let _ = std::fs::remove_dir_all(folder);
+    }
+
+    #[test]
+    fn wallpaper_rejects_paths_outside_allowlist_and_unsupported_extensions() {
+        let base = std::env::temp_dir().join(format!(
+            "odekrai-wallpaper-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let allowed = base.join("allowed");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(&allowed).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        let allowed_file = allowed.join("bad.gif");
+        let outside_file = outside.join("image.png");
+        std::fs::write(&allowed_file, b"GIF89a").unwrap();
+        std::fs::write(&outside_file, b"\x89PNG\r\n\x1a\ncontent").unwrap();
+        let db = Connection::open_in_memory().unwrap();
+        let mut sim = SimulatedAdapter::default();
+        assert!(execute_managed_with(
+            &mut sim,
+            "wallpaper.set",
+            &json!({"path":outside_file}),
+            &db,
+            std::slice::from_ref(&allowed),
+            "model",
+        )
+        .is_err());
+        assert!(execute_managed_with(
+            &mut sim,
+            "wallpaper.set",
+            &json!({"path":allowed_file}),
+            &db,
+            &[allowed],
+            "model",
+        )
+        .is_err());
+        assert!(
+            db.query_row("SELECT COUNT(*) FROM wallpaper_history", [], |row| row
+                .get::<_, i64>(0))
+                .unwrap()
+                == 0
+        );
+        assert!(sim.current_wallpaper.is_none());
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn lock_skill_is_registered_with_reversible_write_risk() {
+        let skill = crate::security::skills::registry()
+            .into_iter()
+            .find(|skill| skill.id == "power.lock")
+            .unwrap();
+        assert_eq!(
+            skill.risk(&json!({})).unwrap(),
+            crate::policy::Risk::EscritaReversivel
+        );
+        let mut simulated = SimulatedAdapter::default();
+        execute_with(&mut simulated, "power.lock", &json!({})).unwrap();
+        assert!(simulated.locked);
+    }
+
+    #[test]
     fn registered_system_skills_use_closed_schemas_and_rust_risk() {
         for id in [
             "audio.get_volume",
@@ -246,6 +580,9 @@ mod tests {
             "media.play_pause",
             "media.next",
             "media.previous",
+            "wallpaper.set",
+            "wallpaper.restore",
+            "power.lock",
         ] {
             let skill = crate::security::skills::registry()
                 .into_iter()
@@ -255,10 +592,16 @@ mod tests {
                 .risk(&match id {
                     "audio.set_volume" => json!({"volume": 40}),
                     "audio.mute" => json!({"muted": true}),
+                    "wallpaper.set" => json!({"path":"C:\\wallpaper.png"}),
                     _ => json!({}),
                 })
                 .is_ok());
         }
+        assert!(crate::system_actions::validate(
+            "wallpaper.set",
+            &json!({"path":"C:\\wallpaper.gif"})
+        )
+        .is_err());
         assert!(
             crate::system_actions::validate("audio.set_volume", &json!({"volume": 101})).is_err()
         );
