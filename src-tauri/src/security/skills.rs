@@ -1017,6 +1017,20 @@ fn skill_category(id: &str) -> &'static str {
     }
 }
 
+fn skill_family_key(family: SkillFamily) -> &'static str {
+    match family {
+        SkillFamily::Arquivos => "arquivos",
+        SkillFamily::AbrirAplicativos => "abrir_aplicativos",
+        SkillFamily::AgendaLembretes => "agenda_lembretes",
+        SkillFamily::PlanilhasDocumentos => "planilhas_documentos",
+        SkillFamily::Mensagens => "mensagens",
+        SkillFamily::Web => "web",
+        SkillFamily::Computador => "computador",
+        SkillFamily::Codigo => "codigo",
+        SkillFamily::IntegracoesMcp => "integracoes_mcp",
+    }
+}
+
 pub(crate) fn skill_available(id: &str) -> bool {
     !id.starts_with("simulated.")
 }
@@ -1024,7 +1038,9 @@ pub(crate) fn skill_available(id: &str) -> bool {
 fn group_skill_ids(category: &str, discord_configured: bool, enabled: bool) -> Vec<&'static str> {
     registry()
         .into_iter()
-        .filter(|skill| skill_category(skill.id) == category)
+        .filter(|skill| {
+            skill_category(skill.id) == category || skill_family_key(skill.family) == category
+        })
         .filter(|skill| skill_available(skill.id))
         .filter(|skill| skill.id != "discord.send" || discord_configured || !enabled)
         .map(|skill| skill.id)
@@ -1039,7 +1055,11 @@ pub fn set_skill_group_enabled(
     enabled: bool,
 ) -> Result<(), String> {
     crate::require_main(&caller)?;
-    if !matches!(category.as_str(), "local" | "integration") {
+    if !matches!(category.as_str(), "local" | "integration")
+        && !registry()
+            .iter()
+            .any(|skill| skill_family_key(skill.family) == category)
+    {
         return Err("Grupo de habilidades desconhecido.".into());
     }
     let ids = group_skill_ids(
@@ -1662,6 +1682,14 @@ mod tests {
         assert!(group_skill_ids("integration", true, true).contains(&"discord.send"));
         assert!(group_skill_ids("integration", false, false).contains(&"discord.send"));
         assert!(group_skill_ids("unknown", true, true).is_empty());
+        let files = group_skill_ids("arquivos", false, true);
+        assert!(files.contains(&"files.read"));
+        assert!(files.contains(&"workspace.write_file"));
+        assert!(!files.contains(&"calendar.create_event"));
+        let calendar = group_skill_ids("agenda_lembretes", false, true);
+        assert!(calendar.contains(&"calendar.create_event"));
+        assert!(calendar.contains(&"reminder.create"));
+        assert!(!calendar.contains(&"files.read"));
     }
 
     #[test]
