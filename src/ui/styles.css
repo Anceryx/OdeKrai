@@ -674,9 +674,9 @@ select:focus-visible {
     filter 0.15s;
 }
 .primary-button {
-  background: var(--gradient);
+  background: var(--gradient-action);
   border: 1px solid #fdba744a;
-  color: white;
+  color: var(--color-accent-contrast);
   box-shadow: 0 4px 14px #f9731630;
 }
 .primary-button:hover:not(:disabled) {
@@ -1591,7 +1591,7 @@ select:focus-visible {
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
 }
@@ -1617,7 +1617,7 @@ select:focus-visible {
   min-width: 0;
   height: 34px;
   padding: 0 9px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   background: var(--color-background);
   color: var(--color-text);
@@ -1964,8 +1964,8 @@ select:focus-visible {
   height: 24px;
   border: 0;
   border-radius: 6px;
-  background: var(--gradient);
-  color: #fff;
+  background: var(--gradient-action);
+  color: var(--color-accent-contrast);
   font-size: 16px;
   line-height: 1;
 }
@@ -3519,6 +3519,49 @@ html.island-window-html {
   color: #fdba74;
   font-size: 10px;
 }
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-11);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.risk-badge > svg {
+  flex: none;
+}
+.risk-badge--leitura {
+  color: var(--color-risk-reading);
+  background: var(--color-risk-reading-surface);
+}
+.risk-badge--escrita_reversivel {
+  color: var(--color-risk-write);
+  background: var(--color-risk-write-surface);
+}
+.risk-badge--comunicacao_externa {
+  color: var(--color-risk-communication);
+  background: var(--color-risk-communication-surface);
+}
+.risk-badge--destrutivo_financeiro {
+  color: var(--color-risk-destructive);
+  background: var(--color-risk-destructive-surface);
+}
+.risk-badge--execucao_de_codigo {
+  color: var(--color-risk-code);
+  background: var(--color-risk-code-surface);
+}
+.risk-badge--unknown {
+  color: var(--color-text-secondary);
+  background: var(--color-surface-raised);
+}
+.agent-risk-chip {
+  font-size: 10px;
+}
 .agent-action-card details pre {
   max-height: 180px;
   overflow: auto;
@@ -3968,7 +4011,7 @@ html.island-window-html {
   color: var(--color-accent-contrast);
 }
 .ui-button--secondary {
-  border-color: var(--color-border);
+  border-color: var(--color-border-strong);
   background: var(--color-surface);
   color: var(--color-text);
 }
@@ -3996,7 +4039,7 @@ html.island-window-html {
   opacity: 0.55;
 }
 .ui-card {
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   padding: var(--space-5);
@@ -4006,7 +4049,7 @@ html.island-window-html {
   align-items: center;
   min-height: 24px;
   padding: 2px var(--space-2);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-pill);
   color: var(--color-text-secondary);
   font: var(--font-size-11) var(--font-mono);
@@ -4029,7 +4072,7 @@ html.island-window-html {
 .ui-banner {
   margin: var(--space-3) 0;
   padding: var(--space-3);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-13);
   line-height: 1.5;
@@ -4052,14 +4095,14 @@ html.island-window-html {
 .ui-select {
   min-height: 36px;
   padding: 7px 10px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   background: var(--color-background);
   color: var(--color-text);
   font: var(--font-size-13) var(--font-sans);
 }
 .ui-selectable-card {
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-text);
@@ -4076,7 +4119,7 @@ html.island-window-html {
   min-width: 42px;
   min-height: 26px;
   padding: 3px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-pill);
   background: var(--color-surface-raised);
 }
@@ -4335,6 +4378,33 @@ html.island-window-html {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Opt-in para hardware modesto: use no elemento html, sem alterar a preferência salva. */
+html[data-performance='on'] *,
+html[data-performance='on'] *::before,
+html[data-performance='on'] *::after {
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  background-image: none !important;
+  filter: none !important;
+}
+html[data-performance='on'] .app-shell {
+  background: var(--color-background) !important;
+}
+html[data-performance='on'] .sidebar,
+html[data-performance='on'] .island-shell,
+html[data-performance='on'] .ui-card,
+html[data-performance='on'] .conversation-menu,
+html[data-performance='on'] .agent-action-card {
+  background-color: var(--color-surface) !important;
+}
+html[data-performance='on'] [data-translucent] {
+  background-color: var(--color-surface-raised) !important;
+}
+html[data-performance='on'] .animated-gradient,
+html[data-performance='on'] [data-animated-gradient] {
+  animation: none !important;
 }
 
 /* Pet 2D (renders Kenney de 512 px, com transparência). */
