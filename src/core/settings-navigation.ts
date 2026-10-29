@@ -53,8 +53,32 @@ export const SETTINGS_INDEX: readonly SettingsIndexEntry[] = [
   {
     title: 'Links externos confiáveis',
     keywords: ['domínio', 'navegador'],
-    section: 'geral',
-    anchor: 'settings-links',
+    section: 'privacidade',
+    anchor: 'trusted-links-heading',
+  },
+  {
+    title: 'Pastas permitidas',
+    keywords: ['arquivos', 'leitura', 'escrita'],
+    section: 'privacidade',
+    anchor: 'allowed-folders-heading',
+  },
+  {
+    title: 'Aplicativos permitidos',
+    keywords: ['programas', 'executáveis'],
+    section: 'privacidade',
+    anchor: 'allowed-apps-heading',
+  },
+  {
+    title: 'Destinos do Discord',
+    keywords: ['mensagens', 'canal'],
+    section: 'privacidade',
+    anchor: 'discord-integration-heading',
+  },
+  {
+    title: 'Programas conectados',
+    keywords: ['servidores locais', 'integrações'],
+    section: 'privacidade',
+    anchor: 'mcp-heading',
   },
   {
     title: 'Provedores alternativos',
@@ -69,10 +93,10 @@ export const SETTINGS_INDEX: readonly SettingsIndexEntry[] = [
     anchor: 'settings-usage',
   },
   {
-    title: 'Dados e privacidade',
-    keywords: ['histórico', 'restaurar'],
-    section: 'geral',
-    anchor: 'settings-data',
+    title: 'Apagar histórico',
+    keywords: ['conversas', 'dados e privacidade'],
+    section: 'privacidade',
+    anchor: 'permissions-data',
   },
   {
     title: 'Perfil',

@@ -138,7 +138,13 @@ export function SettingsModal({
         return <ComputerScreen embedded />;
       case 'privacidade':
         return (
-          <SecurityCenter page="permissions" embedded onDeleteAllHistory={onDeleteAllHistory} />
+          <SecurityCenter
+            page="permissions"
+            embedded
+            onDeleteAllHistory={onDeleteAllHistory}
+            appSettings={settings}
+            updateAppSettings={update}
+          />
         );
       case 'atividade':
         return <SecurityCenter page="activity" embedded onOpenFullPage={onOpenActivityFullPage} />;

@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import settingsSource from '../ui/screens/Settings.tsx?raw';
+import aboutSettingsSource from '../ui/screens/AboutSettings.tsx?raw';
 import agentHomeSource from '../ui/AgentHome.tsx?raw';
 import assistantSource from '../ui/screens/Assistant.tsx?raw';
 import computerSource from '../ui/screens/Computer.tsx?raw';
 import settingsModalSource from '../ui/SettingsModal.tsx?raw';
 import securityCenterSource from '../ui/SecurityCenter.tsx?raw';
+import privacyConfigurationsSource from '../ui/PrivacyConfigurations.tsx?raw';
+import discordSettingsSource from '../ui/DiscordWebhooksSettings.tsx?raw';
 import {
   filterSettingsIndex,
   filterSettingsMenu,
@@ -20,9 +23,9 @@ const sourceBySection = {
   computador: computerSource,
   habilidades: settingsModalSource,
   conectores: settingsModalSource,
-  privacidade: securityCenterSource,
+  privacidade: `${securityCenterSource}\n${privacyConfigurationsSource}\n${discordSettingsSource}`,
   atividade: securityCenterSource,
-  sobre: settingsSource,
+  sobre: aboutSettingsSource,
 } as const;
 
 describe('navegação das configurações', () => {

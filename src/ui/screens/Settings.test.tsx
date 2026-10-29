@@ -21,7 +21,7 @@ describe('SettingsScreen', () => {
     expect(markup).toContain('Voltas máximas');
     expect(markup).toContain('Sempre perguntar');
     expect(markup).toContain('Abrir Permissões');
-    expect(markup).toContain('Links externos');
+    expect(markup).not.toContain('Links externos');
     expect(markup).toContain('Preferências deste dispositivo');
   });
 

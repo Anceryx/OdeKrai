@@ -7,6 +7,8 @@ import { normalizeSoundPreferences, playSound, SoundTriggerGate } from '../core/
 import { Button, PageHeader, SelectableCard } from './DesignSystem';
 import { RiskBadge, type RiskLevel } from './RiskBadge';
 import { HistoryDeletionSettings } from './HistoryDeletionSettings';
+import { PrivacyConfigurations } from './PrivacyConfigurations';
+import type { AppSettings } from '../core/settings';
 
 type Mode = 'sempre_perguntar' | 'aprovar_por_mim' | 'controle_total';
 type ToolOverride = { tool: string; morePermissive: boolean };
@@ -102,11 +104,15 @@ export function SecurityCenter({
   embedded = false,
   onOpenFullPage,
   onDeleteAllHistory,
+  appSettings,
+  updateAppSettings,
 }: {
   page: 'permissions' | 'activity';
   embedded?: boolean;
   onOpenFullPage?: () => void;
   onDeleteAllHistory?: () => Promise<boolean>;
+  appSettings?: AppSettings;
+  updateAppSettings?: (settings: AppSettings) => void;
 }) {
   const [settings, setSettings] = useState<PermissionSettings | null>(null);
   const [entries, setEntries] = useState<AuditEntry[]>([]);
@@ -294,6 +300,9 @@ export function SecurityCenter({
               <p>Você pode apagar o histórico deste dispositivo quando quiser.</p>
               <HistoryDeletionSettings onConfirm={onDeleteAllHistory} />
             </section>
+          )}
+          {appSettings && updateAppSettings && (
+            <PrivacyConfigurations settings={appSettings} update={updateAppSettings} />
           )}
           <section className="settings-panel">
             <div className="panel-heading">

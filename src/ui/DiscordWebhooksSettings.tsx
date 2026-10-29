@@ -70,13 +70,13 @@ export function DiscordWebhooksSettings({ onChanged }: { onChanged?: () => Promi
 
   async function remove(webhook: DiscordWebhook) {
     const confirmed = window.confirm(
-      `Revogar o webhook “${webhook.name}” no Discord? O endpoint será apagado e não poderá ser reutilizado.`,
+      `Remover o destino “${webhook.name}” do Discord? A conexão será apagada e não poderá ser reutilizada.`,
     );
     if (!confirmed) return;
     setBusy(true);
     try {
       await revokeDiscordIntegration(webhook.id, confirmed, invoke);
-      setNotice('Webhook revogado no Discord e credencial local removida.');
+      setNotice('Destino removido do Discord e acesso local apagado.');
       await refresh();
       await onChanged?.();
     } catch (cause) {
@@ -91,11 +91,11 @@ export function DiscordWebhooksSettings({ onChanged }: { onChanged?: () => Promi
       className="settings-panel settings-section allowed-folders-section"
       aria-labelledby="discord-integration-heading"
     >
-      <h3 id="discord-integration-heading">Discord · webhook de saída</h3>
+      <h3 id="discord-integration-heading">Destino do Discord</h3>
       <p className="settings-description">
-        Permite enviar mensagens ao canal associado ao webhook, sempre após aprovação da ação. Não
-        há escopos OAuth nem acesso de leitura ao Discord. Revogar apaga o webhook no Discord e
-        remove a credencial deste aplicativo. A ação pede confirmação e não pode ser desfeita.
+        Permite enviar mensagens ao canal conectado, sempre após aprovação da ação. Esta conexão não
+        lê mensagens. Removê-la apaga o acesso salvo e pede confirmação; a ação não pode ser
+        desfeita.
       </p>
       {error && (
         <div className="error-banner" role="alert">
@@ -108,7 +108,7 @@ export function DiscordWebhooksSettings({ onChanged }: { onChanged?: () => Promi
         </div>
       )}
       <label className="discord-secret-field">
-        Nome do webhook
+        Nome do destino
         <input
           value={name}
           maxLength={60}
@@ -120,7 +120,7 @@ export function DiscordWebhooksSettings({ onChanged }: { onChanged?: () => Promi
         />
       </label>
       <label className="discord-secret-field">
-        URL do webhook
+        Endereço de conexão do Discord
         <input
           type="password"
           autoComplete="new-password"
@@ -137,9 +137,8 @@ export function DiscordWebhooksSettings({ onChanged }: { onChanged?: () => Promi
           checked={authorized}
           onChange={(event) => setAuthorized(event.target.checked)}
         />
-        Autorizo enviar a credencial ao Discord para validar o webhook, salvá-la no Gerenciador de
-        Credenciais do Windows e permitir mensagens ao canal configurado, sujeitas à aprovação de
-        cada ação.
+        Autorizo enviar os dados de conexão ao Discord para verificar este destino e salvar o acesso
+        no Gerenciador de Credenciais do Windows. Cada mensagem ainda pede aprovação.
       </label>
       <div className="folder-shortcuts">
         <Button
@@ -162,13 +161,12 @@ export function DiscordWebhooksSettings({ onChanged }: { onChanged?: () => Promi
           <li key={webhook.id}>
             <div>
               <strong>{webhook.name}</strong>
-              <small>ID para identificar a habilidade: {webhook.id}</small>
             </div>
             <Button
               variant="ghost"
               disabled={busy}
               onClick={() => void remove(webhook)}
-              aria-label={`Revogar webhook ${webhook.name} no Discord e remover do aplicativo`}
+              aria-label={`Remover destino ${webhook.name} do Discord e do aplicativo`}
             >
               <Icon name="delete" />
             </Button>

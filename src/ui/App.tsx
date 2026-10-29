@@ -1161,7 +1161,9 @@ function MainApp() {
               )}
               {section === 'computer' && <ComputerScreen />}
               {section === 'calendar' && <CalendarScreen />}
-              {section === 'skills' && <SkillsScreen />}
+              {section === 'skills' && (
+                <SkillsScreen onOpenPrivacy={() => navigate('permissions')} />
+              )}
               {section === 'companion' && (
                 <AssistantScreen
                   settings={settings}
