@@ -14,6 +14,9 @@ import { Modal } from './Modal';
 const SettingsScreen = lazy(() =>
   import('./screens/Settings').then((module) => ({ default: module.SettingsScreen })),
 );
+const AboutSettings = lazy(() =>
+  import('./screens/AboutSettings').then((module) => ({ default: module.AboutSettings })),
+);
 const IdentityScreen = lazy(() =>
   import('./screens/Identity').then((module) => ({ default: module.IdentityScreen })),
 );
@@ -43,6 +46,7 @@ export function SettingsModal({
   onError,
   onDeleteAllHistory,
   onOpenPage,
+  onOpenActivityFullPage,
   onAgentStatus,
 }: {
   open: boolean;
@@ -60,6 +64,7 @@ export function SettingsModal({
   onError: (message: string) => void;
   onDeleteAllHistory: () => Promise<boolean>;
   onOpenPage: (page: Extract<Section, 'skills' | 'providers'>) => void;
+  onOpenActivityFullPage: () => void;
   onAgentStatus: () => void;
 }) {
   const [query, setQuery] = useState('');
@@ -95,17 +100,16 @@ export function SettingsModal({
   const content = (() => {
     switch (section) {
       case 'geral':
-      case 'sobre':
         return (
           <SettingsScreen
             settings={settings}
             update={update}
-            onDeleteAllHistory={onDeleteAllHistory}
             onOpenPermissions={() => chooseSection('privacidade')}
             embedded
-            embeddedSection={section === 'sobre' ? 'about' : 'general'}
           />
         );
+      case 'sobre':
+        return <AboutSettings />;
       case 'perfil-memoria':
         return (
           <IdentityScreen
@@ -133,9 +137,11 @@ export function SettingsModal({
       case 'computador':
         return <ComputerScreen embedded />;
       case 'privacidade':
-        return <SecurityCenter page="permissions" embedded />;
+        return (
+          <SecurityCenter page="permissions" embedded onDeleteAllHistory={onDeleteAllHistory} />
+        );
       case 'atividade':
-        return <SecurityCenter page="activity" embedded />;
+        return <SecurityCenter page="activity" embedded onOpenFullPage={onOpenActivityFullPage} />;
       case 'habilidades':
         return (
           <GlobalPreferences

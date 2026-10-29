@@ -45,6 +45,17 @@ export function resolveLegacySettingsNavigation(
   };
 }
 
+export function resolveLegacyScreenNavigation(
+  destination: Section,
+  current: NavigationView,
+): NavigationView {
+  return {
+    route: { page: current.route.page },
+    section: destination,
+    settingsOpen: false,
+  };
+}
+
 export function resolveNavigation(destination: Section | AppRoute): NavigationSnapshot {
   if (typeof destination === 'string') {
     const settingsSection = LEGACY_SETTINGS_SECTIONS[destination];

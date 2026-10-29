@@ -2105,9 +2105,6 @@ html[data-performance='on'] .modal-surface {
   gap: var(--space-4);
 }
 
-.settings-embedded-content.about-only > :not(#settings-about) {
-  display: none;
-}
 @media (max-width: 799px) {
   .settings-modal-content {
     padding: 14px 16px 16px;

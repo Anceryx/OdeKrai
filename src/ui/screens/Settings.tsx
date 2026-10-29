@@ -4,18 +4,9 @@ import { defaultSettings, type AppSettings } from '../../core/settings';
 import { AI_PROVIDERS } from '../../core/providers';
 import { moveFallbackProvider, setFallbackProviderIds } from '../../core/provider-directory';
 import { PageHeader, Toggle } from '../DesignSystem';
-import { HistoryDeletionSettings } from '../HistoryDeletionSettings';
 import { normalizeTrustedLinkDomain } from '../../core/markdown';
 import { CodeDelegationSettings } from '../CodeDelegationSettings';
 import { localBrazilianPortugueseVoices, type LocalSpeechVoice } from '../../core/speech';
-
-type BuildInfo = {
-  version: string;
-  commit: string;
-  build_date: string;
-  webview_version: string;
-  windows_version: string;
-};
 
 type ProviderUsage = {
   providerId: string;
@@ -35,19 +26,14 @@ type AgentLimits = {
 export function SettingsScreen({
   settings,
   update,
-  onDeleteAllHistory,
   onOpenPermissions,
   embedded = false,
-  embeddedSection = 'general',
 }: {
   settings: AppSettings;
   update: (next: AppSettings) => void;
-  onDeleteAllHistory: () => Promise<boolean>;
   onOpenPermissions: () => void;
   embedded?: boolean;
-  embeddedSection?: 'general' | 'about';
 }) {
-  const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null);
   const [usage, setUsage] = useState<ProviderUsage[]>([]);
   const [fallbackToAdd, setFallbackToAdd] = useState('');
   const [linkDomainDraft, setLinkDomainDraft] = useState('');
@@ -59,7 +45,6 @@ export function SettingsScreen({
     maxExternalActions: 2,
   });
   const [agentLimitsError, setAgentLimitsError] = useState('');
-  const [aboutError, setAboutError] = useState('');
   const [speechVoices, setSpeechVoices] = useState<LocalSpeechVoice[]>([]);
   const totalTokensToday = usage.reduce(
     (total, item) => total + item.todayInput + item.todayOutput,
@@ -71,19 +56,6 @@ export function SettingsScreen({
       : totalTokensToday > settings.dailyTokenLimit
         ? 'Limite ultrapassado'
         : 'Dentro do limite';
-  const buildDate = buildInfo?.build_date ? new Date(buildInfo.build_date) : null;
-  const shortCommit =
-    buildInfo?.commit && buildInfo.commit !== 'local' ? buildInfo.commit.slice(0, 7) : 'local';
-  const aboutText = [
-    `Versão: ${buildInfo?.version ?? '—'}`,
-    `Commit: ${shortCommit}`,
-    `Build (local): ${buildDate && !Number.isNaN(buildDate.valueOf()) ? buildDate.toLocaleString('pt-BR') : '—'}`,
-    `Build (UTC): ${buildInfo?.build_date ?? '—'}`,
-    `WebView2: ${buildInfo?.webview_version ?? '—'}`,
-    `Windows: ${buildInfo?.windows_version ?? '—'}`,
-    'Licença: MIT',
-  ].join('\n');
-
   useEffect(() => {
     if (!('speechSynthesis' in window)) return;
     const refreshVoices = () =>
@@ -95,9 +67,6 @@ export function SettingsScreen({
 
   useEffect(() => {
     if (!isTauri()) return;
-    void invoke<BuildInfo>('get_build_info')
-      .then(setBuildInfo)
-      .catch(() => setBuildInfo(null));
     void invoke<ProviderUsage[]>('get_provider_usage')
       .then(setUsage)
       .catch(() => setUsage([]));
@@ -134,9 +103,7 @@ export function SettingsScreen({
   }
 
   return (
-    <div
-      className={`${embedded ? 'settings-embedded-content' : 'page subpage'}${embedded && embeddedSection === 'about' ? ' about-only' : ''}`}
-    >
+    <div className={embedded ? 'settings-embedded-content' : 'page subpage'}>
       {!embedded && (
         <PageHeader
           eyebrow="PREFERÊNCIAS"
@@ -644,110 +611,18 @@ export function SettingsScreen({
           )}
         </ul>
       </section>
-      <section id="settings-data" className="settings-panel settings-section">
-        <h2>Dados e privacidade</h2>
+      <section id="settings-preferences-reset" className="settings-panel settings-section">
+        <h2>Preferências deste dispositivo</h2>
         <p className="settings-description">
-          Preferências ficam neste dispositivo. Perfil e conversas são salvos no banco de dados
-          local; credenciais ficam no Gerenciador de Credenciais do Windows.
+          Restaurar os valores iniciais não remove o perfil, as conversas nem as credenciais.
         </p>
-        <div className="preference-row">
-          <div>
-            <strong>Restaurar preferências</strong>
-            <span>Voltar aos valores iniciais deste dispositivo.</span>
-          </div>
-          <button className="secondary-button small-button" onClick={() => update(defaultSettings)}>
-            Restaurar
-          </button>
-        </div>
-        <HistoryDeletionSettings onConfirm={onDeleteAllHistory} />
+        <button className="secondary-button small-button" onClick={() => update(defaultSettings)}>
+          Restaurar preferências
+        </button>
       </section>
       <div className="provider-footnote">
         <p>A restauração volta ao padrão Encerrar e não remove perfil, histórico ou credenciais.</p>
       </div>
-      <section
-        id="settings-about"
-        className="settings-panel settings-section"
-        aria-labelledby="about-heading"
-      >
-        <h2 id="about-heading">Sobre</h2>
-        <dl className="about-table">
-          <div>
-            <dt>Versão</dt>
-            <dd>{buildInfo?.version ?? '—'}</dd>
-          </div>
-          <div>
-            <dt>Commit</dt>
-            <dd>
-              {buildInfo?.commit && buildInfo.commit !== 'local' ? (
-                <button
-                  className="text-link-button"
-                  onClick={() =>
-                    void invoke('open_build_commit').catch((error: unknown) =>
-                      setAboutError(String(error)),
-                    )
-                  }
-                >
-                  {shortCommit} · Abrir no GitHub
-                </button>
-              ) : (
-                shortCommit
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt>Data do build (local)</dt>
-            <dd>
-              {buildDate && !Number.isNaN(buildDate.valueOf())
-                ? buildDate.toLocaleString('pt-BR')
-                : '—'}
-            </dd>
-          </div>
-          <div>
-            <dt>Data do build (UTC)</dt>
-            <dd>{buildInfo?.build_date ?? '—'}</dd>
-          </div>
-          <div>
-            <dt>WebView2</dt>
-            <dd>{buildInfo?.webview_version ?? '—'}</dd>
-          </div>
-          <div>
-            <dt>Windows</dt>
-            <dd>{buildInfo?.windows_version ?? '—'}</dd>
-          </div>
-          <div>
-            <dt>Licença</dt>
-            <dd>MIT</dd>
-          </div>
-        </dl>
-        <div className="about-actions">
-          <button
-            className="secondary-button small-button"
-            onClick={() =>
-              void navigator.clipboard
-                .writeText(aboutText)
-                .then(() => setAboutError('Informações copiadas.'))
-                .catch(() => setAboutError('Não foi possível copiar as informações.'))
-            }
-          >
-            Copiar informações
-          </button>
-          <button
-            className="secondary-button small-button"
-            onClick={() =>
-              void invoke('open_logs_folder').catch((error: unknown) =>
-                setAboutError(String(error)),
-              )
-            }
-          >
-            Abrir pasta de logs
-          </button>
-        </div>
-        {aboutError && (
-          <p role="status" className="settings-description">
-            {aboutError}
-          </p>
-        )}
-      </section>
     </div>
   );
 }

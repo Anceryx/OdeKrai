@@ -6,6 +6,7 @@ import { loadSettings } from '../core/settings';
 import { normalizeSoundPreferences, playSound, SoundTriggerGate } from '../core/sounds';
 import { Button, PageHeader, SelectableCard } from './DesignSystem';
 import { RiskBadge, type RiskLevel } from './RiskBadge';
+import { HistoryDeletionSettings } from './HistoryDeletionSettings';
 
 type Mode = 'sempre_perguntar' | 'aprovar_por_mim' | 'controle_total';
 type ToolOverride = { tool: string; morePermissive: boolean };
@@ -99,9 +100,13 @@ function decision(mode: Mode, risk: RiskLevel): string {
 export function SecurityCenter({
   page,
   embedded = false,
+  onOpenFullPage,
+  onDeleteAllHistory,
 }: {
   page: 'permissions' | 'activity';
   embedded?: boolean;
+  onOpenFullPage?: () => void;
+  onDeleteAllHistory?: () => Promise<boolean>;
 }) {
   const [settings, setSettings] = useState<PermissionSettings | null>(null);
   const [entries, setEntries] = useState<AuditEntry[]>([]);
@@ -283,6 +288,13 @@ export function SecurityCenter({
               </table>
             </div>
           </section>
+          {onDeleteAllHistory && (
+            <section id="permissions-data" className="settings-panel">
+              <h3>Apagar conversas</h3>
+              <p>Você pode apagar o histórico deste dispositivo quando quiser.</p>
+              <HistoryDeletionSettings onConfirm={onDeleteAllHistory} />
+            </section>
+          )}
           <section className="settings-panel">
             <div className="panel-heading">
               <div>
@@ -470,6 +482,11 @@ export function SecurityCenter({
             <span className={`state-chip ${verified ? 'connected' : 'warning'}`}>
               {verified === null ? 'VERIFICANDO' : verified ? 'CADEIA ÍNTEGRA' : 'FALHA NA CADEIA'}
             </span>
+            {embedded && onOpenFullPage && (
+              <Button type="button" variant="secondary" onClick={onOpenFullPage}>
+                Abrir tela completa
+              </Button>
+            )}
           </div>
           <div className="audit-toolbar">
             <input

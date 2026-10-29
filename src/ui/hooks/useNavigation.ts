@@ -5,6 +5,7 @@ import {
   readLastPage,
   readLastSettingsSection,
   resolveLegacySettingsNavigation,
+  resolveLegacyScreenNavigation,
   resolveNavigation,
   type AppRoute,
   type NavigationView,
@@ -52,6 +53,15 @@ export function useNavigation() {
     setHistory(history.slice(0, -1));
   }, [history]);
 
+  const openLegacyScreen = useCallback(
+    (destination: Section) => {
+      const next = resolveLegacyScreenNavigation(destination, current);
+      setHistory((items) => [...items, current]);
+      setCurrent(next);
+    },
+    [current],
+  );
+
   const closeSettings = useCallback(() => {
     setCurrent((previous) => ({ ...previous, settingsOpen: false }));
   }, []);
@@ -72,6 +82,7 @@ export function useNavigation() {
     closeSettings,
     selectSettingsSection,
     navigate,
+    openLegacyScreen,
     back,
   };
 }

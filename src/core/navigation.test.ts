@@ -8,11 +8,22 @@ import {
   resolveAgentReason,
   resolveConfigurationReason,
   resolveLegacySettingsNavigation,
+  resolveLegacyScreenNavigation,
   resolveNavigation,
 } from './navigation';
 import type { Section } from '../ui/screens/types';
 
 describe('modelo de navegação', () => {
+  it('abre atividade pela rota antiga em tela completa', () => {
+    expect(
+      resolveLegacyScreenNavigation('activity', {
+        route: { page: 'skills', settingsSection: 'privacidade' },
+        section: 'skills',
+        settingsOpen: true,
+      }),
+    ).toEqual({ route: { page: 'skills' }, section: 'activity', settingsOpen: false });
+  });
+
   it.each([
     ['agent', 'perfil-memoria'],
     ['companion', 'assistente'],

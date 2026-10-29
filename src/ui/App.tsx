@@ -119,8 +119,15 @@ export function App() {
 
 function MainApp() {
   const appState = useAppState();
-  const { section, route, navigate, settingsOpen, closeSettings, selectSettingsSection } =
-    useNavigation();
+  const {
+    section,
+    route,
+    navigate,
+    openLegacyScreen,
+    settingsOpen,
+    closeSettings,
+    selectSettingsSection,
+  } = useNavigation();
   const [usedProviderId, setUsedProviderId] = useState<string | null>(null);
   const [agentAvailability, setAgentAvailability] = useState<{
     available: boolean;
@@ -1170,7 +1177,6 @@ function MainApp() {
                 <SettingsScreen
                   settings={settings}
                   update={setSettings}
-                  onDeleteAllHistory={deleteAllConversations}
                   onOpenPermissions={() => navigate('permissions')}
                 />
               )}
@@ -1210,6 +1216,7 @@ function MainApp() {
         onError={setToast}
         onDeleteAllHistory={deleteAllConversations}
         onOpenPage={(page) => navigate(page)}
+        onOpenActivityFullPage={() => openLegacyScreen('activity')}
         onAgentStatus={() => reportDiagnostic('agent_home_status', '')}
       />
     </div>
