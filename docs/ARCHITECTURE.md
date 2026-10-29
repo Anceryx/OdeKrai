@@ -73,6 +73,12 @@ aceitam `http` e `https`.
 
 A janela `pet` usa transparência sem região Win32 e não ignora eventos do ponteiro. Os cantos transparentes continuam pertencendo à janela e podem receber cliques; arrasto, foco, DPI e monitores múltiplos exigem validação visual no Windows.
 
+## Navegação e configurações
+
+`src/ui/hooks/useNavigation.ts` concentra a navegação. A barra lateral abre Visão geral, Conversas, Agenda, Habilidades e Conectores de IA. As seções legadas continuam registradas para telas completas e para os acionadores existentes; quando o destino tem correspondência, `resolveLegacySettingsNavigation` abre Configurações sobre a página atual. Os mapeamentos `agent`, `companion`, `settings`, `permissions`, `activity` e `computer` apontam, respectivamente, para Perfil e memória, Assistente e mascote, Geral, Privacidade e permissões, Atividade e Seu computador.
+
+`SettingsModal` usa os componentes existentes das telas. `Modal` mantém o conteúdo de fundo montado e inerte enquanto está aberto, confina o foco, bloqueia a rolagem do documento e restaura o foco ao fechar; cada tela continua usando o estado do `App`, sem uma segunda cópia de configurações. A busca é alimentada por `src/core/settings-navigation.ts`. Os destinos legados têm testes unitários; dimensões, escala, aparência e comportamento no WebView2 exigem validação no executável Windows.
+
 ## Pasta e identidade do agente
 
 `src-tauri/src/agent_home.rs` valida a pasta escolhida na primeira execução (sugestão: `%USERPROFILE%\OdeKrai`) e cria `ODEKRAI.md`, `memory/`, `workspace/`, `skills/` e `logs/`. O template está embutido no Rust; o repositório não contém o arquivo pessoal gerado. A última versão aprovada e seu SHA-256 ficam nos dados locais do aplicativo. Uma alteração externa suspende o prompt até revisão e aprovação.

@@ -38,7 +38,7 @@ island/mascote.
 
 - `DesignSystem.test.tsx`: variantes de botão, nome e estado acessíveis de alternância e cartão selecionável, estrutura de cabeçalho, aviso, selo, cartão, campo e seletor.
 - `npm run build`: verifica TypeScript e bundle após a adoção dos componentes e tokens.
-- Validação visual pendente no Windows: Visão geral, Conversas, Identidade e memória, Conectores, Assistente, Configurações, Permissões, Atividade e Perfil em 1250 × 700 e 1000 × 600; conferir foco, contraste e escala de texto.
+- Validação visual pendente no Windows: Visão geral, Conversas, Agenda, Habilidades, Conectores de IA e Configurações em 1250 × 700 e 1000 × 600; conferir foco, contraste e escala de texto.
 - `assets-src/iconly/` contém SVGs locais ainda não rastreados, mas não há arquivo de licença nem atribuição informada. Os ícones não foram incorporados; a atribuição e o uso dependem de confirmar os direitos.
 
 ### Painéis da tela Conversas
@@ -114,12 +114,16 @@ Execute em uma sessão Windows com a janela visível. Registre sistema, escala D
 20. Em build de desenvolvimento, teste leitura, gravação com backup, mover para `.trash`, envio simulado e bloqueio financeiro. Confirme que só a janela `approval` pode aprovar, que Negar e fechar negam, que parâmetros adulterados/replay/expiração/fila cheia falham fechados e que conteúdo externo pede aprovação.
 21. Confirme que a inicialização abre apenas `main`; habilite, oculte e alterne os modos Ilha/Livre do pet; resolva/expire aprovações e confirme que a janela do pet é criada sob demanda.
 22. Na primeira execução com a janela visível, abra o seletor de pasta nativo, escolha um diretório local e confirme que o Rust ainda valida o caminho antes de criar a pasta do agente; teste os selects de idioma e tom.
-23. Nas resoluções de janela 1250×700 e 1000×600, percorra Visão geral, Conversas, Identidade e memória, Conectores, Assistente, Configurações, Permissões, Atividade e Perfil; confirme uma barra de rolagem principal, rodapé fixo e histórico selecionável com título/data.
+23. Nas resoluções de janela 1250×700 e 1000×600, percorra Visão geral, Conversas, Agenda, Habilidades e Conectores de IA. No modal de Configurações, confira as nove seções, pesquisa, menu lateral e lista suspensa estreita; confirme uma área de rolagem própria, conteúdo de fundo preservado e rodapé fixo.
 24. Ao mudar modo ou habilitar override, confirme que a caixa Win32 aparece sem congelar a janela principal enquanto permanece aberta; confirme Cancelar e Sim retornando à interface.
 25. Execute `npm run build` e inspecione `dist/` para confirmar que o aplicativo não inclui modelos GLB nem arquivos do renderer 3D.
 26. Teste `Ctrl+Shift+F12` e um atalho em conflito. Confirme que Parar tudo cancela uma resposta em streaming, nega aprovações pendentes, bloqueia novas ações e persiste após reiniciar; Retomar exige uma auditoria gravada.
 27. Na tela Atividade, confirme a cadeia, exporte JSONL e altere uma cópia de teste para verificar a detecção. Não edite os logs reais durante o ensaio.
 28. Repita a janela de aprovação em 100%, 125% e 150% de DPI, monitores distintos, foco alternado e telas menores; verifique texto longo sem renderização de Markdown/HTML.
+29. A partir dos acionadores antigos, abra Configurações, Permissões e segurança, Meu perfil, Identidade e memória, Assistente, Seu computador e Atividade; confirme que cada um abre a seção correspondente e que “Abrir tela completa” em Atividade preserva a rota antiga.
+30. Com teclado, percorra o menu do perfil, pesquisa, seções e controles do modal com Tab e Shift+Tab; confirme rótulos acessíveis, foco visível, Escape, retorno do foco ao acionador e ausência de captura do teclado após fechar.
+31. No Windows, compare as telas com movimento normal e reduzido e com `data-performance="on"`; confirme ausência de animações não essenciais, sombras grandes, gradientes animados e transparência no modo de desempenho.
+32. Em uma sessão parada de 60 segundos do executável, registre chamadas IPC e CPU do processo sem interagir; repita com o mesmo estado após a mudança. Se a contagem IPC não puder ser instrumentada, registre-a como não medida e não estime o valor.
 
 ## Inspeção visual manual pendente
 

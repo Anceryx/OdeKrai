@@ -36,6 +36,12 @@ Para estados sem risco, usar `ui-badge--success`, `ui-badge--warning`, `ui-badge
 
 Definir `data-performance="on"` no elemento `<html>` ativa o modo de baixo custo visual: remove sombras e filtros, imagens de fundo em gradiente, animações de gradiente e translucidez em superfícies marcadas com `data-translucent`. O modo é opt-in e não altera preferências salvas nem a aparência padrão. Remover o atributo restaura o estilo usual.
 
+## Teclado e movimento
+
+No diálogo modal, o foco inicial vai para a pesquisa de configurações; a ordem de Tab segue o DOM, inclui o botão de fechar e os controles da seção, e permanece dentro do diálogo. `Escape` fecha e devolve o foco ao acionador. Em largura abaixo de 800 px, a navegação por seções usa uma lista suspensa rotulada. Controles interativos mantêm indicação `:focus-visible`.
+
+As animações devem respeitar `prefers-reduced-motion`; o CSS global desliga animações e transições nessa preferência. O modo `data-performance="on"` aplica as reduções visuais e remove os efeitos de maior custo listados acima. A validação automatizada cobre os contratos de foco, rótulos, tokens, contraste e seletores; a inspeção no WebView2 continua manual.
+
 ## Verificação
 
 `npm run check:design-tokens` confere presença dos tokens, escala de espaçamento, durações, elevações sem blur, modo de desempenho e contraste WCAG dos pares principais, estados e riscos. O comando deve passar junto a `npm run check:encoding`.

@@ -14,7 +14,7 @@ OdeKrai chats with the AI provider you configure and can run skills on your comp
 - **A named mascot:** 12 characters with animations and Island and Free modes.
 - **Local calendar:** organize events by day and month, set recurrence, and import or export `.ics` files.
 - **Local skills:** the agent can run actions registered by the app, subject to Rust-enforced permissions.
-- **Google Calendar:** connect your primary calendar under Skills > Integrations to view and manage events, with approval for changes. See [setup and scopes](docs/GOOGLE-CALENDAR.md).
+- **Google Calendar:** connect your primary calendar under Skills > Calendar and reminders > Manage to view and manage events, with approval for changes. See [setup and scopes](docs/GOOGLE-CALENDAR.md).
 - **You stay in control:** permission modes, approvals, activity records, and a kill switch.
 - **Local settings:** provider credentials are stored by Rust in Windows Credential Manager.
 
