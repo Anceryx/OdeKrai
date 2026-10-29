@@ -199,6 +199,7 @@ fn save_to_ics(path: &std::path::Path, event: &CalendarEvent) -> Result<(), Stri
 pub struct CalendarDefault {
     pub mode: String,
     pub path: Option<String>,
+    pub google_available: bool,
 }
 
 fn default_target(conn: &Connection) -> Result<CalendarDefault, String> {
@@ -219,7 +220,17 @@ fn default_target(conn: &Connection) -> Result<CalendarDefault, String> {
         )
         .optional()
         .map_err(|_| "Não foi possível consultar o arquivo .ics padrão.".to_string())?;
-    Ok(CalendarDefault { mode, path })
+    Ok(CalendarDefault {
+        mode,
+        path,
+        google_available: crate::google_oauth::has_scope(crate::google_calendar::SCOPE),
+    })
+}
+
+pub(crate) fn google_is_default(app: &tauri::AppHandle) -> bool {
+    db(app)
+        .and_then(|conn| default_target(&conn))
+        .is_ok_and(|target| target.mode == "google")
 }
 
 #[tauri::command]
@@ -240,6 +251,12 @@ pub fn calendar_set_default(
 ) -> Result<(), String> {
     crate::require_main(&caller)?;
     if !matches!(mode.as_str(), "local" | "ics") {
+        if mode == "google" && crate::google_oauth::has_scope(crate::google_calendar::SCOPE) {
+            let conn = db(&app)?;
+            conn.execute("INSERT INTO calendar_settings(key,value) VALUES('default_mode','google') ON CONFLICT(key) DO UPDATE SET value=excluded.value", [])
+                .map_err(|_| "Não foi possível salvar o destino Google Calendar.".to_string())?;
+            return Ok(());
+        }
         return Err("Destino de calendário inválido.".into());
     }
     if mode == "ics" {
@@ -377,6 +394,10 @@ pub(crate) fn preview_skill(
 ) -> Result<String, String> {
     let target = default_target(&db(app)?)?;
     Ok(match skill_id {
+        "calendar.create_event" if target.mode == "google" => format!(
+            "Criar evento no Google Calendar (calendário principal), após aprovação: {}",
+            params
+        ),
         "calendar.create_event" if target.mode == "ics" => format!(
             "Salvar evento em {} e abrir o calendário do sistema.",
             target

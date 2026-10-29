@@ -567,6 +567,24 @@ impl Tool for Productivity {
                 Risk::DestrutivoFinanceiro
             }
             SimulatedAction::Productivity { skill_id, .. }
+                if skill_id == "google.calendar.delete_event" =>
+            {
+                Risk::DestrutivoFinanceiro
+            }
+            SimulatedAction::Productivity { skill_id, .. }
+                if matches!(
+                    skill_id.as_str(),
+                    "google.calendar.create_event" | "google.calendar.update_event"
+                ) =>
+            {
+                Risk::ComunicacaoExterna
+            }
+            SimulatedAction::Productivity { skill_id, .. }
+                if skill_id == "google.calendar.list_events" =>
+            {
+                Risk::Leitura
+            }
+            SimulatedAction::Productivity { skill_id, .. }
                 if skill_id == "calendar.create_event" =>
             {
                 Risk::ComunicacaoExterna
@@ -629,6 +647,12 @@ impl Tool for Productivity {
         if skill_id.starts_with("calendar.") {
             return crate::productivity::preview(skill_id, params, root);
         }
+        if skill_id.starts_with("google.calendar.") {
+            return Ok(format!(
+                "Google Calendar (calendário principal): {}",
+                params
+            ));
+        }
         if skill_id.starts_with("files.") {
             return file_skill_preview(skill_id, params, root);
         }
@@ -640,6 +664,9 @@ impl Tool for Productivity {
         };
         if skill_id == "web.fetch" {
             return Err("web.fetch precisa ser executado pelo cliente HTTPS do Rust.".into());
+        }
+        if skill_id.starts_with("google.calendar.") {
+            return Err("A integração Google Calendar precisa do cliente de rede do Rust.".into());
         }
         if skill_id.starts_with("calendar.") {
             return crate::productivity::execute(skill_id, params, root, None);
@@ -665,6 +692,14 @@ impl Tool for Productivity {
             let url = params["url"].as_str().unwrap_or("").to_string();
             let app = app.clone();
             return Box::pin(async move { crate::web_fetch::fetch(&app, &url).await });
+        }
+        if skill_id.starts_with("google.calendar.") {
+            let skill_id = skill_id.clone();
+            let params = params.clone();
+            let app = app.clone();
+            return Box::pin(async move {
+                crate::google_calendar::execute(&app, &skill_id, &params).await
+            });
         }
         if matches!(
             skill_id.as_str(),
@@ -697,6 +732,12 @@ impl Tool for Productivity {
             let skill_id = skill_id.clone();
             let params = params.clone();
             let app = app.clone();
+            if skill_id == "calendar.create_event" && crate::calendar::google_is_default(&app) {
+                return Box::pin(async move {
+                    crate::google_calendar::execute(&app, "google.calendar.create_event", &params)
+                        .await
+                });
+            }
             return Box::pin(async move {
                 crate::productivity::execute(&skill_id, &params, Path::new(""), Some(&app))
             });
@@ -1115,6 +1156,8 @@ pub(super) fn validate_action(action: &SimulatedAction) -> Result<(), String> {
         SimulatedAction::Productivity { skill_id, params } => {
             if skill_id.starts_with("files.") {
                 validate_file_skill(skill_id, params)?;
+            } else if skill_id.starts_with("google.calendar.") {
+                crate::google_calendar::validate_skill(skill_id, params)?;
             } else {
                 crate::productivity::validate(skill_id, params)?;
             }

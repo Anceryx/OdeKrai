@@ -4,6 +4,7 @@ Este arquivo segue o formato Keep a Changelog. Todas as versões listadas são p
 
 ## [Não lançado]
 
+- Conexão Google Calendar com habilidades Rust separadas, aprovação de escritas e escopo `calendar.events.owned`.
 - Habilidades de papel de parede com restauração pelo estado anterior e bloqueio do Windows com aprovação obrigatória; bloqueio negado para origem em conteúdo externo.
 
 ## [v0.15.0] — Ferramentas locais e análise visual — 2026-10-28

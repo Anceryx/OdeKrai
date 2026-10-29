@@ -14,6 +14,7 @@ O OdeKrai conversa com o provedor de IA que você configurar e pode executar hab
 - **Um mascote com nome:** 12 personagens com animações e modos Ilha e Livre.
 - **Habilidades locais:** o agente pode executar ações registradas no aplicativo, sujeitas às permissões do Rust.
 - **Agenda local:** organize eventos por dia e mês, configure recorrências e importe ou exporte arquivos `.ics`.
+- **Google Calendar:** conecte o calendário principal em Habilidades > Integrações para consultar e gerenciar eventos com aprovação nas alterações. Consulte [a configuração e os escopos](docs/GOOGLE-CALENDAR.md).
 - **Você no controle:** modos de permissão, aprovações, registro de atividade e kill switch.
 - **Configurações locais:** credenciais de provedores são armazenadas pelo Rust no Gerenciador de Credenciais do Windows.
 

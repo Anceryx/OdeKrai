@@ -14,7 +14,11 @@ type CalendarEvent = {
   recurrence: 'none' | 'daily' | 'weekly' | 'monthly';
 };
 type Draft = Omit<CalendarEvent, 'id'> & { id?: string; startLocal: string; endLocal: string };
-type CalendarDefault = { mode: 'local' | 'ics'; path: string | null };
+type CalendarDefault = {
+  mode: 'local' | 'ics' | 'google';
+  path: string | null;
+  googleAvailable: boolean;
+};
 const blank = (): Draft => ({
   title: '',
   start: '',
@@ -47,6 +51,7 @@ export function CalendarScreen() {
   const [calendarDefault, setCalendarDefault] = useState<CalendarDefault>({
     mode: 'local',
     path: null,
+    googleAvailable: false,
   });
   const reload = useCallback(async () => {
     if (!isTauri()) return;
@@ -156,7 +161,7 @@ export function CalendarScreen() {
     if (!path) return;
     try {
       await invoke('calendar_set_default', { mode: 'ics', path });
-      setCalendarDefault({ mode: 'ics', path });
+      setCalendarDefault({ ...calendarDefault, mode: 'ics', path });
       setMessage('O calendário padrão agora é o arquivo .ics escolhido.');
     } catch {
       setError('Não foi possível configurar o arquivo .ics padrão.');
@@ -165,10 +170,23 @@ export function CalendarScreen() {
   async function setLocalDefault() {
     try {
       await invoke('calendar_set_default', { mode: 'local', path: null });
-      setCalendarDefault({ mode: 'local', path: null });
+      setCalendarDefault({ ...calendarDefault, mode: 'local', path: null });
       setMessage('O calendário padrão agora é a Agenda local do OdeKrai.');
     } catch {
       setError('Não foi possível salvar o calendário padrão.');
+    }
+  }
+  async function setGoogleDefault() {
+    try {
+      await invoke('calendar_set_default', { mode: 'google', path: null });
+      setCalendarDefault({ ...calendarDefault, mode: 'google' });
+      setMessage(
+        'O destino padrão das habilidades agora é o Google Calendar (calendário principal).',
+      );
+    } catch {
+      setError(
+        'Conecte o Google Calendar com o escopo calendar.events.owned antes de selecioná-lo.',
+      );
     }
   }
   const weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -189,7 +207,9 @@ export function CalendarScreen() {
         <span>
           {calendarDefault.mode === 'local'
             ? 'Agenda do OdeKrai (local)'
-            : `Arquivo .ics: ${calendarDefault.path ?? 'não configurado'}`}
+            : calendarDefault.mode === 'google'
+              ? 'Google Calendar (calendário principal)'
+              : `Arquivo .ics: ${calendarDefault.path ?? 'não configurado'}`}
         </span>
         <button className="secondary-button" onClick={() => void setLocalDefault()}>
           Usar Agenda local
@@ -197,6 +217,18 @@ export function CalendarScreen() {
         <button className="secondary-button" onClick={() => void chooseCalendarFile()}>
           Escolher arquivo .ics
         </button>
+        <button
+          className="secondary-button"
+          onClick={() => void setGoogleDefault()}
+          disabled={!calendarDefault.googleAvailable}
+        >
+          Usar Google Calendar
+        </button>
+        <small>
+          {calendarDefault.googleAvailable
+            ? 'Conexão autorizada para eventos Google.'
+            : 'Conecte Google Calendar em Habilidades > Integrações para habilitar esta opção.'}
+        </small>
       </section>
       <div className="calendar-toolbar">
         <button

@@ -329,6 +329,14 @@ pub async fn access_token(state: &GoogleOAuthState) -> Result<String, String> {
     Ok(token)
 }
 
+/// Verifica se a conexão armazenada concedeu o escopo exigido.
+pub fn has_scope(scope: &str) -> bool {
+    load()
+        .ok()
+        .flatten()
+        .is_some_and(|connection| connection.scopes.iter().any(|s| s == scope))
+}
+
 #[tauri::command]
 pub async fn google_oauth_disconnect(
     caller: tauri::WebviewWindow,

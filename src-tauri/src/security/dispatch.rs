@@ -80,6 +80,10 @@ pub(super) fn action_metadata(
             "files.write" | "files.append" | "files.mkdir" | "files.copy" | "files.move"
             | "files.rename" | "files.delete" | "files.apply_plan" => skill_id,
             "calendar.create_event" => "calendar.create_event",
+            "google.calendar.create_event"
+            | "google.calendar.update_event"
+            | "google.calendar.delete_event"
+            | "google.calendar.list_events" => skill_id,
             "reminder.create" | "reminder.list" | "reminder.cancel" => skill_id,
             "doc.create_markdown" => "doc.create_markdown",
             "doc.create_text" => "doc.create_text",
@@ -157,7 +161,7 @@ fn require_batch_approval(action: &SimulatedAction, decision: Decision) -> Decis
         && matches!(decision, Decision::Allow(_))
     {
         Decision::AskUser("memory_proposal_requires_approval")
-    } else if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "files.apply_plan" | "app.launch" | "clipboard.read" | "clipboard.write" | "discord.send" | "code.delegate" | "calendar.delete_event"))
+    } else if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "files.apply_plan" | "app.launch" | "clipboard.read" | "clipboard.write" | "discord.send" | "code.delegate" | "calendar.create_event" | "calendar.delete_event" | "google.calendar.create_event" | "google.calendar.update_event" | "google.calendar.delete_event"))
         && matches!(decision, Decision::Allow(_))
     {
         Decision::AskUser("batch_requires_approval")
@@ -395,6 +399,13 @@ pub(super) fn preview_for(
     if let SimulatedAction::Productivity { skill_id, params } = action {
         if skill_id.starts_with("calendar.") {
             return crate::calendar::preview_skill(app, skill_id, params);
+        }
+        if skill_id.starts_with("google.calendar.") {
+            let details = params.get("event").unwrap_or(params);
+            return Ok(format!(
+                "Google Calendar (calendário principal) — {} — dados para aprovação: {}",
+                skill_id, details
+            ));
         }
         if skill_id == "memory.propose_note" {
             return crate::productivity::preview(skill_id, params, Path::new(""));
@@ -1289,5 +1300,23 @@ mod batch_approval_tests {
             require_batch_approval(&action, Decision::AskUser("mode_always_ask")),
             Decision::AskUser("mode_always_ask")
         );
+    }
+
+    #[test]
+    fn google_calendar_writes_always_require_explicit_approval() {
+        for skill_id in [
+            "google.calendar.create_event",
+            "google.calendar.update_event",
+            "google.calendar.delete_event",
+        ] {
+            let action = SimulatedAction::Productivity {
+                skill_id: skill_id.into(),
+                params: serde_json::json!({"event":{"id":"event12345","title":"Evento"}}),
+            };
+            assert_eq!(
+                require_batch_approval(&action, Decision::Allow("mode_total")),
+                Decision::AskUser("batch_requires_approval")
+            );
+        }
     }
 }

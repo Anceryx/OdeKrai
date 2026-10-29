@@ -112,6 +112,7 @@ mod code_delegate;
 mod diagnostics;
 mod discord;
 mod external_links;
+mod google_calendar;
 pub mod google_oauth;
 mod hardware;
 mod history;

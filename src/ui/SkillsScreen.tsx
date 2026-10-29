@@ -528,11 +528,12 @@ export function SkillsScreen() {
                 id="google-oauth-scopes"
                 value={googleScopes}
                 onChange={(event) => setGoogleScopes(event.target.value)}
-                placeholder="URI dos escopos, separados por espaço"
+                placeholder="https://www.googleapis.com/auth/calendar.events.owned"
               />
               <p>
-                O módulo não define escopos. Cole aqui os escopos documentados pela integração que
-                usará a conexão. Clientes desktop são públicos; o secret não é confidencial.
+                Para usar Google Calendar, informe somente
+                https://www.googleapis.com/auth/calendar.events.owned. Clientes desktop são
+                públicos; o secret opcional não é confidencial.
               </p>
               <Button
                 disabled={busy || !isTauri() || !googleClientId.trim() || !googleScopes.trim()}
