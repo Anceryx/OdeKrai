@@ -24,6 +24,79 @@ pub struct Skill {
     pub result_trust: ResultTrust,
     pub timeout: Duration,
     pub rate_limit_per_minute: usize,
+    pub family: SkillFamily,
+    pub icon: &'static str,
+    pub examples: Vec<&'static str>,
+    pub origin: SkillOrigin,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillFamily {
+    Arquivos,
+    AbrirAplicativos,
+    AgendaLembretes,
+    PlanilhasDocumentos,
+    Mensagens,
+    Web,
+    Computador,
+    Codigo,
+    IntegracoesMcp,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", tag = "kind", content = "server")]
+pub enum SkillOrigin {
+    Builtin,
+    Mcp(String),
+}
+
+fn skill_metadata(
+    id: &str,
+    model_description: &'static str,
+) -> (SkillFamily, &'static str, Vec<&'static str>, SkillOrigin) {
+    let (family, icon) = match id {
+        "google.calendar.list_events"
+        | "google.calendar.create_event"
+        | "google.calendar.update_event"
+        | "google.calendar.delete_event"
+        | "calendar.create_event"
+        | "calendar.list_events"
+        | "calendar.update_event"
+        | "calendar.delete_event"
+        | "reminder.create"
+        | "reminder.list"
+        | "reminder.cancel" => (SkillFamily::AgendaLembretes, "calendar"),
+        "sheet.create_csv"
+        | "sheet.create_xlsx"
+        | "sheet.read"
+        | "doc.create_markdown"
+        | "doc.create_text" => (SkillFamily::PlanilhasDocumentos, "file_doc"),
+        "mail.draft" | "discord.send" | "simulated.send_message" => {
+            (SkillFamily::Mensagens, "chat_text")
+        }
+        "web.fetch" | "system.open_url" => (SkillFamily::Web, "globe"),
+        "code.delegate" => (SkillFamily::Codigo, "code"),
+        "app.launch" => (SkillFamily::AbrirAplicativos, "app_window"),
+        "system.open_path"
+        | "system.reveal_in_folder"
+        | "files.list"
+        | "files.search"
+        | "files.read"
+        | "files.write"
+        | "files.append"
+        | "files.mkdir"
+        | "files.copy"
+        | "files.move"
+        | "files.rename"
+        | "files.delete"
+        | "files.apply_plan"
+        | "workspace.read_file"
+        | "workspace.write_file"
+        | "workspace.delete_file" => (SkillFamily::Arquivos, "folder"),
+        _ => (SkillFamily::Computador, "desktop"),
+    };
+    (family, icon, vec![model_description], SkillOrigin::Builtin)
 }
 
 impl Skill {
@@ -564,19 +637,26 @@ pub fn registry() -> Vec<Skill> {
     ];
     rows.into_iter()
         .map(
-            |(id, name, description, model_description, schema, result_trust)| Skill {
-                id,
-                name,
-                description,
-                model_description,
-                schema,
-                result_trust,
-                timeout: if id == "code.delegate" {
-                    Duration::from_secs(610)
-                } else {
-                    tool_for(&action_example(id)).timeout()
-                },
-                rate_limit_per_minute: tool_for(&action_example(id)).rate_limit_per_minute(),
+            |(id, name, description, model_description, schema, result_trust)| {
+                let (family, icon, examples, origin) = skill_metadata(id, model_description);
+                Skill {
+                    id,
+                    name,
+                    description,
+                    model_description,
+                    schema,
+                    result_trust,
+                    timeout: if id == "code.delegate" {
+                        Duration::from_secs(610)
+                    } else {
+                        tool_for(&action_example(id)).timeout()
+                    },
+                    rate_limit_per_minute: tool_for(&action_example(id)).rate_limit_per_minute(),
+                    family,
+                    icon,
+                    examples,
+                    origin,
+                }
             },
         )
         .collect()
@@ -844,6 +924,84 @@ pub struct SkillView {
     pub category: String,
     pub status: String,
     pub configuration_required: bool,
+    pub family: SkillFamily,
+    pub icon: String,
+    pub examples: Vec<String>,
+    pub origin: SkillOrigin,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillFamilySummary {
+    pub family: SkillFamily,
+    pub skill_count: usize,
+    pub active_count: usize,
+    pub highest_risk: Risk,
+    pub configuration_required: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PublicCatalog {
+    pub items: Vec<Value>,
+    pub coming_soon: bool,
+}
+
+fn risk_rank(risk: Risk) -> u8 {
+    match risk {
+        Risk::Leitura => 0,
+        Risk::EscritaReversivel => 1,
+        Risk::ComunicacaoExterna => 2,
+        Risk::ExecucaoDeCodigo => 3,
+        Risk::DestrutivoFinanceiro => 4,
+    }
+}
+
+fn family_summaries(skills: &[SkillView]) -> Vec<SkillFamilySummary> {
+    let mut summaries: Vec<SkillFamilySummary> = Vec::new();
+    for skill in skills {
+        if let Some(summary) = summaries
+            .iter_mut()
+            .find(|item| item.family == skill.family)
+        {
+            summary.skill_count += 1;
+            summary.active_count += usize::from(skill.enabled);
+            summary.configuration_required |= skill.configuration_required;
+            if risk_rank(skill.risk) > risk_rank(summary.highest_risk) {
+                summary.highest_risk = skill.risk;
+            }
+        } else {
+            summaries.push(SkillFamilySummary {
+                family: skill.family,
+                skill_count: 1,
+                active_count: usize::from(skill.enabled),
+                highest_risk: skill.risk,
+                configuration_required: skill.configuration_required,
+            });
+        }
+    }
+    summaries
+}
+
+#[tauri::command]
+pub fn get_public_catalog(caller: tauri::WebviewWindow) -> Result<PublicCatalog, String> {
+    crate::require_main(&caller)?;
+    Ok(public_catalog())
+}
+
+fn public_catalog() -> PublicCatalog {
+    PublicCatalog {
+        items: Vec::new(),
+        coming_soon: true,
+    }
+}
+
+#[tauri::command]
+pub fn get_skill_family_summaries(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+) -> Result<Vec<SkillFamilySummary>, String> {
+    Ok(family_summaries(&get_skills(app, caller)?))
 }
 
 fn skill_category(id: &str) -> &'static str {
@@ -957,6 +1115,14 @@ pub fn get_skills(
                 .into(),
                 configuration_required: skill.id == "discord.send"
                     && !crate::discord::discord_is_configured(&app)?,
+                family: skill.family,
+                icon: skill.icon.into(),
+                examples: skill
+                    .examples
+                    .iter()
+                    .map(|example| (*example).into())
+                    .collect(),
+                origin: skill.origin,
             })
         })
         .collect()
@@ -1262,6 +1428,114 @@ fn protected_absolute_path(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn registered_skills_have_catalog_metadata_and_each_family_is_populated() {
+        let skills = registry();
+        assert!(!skills.is_empty());
+        for skill in &skills {
+            assert!(!format!("{:?}", skill.family).is_empty(), "{}", skill.id);
+            assert!(!skill.icon.trim().is_empty(), "{}", skill.id);
+            assert!(!skill.examples.is_empty(), "{}", skill.id);
+            assert!(skill.examples.len() <= 3, "{}", skill.id);
+            assert_eq!(skill.origin, SkillOrigin::Builtin, "{}", skill.id);
+        }
+        let families: std::collections::HashSet<_> =
+            skills.iter().map(|skill| skill.family).collect();
+        assert!(!families.is_empty());
+        assert!(families
+            .iter()
+            .all(|family| skills.iter().any(|skill| skill.family == *family)));
+    }
+
+    #[test]
+    fn public_catalog_is_empty_until_real_catalog_items_are_available() {
+        let catalog = public_catalog();
+        assert!(catalog.items.is_empty());
+        assert!(catalog.coming_soon);
+    }
+
+    #[test]
+    fn skill_view_keeps_existing_serialized_fields() {
+        let view = SkillView {
+            id: "files.read".into(),
+            name: "Ler arquivo".into(),
+            description: "Leitura local".into(),
+            risk: Risk::Leitura,
+            result_trust: ResultTrust::Local,
+            enabled: false,
+            more_permissive: false,
+            fixed_blocked: false,
+            category: "local".into(),
+            status: "available".into(),
+            configuration_required: false,
+            family: SkillFamily::Arquivos,
+            icon: "folder".into(),
+            examples: vec!["Leia o arquivo".into()],
+            origin: SkillOrigin::Builtin,
+        };
+        let value = serde_json::to_value(view).unwrap();
+        for field in [
+            "id",
+            "name",
+            "description",
+            "risk",
+            "resultTrust",
+            "enabled",
+            "morePermissive",
+            "fixedBlocked",
+            "category",
+            "status",
+            "configurationRequired",
+            "family",
+            "icon",
+            "examples",
+            "origin",
+        ] {
+            assert!(value.get(field).is_some(), "campo ausente: {field}");
+        }
+    }
+
+    #[test]
+    fn family_summary_aggregates_count_active_risk_and_configuration() {
+        let family = SkillFamily::AgendaLembretes;
+        let make = |id: &str, enabled: bool, risk: Risk, configuration_required: bool| SkillView {
+            id: id.into(),
+            name: id.into(),
+            description: String::new(),
+            risk,
+            result_trust: ResultTrust::Local,
+            enabled,
+            more_permissive: false,
+            fixed_blocked: false,
+            category: "local".into(),
+            status: "available".into(),
+            configuration_required,
+            family,
+            icon: "calendar".into(),
+            examples: vec!["Consulte a agenda.".into()],
+            origin: SkillOrigin::Builtin,
+        };
+        let summaries = family_summaries(&[
+            make("calendar.list_events", true, Risk::Leitura, false),
+            make(
+                "calendar.create_event",
+                false,
+                Risk::ComunicacaoExterna,
+                true,
+            ),
+        ]);
+        assert_eq!(
+            summaries,
+            vec![SkillFamilySummary {
+                family,
+                skill_count: 2,
+                active_count: 1,
+                highest_risk: Risk::ComunicacaoExterna,
+                configuration_required: true,
+            }]
+        );
+    }
 
     #[test]
     fn files_results_from_workspace_are_local_and_from_other_roots_are_untrusted() {

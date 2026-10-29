@@ -1069,6 +1069,8 @@ pub fn run() -> Result<(), tauri::Error> {
             security::set_permission_mode,
             security::set_tool_override,
             security::skills::get_skills,
+            security::skills::get_skill_family_summaries,
+            security::skills::get_public_catalog,
             security::skills::set_skill_enabled,
             security::skills::set_skill_group_enabled,
             security::skills::get_allowed_folders,
