@@ -203,6 +203,18 @@ impl McpStdioClient {
         self.stderr.lock().map(|v| v.clone()).unwrap_or_default()
     }
 
+    pub fn is_alive(&self) -> bool {
+        self.child
+            .lock()
+            .ok()
+            .and_then(|mut child| {
+                child
+                    .as_mut()
+                    .map(|child| child.try_wait().ok().flatten().is_none())
+            })
+            .unwrap_or(false)
+    }
+
     fn request_timeout(
         &self,
         method: &str,
@@ -423,6 +435,10 @@ fn capture_stderr(mut stderr: impl Read, output: std::sync::Arc<Mutex<Vec<u8>>>)
 
 #[cfg(windows)]
 struct WindowsJob(windows_sys::Win32::Foundation::HANDLE);
+
+// A Job Object handle is process-wide; ownership is exclusive and Drop only closes it.
+#[cfg(windows)]
+unsafe impl Send for WindowsJob {}
 #[cfg(windows)]
 impl WindowsJob {
     fn assign(child: &Child) -> Result<Self, String> {

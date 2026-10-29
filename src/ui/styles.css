@@ -1064,6 +1064,49 @@ select:focus-visible {
 .skills-search-section p {
   margin: 7px 0 0;
 }
+.mcp-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.mcp-settings-grid label,
+.mcp-env-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+.mcp-settings-grid input,
+.mcp-settings-grid textarea,
+.mcp-env-field input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised, #211d14);
+  color: var(--color-text);
+  font: inherit;
+}
+.mcp-settings-grid textarea {
+  resize: vertical;
+}
+.mcp-server-command code {
+  overflow-wrap: anywhere;
+}
+.allowed-folder-list pre[aria-label='Ferramentas e schemas não confiáveis'] {
+  max-height: 300px;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .skills-catalog-group .section-heading-row {
   margin-bottom: 8px;
 }
@@ -1177,6 +1220,9 @@ select:focus-visible {
   font-weight: 500;
 }
 @media (max-width: 850px) {
+  .mcp-settings-grid {
+    grid-template-columns: 1fr;
+  }
   .skill-card {
     grid-template-columns: 1fr;
   }

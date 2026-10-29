@@ -95,6 +95,7 @@ mod hardware;
 mod history;
 mod local_models;
 pub mod mcp;
+mod mcp_registry;
 mod memory_skills;
 mod pet_position;
 mod policy;
@@ -834,6 +835,7 @@ pub fn run() -> Result<(), tauri::Error> {
         .manage(tray::CloseBehaviorState::default())
         .manage(tray::ShutdownState::default())
         .manage(reminders::ReminderScheduler::default())
+        .manage(mcp_registry::McpRuntime::default())
         .setup(|app| {
             reminders::start_scheduler(app.handle());
             load_pet_position(app.handle());
@@ -892,6 +894,12 @@ pub fn run() -> Result<(), tauri::Error> {
             providers::test_provider_connection,
             providers::ping_provider,
             providers::get_provider_capabilities,
+            mcp_registry::mcp_list_servers,
+            mcp_registry::mcp_add_server,
+            mcp_registry::mcp_set_secret,
+            mcp_registry::mcp_set_enabled,
+            mcp_registry::mcp_test_connection,
+            mcp_registry::mcp_remove_server,
             providers::set_provider_tools_opt_in,
             profile::get_profile,
             profile::save_profile,

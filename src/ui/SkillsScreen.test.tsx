@@ -13,12 +13,17 @@ describe('tela de habilidades', () => {
     expect(markup).toContain('Captura de tela: indisponível');
   });
 
-  it('expõe grupos, integração indisponível e detalhes nativos por teclado/leitor de tela', () => {
+  it('expõe grupos, cadastro MCP confirmado e detalhes nativos por teclado/leitor de tela', () => {
     const markup = renderToStaticMarkup(<SkillsScreen />);
     const source = readFileSync(new URL('./SkillsScreen.tsx', import.meta.url), 'utf8');
     expect(markup).toContain('Habilidades locais');
     expect(markup).toContain('Integrações');
-    expect(markup).toContain('Servidores MCP: indisponíveis');
+    expect(markup).toContain('Integrações (MCP)');
+    expect(markup).toContain('este programa roda no seu computador com os seus privilégios');
+    expect(markup).toContain('Comando completo que será executado');
+    expect(source).toContain('mcp_test_connection');
+    expect(source).toContain('mcp_set_secret');
+    expect(source).not.toContain("invoke('tools_call'");
     expect(markup).toContain('aria-live="polite"');
     expect(source).toContain('<details className="skill-advanced">');
     expect(source).toContain('<summary>Detalhes avançados e permissões</summary>');

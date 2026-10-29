@@ -37,6 +37,17 @@ type Skill = {
 };
 type Folder = { path: string; access: 'read_only' | 'read_write'; workspace: boolean };
 type AllowedApp = { id: string; name: string; path: string };
+type McpServer = {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  envNames: string[];
+  enabled: boolean;
+  status: string;
+  error: string | null;
+};
+type McpState = { label: string; tools?: unknown; error?: string };
 
 const riskLabels: Record<Risk, string> = {
   leitura: 'Leitura',
@@ -54,18 +65,28 @@ export function SkillsScreen() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState('');
+  const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
+  const [mcpStates, setMcpStates] = useState<Record<string, McpState>>({});
+  const [mcpName, setMcpName] = useState('');
+  const [mcpCommand, setMcpCommand] = useState('');
+  const [mcpArgs, setMcpArgs] = useState('');
+  const [mcpEnvNames, setMcpEnvNames] = useState('');
+  const [mcpSecrets, setMcpSecrets] = useState<Record<string, string>>({});
+  const [mcpConfirmed, setMcpConfirmed] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!isTauri()) return;
     try {
-      const [nextSkills, nextFolders, nextApps] = await Promise.all([
+      const [nextSkills, nextFolders, nextApps, nextMcpServers] = await Promise.all([
         invoke<Skill[]>('get_skills'),
         invoke<Folder[]>('get_allowed_folders'),
         invoke<AllowedApp[]>('get_allowed_apps'),
+        invoke<McpServer[]>('mcp_list_servers'),
       ]);
       setSkills(nextSkills);
       setFolders(nextFolders);
       setApps(nextApps);
+      setMcpServers(nextMcpServers);
       setError('');
     } catch (cause) {
       setError(String(cause));
@@ -75,6 +96,18 @@ export function SkillsScreen() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    const refreshMcpStatus = () => {
+      if (isTauri()) {
+        void invoke<McpServer[]>('mcp_list_servers')
+          .then(setMcpServers)
+          .catch((cause) => setError(String(cause)));
+      }
+    };
+    window.addEventListener('focus', refreshMcpStatus);
+    return () => window.removeEventListener('focus', refreshMcpStatus);
+  }, []);
 
   async function setEnabled(skill: Skill, enabled: boolean) {
     setBusy(true);
@@ -107,6 +140,105 @@ export function SkillsScreen() {
     setBusy(true);
     try {
       await invoke('set_tool_override', { tool: skill.id, morePermissive });
+      await refresh();
+    } catch (cause) {
+      setError(String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addMcpServer() {
+    if (!mcpConfirmed) {
+      setError('Confirme que este programa será executado com os privilégios do seu usuário.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const args = mcpArgs.split('\n').filter((line) => line.length > 0);
+      const envNames = mcpEnvNames
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const server = await invoke<McpServer>('mcp_add_server', {
+        name: mcpName,
+        command: mcpCommand,
+        args,
+        envNames,
+      });
+      try {
+        for (const key of envNames) {
+          const value = mcpSecrets[key];
+          if (value) await invoke('mcp_set_secret', { serverId: server.id, key, value });
+        }
+      } catch (cause) {
+        await invoke('mcp_remove_server', { serverId: server.id }).catch(() => undefined);
+        throw cause;
+      }
+      setMcpSecrets({});
+      setMcpName('');
+      setMcpCommand('');
+      setMcpArgs('');
+      setMcpEnvNames('');
+      setMcpConfirmed(false);
+      await refresh();
+    } catch (cause) {
+      setError(String(cause));
+    } finally {
+      setMcpSecrets({});
+      setBusy(false);
+    }
+  }
+
+  async function testMcpServer(server: McpServer) {
+    const display = [server.command, ...server.args]
+      .map((part) => `"${part.replaceAll('"', '\\"')}"`)
+      .join(' ');
+    if (
+      !window.confirm(
+        `Este programa será executado no seu computador com os seus privilégios.\n\nComando completo:\n${display}\n\nDeseja continuar?`,
+      )
+    )
+      return;
+    setMcpStates((states) => ({ ...states, [server.id]: { label: 'Conectando…' } }));
+    try {
+      const tools = await invoke<unknown>('mcp_test_connection', {
+        serverId: server.id,
+        confirmed: true,
+      });
+      setMcpStates((states) => ({ ...states, [server.id]: { label: 'Conectado', tools } }));
+    } catch (cause) {
+      const error = String(cause);
+      setMcpStates((states) => ({ ...states, [server.id]: { label: 'Erro', error } }));
+    }
+  }
+
+  async function saveMcpSecret(server: McpServer, key: string) {
+    const value = mcpSecrets[`${server.id}:${key}`];
+    if (!value) return;
+    setBusy(true);
+    try {
+      await invoke('mcp_set_secret', { serverId: server.id, key, value });
+      setMcpStates((states) => ({ ...states, [server.id]: { label: 'Parado' } }));
+      setMcpSecrets((secrets) => {
+        const next = { ...secrets };
+        delete next[`${server.id}:${key}`];
+        return next;
+      });
+      await refresh();
+      setError('');
+    } catch (cause) {
+      setError(String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setMcpEnabled(server: McpServer, enabled: boolean) {
+    setBusy(true);
+    try {
+      await invoke('mcp_set_enabled', { serverId: server.id, enabled });
+      setMcpStates((states) => ({ ...states, [server.id]: { label: 'Parado' } }));
       await refresh();
     } catch (cause) {
       setError(String(cause));
@@ -347,11 +479,184 @@ export function SkillsScreen() {
       )}
       {renderGroup('integration', integrationSkills)}
       {!query.trim() && (
-        <p className="skills-empty">
-          Servidores MCP: indisponíveis nesta versão. Há um módulo de enquadramento de mensagens,
-          mas faltam cliente de transporte, cadastro, credenciais e encaminhamento de ferramentas. O
-          suporte exige atualização do aplicativo.
-        </p>
+        <section className="settings-section allowed-folders-section" aria-labelledby="mcp-heading">
+          <div className="section-heading-row">
+            <div>
+              <h2 id="mcp-heading">Integrações (MCP)</h2>
+              <p>
+                Cadastre servidores locais para inspecionar ferramentas e schemas. Eles não ficam
+                disponíveis ao assistente.
+              </p>
+            </div>
+          </div>
+          <p role="note">
+            <strong>Aviso:</strong> este programa roda no seu computador com os seus privilégios.
+            Nada é instalado automaticamente.
+          </p>
+          <div className="mcp-settings-grid">
+            <label>
+              Nome
+              <input
+                value={mcpName}
+                onChange={(event) => setMcpName(event.target.value)}
+                maxLength={80}
+              />
+            </label>
+            <label>
+              Comando ou caminho do programa
+              <input value={mcpCommand} onChange={(event) => setMcpCommand(event.target.value)} />
+            </label>
+            <label>
+              Argumentos (um por linha)
+              <textarea
+                value={mcpArgs}
+                onChange={(event) => setMcpArgs(event.target.value)}
+                rows={3}
+              />
+            </label>
+            <label>
+              Nomes das variáveis de ambiente (um por linha)
+              <textarea
+                value={mcpEnvNames}
+                onChange={(event) => setMcpEnvNames(event.target.value)}
+                rows={3}
+              />
+            </label>
+            {mcpEnvNames
+              .split('\n')
+              .map((key) => key.trim())
+              .filter(Boolean)
+              .map((key) => (
+                <label key={key}>
+                  {key} (opcional; salvo no Credential Manager)
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    value={mcpSecrets[key] ?? ''}
+                    onChange={(event) =>
+                      setMcpSecrets((secrets) => ({ ...secrets, [key]: event.target.value }))
+                    }
+                  />
+                </label>
+              ))}
+          </div>
+          <p>
+            Comando completo que será executado:{' '}
+            <code>
+              {[mcpCommand, ...mcpArgs.split('\n').filter(Boolean)]
+                .map((part) => `"${part.replaceAll('"', '\\"')}"`)
+                .join(' ') || '—'}
+            </code>
+          </p>
+          <label className="skill-switch">
+            <input
+              type="checkbox"
+              checked={mcpConfirmed}
+              onChange={(event) => setMcpConfirmed(event.target.checked)}
+            />{' '}
+            Confirmo que entendo que o programa cadastrado será executado no meu computador com os
+            meus privilégios.
+          </label>
+          <Button
+            variant="secondary"
+            disabled={busy || !isTauri() || !mcpConfirmed}
+            onClick={() => void addMcpServer()}
+          >
+            Adicionar servidor
+          </Button>
+          <ul className="allowed-folder-list">
+            {mcpServers.length === 0 && <li>Parado · Nenhum servidor MCP cadastrado.</li>}
+            {mcpServers.map((server) => {
+              const state = mcpStates[server.id] ?? {
+                label: server.status,
+                error: server.error ?? undefined,
+              };
+              const displayState = !server.enabled
+                ? 'Parado'
+                : server.status === 'Erro' || server.status === 'Conectado'
+                  ? server.status
+                  : state.label;
+              const displayError = server.error ?? state.error;
+              const command = [server.command, ...server.args].join(' ');
+              return (
+                <li key={server.id}>
+                  <div>
+                    <strong>{server.name}</strong>
+                    <small className="mcp-server-command">
+                      Comando completo: <code>{command}</code>
+                    </small>
+                    <small>
+                      Estado: <span role="status">{displayState}</span> ·{' '}
+                      {server.enabled ? 'Ativado' : 'Desativado'}
+                    </small>
+                    {displayError && <p role="alert">Causa: {displayError}</p>}
+                    {server.envNames.map((key) => (
+                      <label className="mcp-env-field" key={key}>
+                        {key} · segredo (opcional)
+                        <input
+                          type="password"
+                          autoComplete="new-password"
+                          value={mcpSecrets[`${server.id}:${key}`] ?? ''}
+                          onChange={(event) =>
+                            setMcpSecrets((secrets) => ({
+                              ...secrets,
+                              [`${server.id}:${key}`]: event.target.value,
+                            }))
+                          }
+                        />
+                        <Button
+                          variant="secondary"
+                          disabled={busy || !mcpSecrets[`${server.id}:${key}`]}
+                          onClick={() => void saveMcpSecret(server, key)}
+                        >
+                          Salvar credencial
+                        </Button>
+                      </label>
+                    ))}
+                    {state.tools !== undefined && (
+                      <pre aria-label="Ferramentas e schemas não confiáveis">
+                        {String(JSON.stringify(state.tools, null, 2))}
+                      </pre>
+                    )}
+                    <div className="skill-switch">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={server.enabled}
+                          onChange={(event) => void setMcpEnabled(server, event.target.checked)}
+                        />{' '}
+                        Ativar integração
+                      </label>
+                      <Button
+                        variant="secondary"
+                        disabled={!server.enabled || busy}
+                        onClick={() => void testMcpServer(server)}
+                      >
+                        Testar conexão
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Remover ${server.name} e apagar suas credenciais do Gerenciador de Credenciais?`,
+                            )
+                          )
+                            void invoke('mcp_remove_server', { serverId: server.id })
+                              .then(refresh)
+                              .catch((cause) => setError(String(cause)));
+                        }}
+                      >
+                        Remover
+                      </Button>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
       {integrationSkills.some(({ id }) => id === 'discord.send') && (
         <DiscordWebhooksSettings onChanged={refresh} />
