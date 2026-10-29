@@ -938,10 +938,7 @@ pub fn run() -> Result<(), tauri::Error> {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            tray::show_main(app);
         }))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()

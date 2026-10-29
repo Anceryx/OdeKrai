@@ -7,7 +7,7 @@ use std::{
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager, WebviewWindow,
+    AppHandle, Manager, Runtime, WebviewWindow,
 };
 
 const TRAY_ID: &str = "odekrai-main-tray";
@@ -46,7 +46,9 @@ pub fn install_main_close_handler(app: &AppHandle, window: &WebviewWindow) {
             ) {
                 CloseAction::Hide => {
                     api.prevent_close();
-                    let _ = main_window.hide();
+                    if let Err(error) = main_window.hide() {
+                        log::warn!("Não foi possível ocultar a janela principal: {error}");
+                    }
                 }
                 CloseAction::Exit => {
                     api.prevent_close();
@@ -83,19 +85,40 @@ fn shutdown(app: &AppHandle) {
     }
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        let timeout_handle = handle.clone();
-        tauri::async_runtime::spawn(async move {
-            tokio::time::sleep(SHUTDOWN_TIMEOUT).await;
-            std::process::exit(0);
-        });
-        if wait_for_cleanup(close_auxiliary_windows(&handle), SHUTDOWN_TIMEOUT).await {
-            timeout_handle.exit(0);
+        let cleanup_handle = handle.clone();
+        let exit_handle = handle.clone();
+        let completed = finalize_after_cleanup(
+            close_auxiliary_windows(&cleanup_handle),
+            SHUTDOWN_TIMEOUT,
+            move |cleanup_completed| {
+                if !cleanup_completed {
+                    log::error!(
+                        "A limpeza excedeu o prazo; encerrando pelo ciclo normal do Tauri."
+                    );
+                }
+                exit_handle.remove_tray_by_id(TRAY_ID);
+                exit_handle.exit(0);
+            },
+        )
+        .await;
+        if !completed {
+            log::warn!("O encerramento prosseguiu após o prazo de limpeza.");
         }
     });
 }
 
 async fn wait_for_cleanup<F: Future>(cleanup: F, timeout: Duration) -> bool {
     tokio::time::timeout(timeout, cleanup).await.is_ok()
+}
+
+async fn finalize_after_cleanup<F, C>(cleanup: F, timeout: Duration, finalize: C) -> bool
+where
+    F: Future,
+    C: FnOnce(bool),
+{
+    let completed = wait_for_cleanup(cleanup, timeout).await;
+    finalize(completed);
+    completed
 }
 
 #[tauri::command]
@@ -146,18 +169,34 @@ pub async fn set_close_behavior(
     Ok(())
 }
 
-fn show_main(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
+pub(crate) fn show_main<R: Runtime>(app: &AppHandle<R>) {
+    let Some(window) = app.get_webview_window("main") else {
+        log::warn!("A instância existente não tem janela principal para restaurar.");
+        return;
+    };
+    for (operation, result) in [
+        ("desminimizar", window.unminimize()),
+        ("mostrar", window.show()),
+        ("focar", window.set_focus()),
+    ] {
+        if let Err(error) = result {
+            log::warn!("Não foi possível {operation} a janela principal: {error}");
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{close_action, wait_for_cleanup, CloseAction};
+    use super::{close_action, finalize_after_cleanup, show_main, wait_for_cleanup, CloseAction};
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
     use std::{future, time::Duration};
+    use tauri::{
+        test::{mock_builder, mock_context, noop_assets, MockRuntime},
+        Manager, WebviewUrl, WebviewWindowBuilder,
+    };
 
     #[test]
     fn close_behavior_maps_to_hide_or_application_exit() {
@@ -169,5 +208,66 @@ mod tests {
     async fn shutdown_cleanup_respects_its_deadline() {
         assert!(!wait_for_cleanup(future::pending::<()>(), Duration::from_millis(1)).await);
         assert!(wait_for_cleanup(async {}, Duration::from_millis(50)).await);
+    }
+
+    #[tokio::test]
+    async fn shutdown_finalizes_after_successful_cleanup() {
+        let finalized = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&finalized);
+        let completed = finalize_after_cleanup(async {}, Duration::from_millis(50), move |clean| {
+            assert!(clean);
+            flag.store(true, Ordering::SeqCst);
+        })
+        .await;
+
+        assert!(completed);
+        assert!(finalized.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn shutdown_still_finalizes_after_cleanup_timeout() {
+        let finalized = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&finalized);
+        let completed = finalize_after_cleanup(
+            future::pending::<()>(),
+            Duration::from_millis(1),
+            move |clean| {
+                assert!(!clean);
+                flag.store(true, Ordering::SeqCst);
+            },
+        )
+        .await;
+
+        assert!(!completed);
+        assert!(finalized.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn restoring_main_window_unminimizes_shows_and_focuses_it() {
+        let app = mock_builder()
+            .build(mock_context(noop_assets()))
+            .expect("mock Tauri app should build");
+        let window = WebviewWindowBuilder::<MockRuntime, _>::new(
+            &app,
+            "main",
+            WebviewUrl::App("index.html".into()),
+        )
+        .build()
+        .expect("mock main window should build");
+        window.hide().expect("window should hide");
+        window.minimize().expect("window should minimize");
+
+        let handle = app.handle();
+        show_main(&handle);
+
+        let restored = app
+            .get_webview_window("main")
+            .expect("main window should remain registered");
+        assert!(restored
+            .is_visible()
+            .expect("visibility should be readable"));
+        assert!(!restored
+            .is_minimized()
+            .expect("minimized state should be readable"));
     }
 }

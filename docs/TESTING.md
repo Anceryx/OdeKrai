@@ -175,7 +175,7 @@ O histórico local guarda o provedor e modelo da última resposta de cada conver
 
 ## Fechamento e bandeja do Windows
 
-O padrão é Encerrar. Nessa opção, o X tenta cancelar solicitações registradas de provedor e fechar as janelas auxiliares; a saída tem limite de três segundos. Em Minimizar para a bandeja, o X oculta a janela principal e o menu nativo oferece Abrir e Sair; Sair também encerra o processo. Os testes unitários cobrem a escolha entre ocultar e encerrar e o limite da limpeza; a interação real com a bandeja, reabertura por segunda instância e encerramento de WebView2 ainda requer teste visual/nativo em Windows.
+O padrão é Encerrar. Nessa opção, o X tenta cancelar solicitações registradas de provedor e fechar as janelas auxiliares; a limpeza tem limite de três segundos e, mesmo se excedido, o encerramento segue pelo ciclo normal do Tauri. Antes da saída, o ícone da bandeja é removido. Em Minimizar para a bandeja, o X oculta a janela principal e o menu nativo oferece Abrir e Sair; Abrir e uma segunda instância desminimizam, exibem e focam a janela existente. Sair também encerra o processo. Testes unitários cobrem a escolha entre ocultar e encerrar, o limite e a finalização da limpeza e a restauração da janela simulada. A interação real com a bandeja, reabertura por segunda instância, encerramento de WebView2 e verificação de ícones residuais ainda requer teste visual/nativo em Windows; consulte `docs/qa/LOTE-6-E2.md`.
 
 ## Identidade e memória
 
