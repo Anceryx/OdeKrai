@@ -1,5 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { AppSettings } from '../core/settings';
+import { providerById } from '../core/providers';
+import type { CatalogSkill } from '../core/skills-catalog';
 import {
   filterSettingsIndex,
   filterSettingsMenu,
@@ -8,8 +11,9 @@ import {
 import type { SettingsSection } from '../core/navigation';
 import type { ProfileData } from './Profile';
 import type { Section } from './screens/types';
-import { Button, Toggle } from './DesignSystem';
+import { Button } from './DesignSystem';
 import { Modal } from './Modal';
+import { ScreenErrorBoundary } from './ScreenErrorBoundary';
 
 const SettingsScreen = lazy(() =>
   import('./screens/Settings').then((module) => ({ default: module.SettingsScreen })),
@@ -149,23 +153,12 @@ export function SettingsModal({
       case 'atividade':
         return <SecurityCenter page="activity" embedded onOpenFullPage={onOpenActivityFullPage} />;
       case 'habilidades':
-        return (
-          <GlobalPreferences
-            id="skills-global-preferences"
-            settings={settings}
-            update={update}
-            onOpenPage={() => onOpenPage('skills')}
-            title="Preferências globais"
-          />
-        );
+        return <SkillsSettingsSummary onOpenPage={() => onOpenPage('skills')} />;
       case 'conectores':
         return (
-          <GlobalPreferences
-            id="connectors-global-preferences"
+          <ConnectorsSettingsSummary
             settings={settings}
-            update={update}
             onOpenPage={() => onOpenPage('providers')}
-            title="Preferências globais"
           />
         );
     }
@@ -235,7 +228,11 @@ export function SettingsModal({
             </label>
           </nav>
           <section className="settings-modal-panel" aria-label={activeTitle} ref={contentRef}>
-            <Suspense fallback={<p role="status">Carregando configurações…</p>}>{content}</Suspense>
+            <ScreenErrorBoundary key={section}>
+              <Suspense fallback={<p role="status">Carregando configurações…</p>}>
+                {content}
+              </Suspense>
+            </ScreenErrorBoundary>
           </section>
         </div>
       </div>
@@ -243,54 +240,131 @@ export function SettingsModal({
   );
 }
 
-function GlobalPreferences({
+export function summarizeSkillsStatus(skills: Pick<CatalogSkill, 'status'>[]) {
+  return {
+    total: skills.length,
+    active: skills.filter((skill) => skill.status === 'installed').length,
+  };
+}
+
+export function summarizeConnectors(settings: AppSettings) {
+  const providerId = settings.activeProviderId;
+  const configuration = settings.providers[providerId];
+  return {
+    providerName: providerId
+      ? (providerById(providerId)?.name ?? 'Provedor selecionado')
+      : 'Nenhum provedor principal selecionado',
+    model: configuration?.model.trim() || null,
+    enabled: configuration?.enabled !== false,
+    fallbackCount: settings.fallbackProviderIds.filter(
+      (fallbackId) =>
+        settings.providers[fallbackId]?.enabled !== false &&
+        Boolean(settings.providers[fallbackId]?.model.trim()),
+    ).length,
+  };
+}
+
+function SettingsDestinationSummary({
   id,
   title,
-  settings,
-  update,
+  description,
+  status,
+  actionLabel,
   onOpenPage,
 }: {
   id: string;
   title: string;
-  settings: AppSettings;
-  update: (settings: AppSettings) => void;
+  description: string;
+  status: string;
+  actionLabel: string;
   onOpenPage: () => void;
 }) {
   return (
     <div className="settings-embedded-content">
       <section id={id} className="settings-panel settings-section">
         <h2>{title}</h2>
-        <div className="preference-row">
-          <div>
-            <strong>Reduzir animações</strong>
-            <span>Respeita a preferência do sistema.</span>
-          </div>
-          <Toggle
-            checked={settings.reduceMotion}
-            label="Reduzir animações"
-            onClick={() => update({ ...settings, reduceMotion: !settings.reduceMotion })}
-          />
-        </div>
-        <div className="preference-row">
-          <div>
-            <strong>Usar mascote nas respostas</strong>
-            <span>Preferência global do assistente.</span>
-          </div>
-          <Toggle
-            checked={settings.useMascotAsAssistantAvatar}
-            label="Usar mascote nas respostas"
-            onClick={() =>
-              update({
-                ...settings,
-                useMascotAsAssistantAvatar: !settings.useMascotAsAssistantAvatar,
-              })
-            }
-          />
-        </div>
+        <p>{description}</p>
+        <p role="status">{status}</p>
         <Button type="button" variant="secondary" onClick={onOpenPage}>
-          Abrir página
+          {actionLabel}
         </Button>
       </section>
     </div>
+  );
+}
+
+export function SkillsSettingsSummary({ onOpenPage }: { onOpenPage: () => void }) {
+  const [summary, setSummary] = useState<
+    | { state: 'loading' }
+    | { state: 'ready'; total: number; active: number }
+    | { state: 'unavailable' }
+    | { state: 'error' }
+  >({ state: 'loading' });
+
+  useEffect(() => {
+    let current = true;
+    if (!isTauri()) {
+      setSummary({ state: 'unavailable' });
+      return () => {
+        current = false;
+      };
+    }
+    setSummary({ state: 'loading' });
+    void invoke<CatalogSkill[]>('get_skills')
+      .then((skills) => {
+        if (current) setSummary({ state: 'ready', ...summarizeSkillsStatus(skills) });
+      })
+      .catch(() => {
+        if (current) setSummary({ state: 'error' });
+      });
+    return () => {
+      current = false;
+    };
+  }, []);
+
+  const status =
+    summary.state === 'loading'
+      ? 'Consultando o catálogo de habilidades…'
+      : summary.state === 'unavailable'
+        ? 'O catálogo está disponível no aplicativo OdeKrai para desktop.'
+        : summary.state === 'error'
+          ? 'Não foi possível consultar o catálogo. Abra a central para verificar novamente.'
+          : summary.total === 0
+            ? 'Nenhuma habilidade está registrada nesta versão.'
+            : `${summary.active} de ${summary.total} habilidades estão ativas no catálogo.`;
+
+  return (
+    <SettingsDestinationSummary
+      id="skills-summary"
+      title="Habilidades"
+      description="A busca, a ativação por família e a configuração das habilidades ficam na central de Habilidades. A disponibilidade no agente também depende dos requisitos de cada ferramenta."
+      status={status}
+      actionLabel="Abrir central de habilidades"
+      onOpenPage={onOpenPage}
+    />
+  );
+}
+
+export function ConnectorsSettingsSummary({
+  settings,
+  onOpenPage,
+}: {
+  settings: AppSettings;
+  onOpenPage: () => void;
+}) {
+  const summary = summarizeConnectors(settings);
+  const status = !settings.activeProviderId
+    ? 'Nenhum provedor principal foi selecionado.'
+    : `${summary.providerName} · ${summary.enabled ? 'habilitado' : 'desabilitado'} · ${summary.model ? `modelo ${summary.model}` : 'modelo não selecionado'} · ${summary.fallbackCount} provedores reserva configurados.`;
+
+  return (
+    <SettingsDestinationSummary
+      id="connectors-summary"
+      title="Conectores de IA"
+      description="A configuração de credenciais, modelos, testes de conexão e provedores reserva é feita na central de Conectores de IA."
+      status={status}
+      actionLabel="Abrir central de conectores"
+      onOpenPage={onOpenPage}
+    />
   );
 }

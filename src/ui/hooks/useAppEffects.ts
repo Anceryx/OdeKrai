@@ -13,6 +13,14 @@ import type { ProfileData } from '../Profile';
 
 const STARTUP_TIMEOUT_MS = 5000;
 
+function correlationId(): string {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (character) => {
+    const value = Math.floor(Math.random() * 16);
+    return (character === 'x' ? value : (value & 0x3) | 0x8).toString(16);
+  });
+}
+
 function timeout<T>(promise: Promise<T>, command: string): Promise<T> {
   let timer: number | undefined;
   return Promise.race([
@@ -43,19 +51,23 @@ function diagnosticMessage(command: string) {
   return messages[command] ?? 'A inicialização encontrou uma falha.';
 }
 
-async function startupInvoke<T>(
+export async function startupInvoke<T>(
   command: string,
   args: Record<string, unknown> | undefined,
   reportDiagnostic: (command: string, message: string, details?: string) => void,
 ): Promise<T> {
   const started = performance.now();
+  const id = correlationId();
   let outcome = 'ok';
   void invoke('record_diagnostic_event', {
     event: 'startup_command_start',
     command,
     outcome: 'ok',
     durationMs: 0,
-  }).catch((error: unknown) => console.warn('[OdeKrai diagnóstico] Falha no log local.', error));
+    section: 'startup',
+    category: 'initialization',
+    correlationId: id,
+  }).catch(() => console.warn('[OdeKrai diagnóstico] Não foi possível persistir um evento local.'));
   try {
     const result = await timeout(invoke<T>(command, args), command);
     reportDiagnostic(command, '');
@@ -71,19 +83,25 @@ async function startupInvoke<T>(
       command,
       outcome,
       durationMs,
-    }).catch((error: unknown) => console.warn('[OdeKrai diagnóstico] Falha no log local.', error));
+      section: 'startup',
+      category: 'initialization',
+      correlationId: id,
+    }).catch(() =>
+      console.warn('[OdeKrai diagnóstico] Não foi possível persistir um evento local.'),
+    );
   }
 }
 
-function sanitizeDiagnosticDetails(error: unknown): string {
-  const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+export function sanitizeDiagnosticDetails(error: unknown): string {
+  const text =
+    error instanceof Error ? (error.stack ?? `${error.name}: ${error.message}`) : String(error);
   return text
     .replace(/(?:\\\\\?\\)?[A-Z]:\\(?:[^\\\s]+\\)*[^\\\s]*/gi, '[caminho local]')
     .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, '[e-mail]')
     .replace(/(?:Bearer\s+|sk-[A-Za-z0-9_-]{8,})\S+/gi, '[credencial]')
     .replace(/(?:api[_-]?key|token|secret|password)\s*[:=]\s*\S+/gi, '[credencial]')
     .replace(/[\r\n\t]+/g, ' ')
-    .slice(0, 240);
+    .slice(0, 1200);
 }
 
 export function useAppEffects(state: ReturnType<typeof useAppState>) {
@@ -256,7 +274,13 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
       } catch {
         // A falha fica registrada no banner e a janela principal continua utilizável.
       }
-    })();
+    })().catch((error: unknown) => {
+      reportDiagnostic(
+        'startup',
+        'A inicialização foi interrompida por uma falha inesperada.',
+        sanitizeDiagnosticDetails(error),
+      );
+    });
     let unlisten: (() => void)[] = [];
     void Promise.all([
       listen('security-halted', () => {
@@ -306,6 +330,7 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
         reportDiagnostic('listen', 'Não foi possível iniciar alguns avisos de segurança.'),
       );
     const onError = (event: ErrorEvent) => {
+      const id = correlationId();
       reportDiagnostic(
         'frontend.window.onerror',
         'Ocorreu um erro não tratado no frontend.',
@@ -316,15 +341,19 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
         command: 'window.onerror',
         outcome: 'error',
         durationMs: 0,
-      }).catch((error: unknown) =>
-        console.warn('[OdeKrai diagnóstico] Falha no log local.', error),
+        section: 'window',
+        category: 'window_error',
+        correlationId: id,
+      }).catch(() =>
+        console.warn('[OdeKrai diagnóstico] Não foi possível persistir um evento local.'),
       );
     };
     const onRejection = (event: PromiseRejectionEvent) => {
       const detail = sanitizeDiagnosticDetails(event.reason);
+      const id = correlationId();
       reportDiagnostic(
         'frontend.unhandledrejection',
-        'Uma promessa do frontend foi rejeitada.',
+        `Uma promessa do frontend foi rejeitada (referência ${id}).`,
         detail || 'O WebView não informou o motivo da rejeição.',
       );
       void invoke('record_diagnostic_event', {
@@ -332,8 +361,11 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
         command: 'unhandledrejection',
         outcome: 'error',
         durationMs: 0,
-      }).catch((error: unknown) =>
-        console.warn('[OdeKrai diagnóstico] Falha no log local.', error),
+        section: 'window',
+        category: 'promise_rejection',
+        correlationId: id,
+      }).catch(() =>
+        console.warn('[OdeKrai diagnóstico] Não foi possível persistir um evento local.'),
       );
     };
     window.addEventListener('error', onError);

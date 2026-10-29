@@ -576,10 +576,12 @@ export function ApprovalWindow() {
     void refresh();
     let unlisten: (() => void) | undefined;
     let disposed = false;
-    void listen('approval-updated', () => void refresh()).then((off) => {
-      if (disposed) off();
-      else unlisten = off;
-    });
+    void listen('approval-updated', () => void refresh())
+      .then((off) => {
+        if (disposed) off();
+        else unlisten = off;
+      })
+      .catch(() => setError('Não foi possível acompanhar as aprovações pendentes.'));
     return () => {
       disposed = true;
       unlisten?.();

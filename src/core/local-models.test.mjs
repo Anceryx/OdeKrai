@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import manifest from '../../src-tauri/resources/local-models.json';
-import { recommendLocalModel } from './local-models';
+import { isHardwareProfile, isLocalModelInventory, recommendLocalModel } from './local-models';
 import { validateManifest } from '../../scripts/refresh-local-models.mjs';
 
 const profile = (ram, vram = 0, avx2 = true) => ({
@@ -12,10 +12,33 @@ const profile = (ram, vram = 0, avx2 = true) => ({
   avx2,
   avx512: false,
   adapters: vram ? [{ name: 'GPU simulada', dedicated_vram_bytes: vram }] : [],
+  warnings: [],
 });
 const gib = 1_073_741_824;
 
 describe('modelos locais', () => {
+  it('aceita o perfil de hardware completo e rejeita respostas IPC inválidas', () => {
+    expect(isHardwareProfile(profile(16 * gib, 4 * gib))).toBe(true);
+    expect(isHardwareProfile({ ...profile(16 * gib), adapters: null })).toBe(false);
+    expect(isHardwareProfile({ ...profile(16 * gib), cpu_cores: '8' })).toBe(false);
+  });
+
+  it('aceita inventário IPC conhecido e rejeita formato ou estado inválido', () => {
+    const entry = {
+      modelId: 'modelo-teste',
+      name: 'Modelo de teste',
+      fileName: 'modelo.gguf',
+      path: 'C:\\modelos\\modelo.gguf',
+      sizeBytes: 10,
+      status: 'VERIFICADO',
+      engine: 'GGUF sem executor integrado',
+      ramVramEstimate: 'NÃO VERIFICADO',
+    };
+    expect(isLocalModelInventory([entry])).toBe(true);
+    expect(isLocalModelInventory({ items: [entry] })).toBe(false);
+    expect(isLocalModelInventory([{ ...entry, status: 'PRONTO' }])).toBe(false);
+  });
+
   it('recomenda ultraleve e avisa sobre processador sem AVX2', () => {
     const result = recommendLocalModel(profile(6 * gib, 0, false));
     expect(result.profile).toBe('ultraleve');

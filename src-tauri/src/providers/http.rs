@@ -36,13 +36,31 @@ pub(super) fn provider_http_error(status: u16) -> String {
         400 => {
             format!("O provedor rejeitou o modelo ou os parâmetros da solicitação (HTTP {status}).")
         }
-        401 | 403 => format!("A credencial é inválida ou não tem permissão (HTTP {status})."),
+        401 => "O provedor recusou a credencial (HTTP 401). Confira a chave em Conectores de IA.".into(),
+        403 => "O provedor negou permissão para esta operação (HTTP 403). Confira o acesso da chave e do modelo.".into(),
         404 => "O endpoint ou modelo não foi encontrado (HTTP 404).".into(),
         408 => "O provedor atingiu o tempo limite (HTTP 408). Tente novamente.".into(),
         429 => "O limite de uso deste provedor foi atingido (HTTP 429). Consulte os limites do seu plano e tente novamente mais tarde.".into(),
         500..=599 => format!("O serviço do provedor está indisponível (HTTP {status})."),
         _ => format!("O provedor respondeu com HTTP {status}."),
     }
+}
+
+pub(super) fn provider_http_error_with_body(status: u16, body: &str) -> String {
+    if status != 400 {
+        return provider_http_error(status);
+    }
+    let normalized = body.to_ascii_lowercase();
+    if normalized.contains("function") && normalized.contains("name") {
+        return "O provedor recusou o nome de uma ferramenta (HTTP 400). Confira a compatibilidade do modelo.".into();
+    }
+    if normalized.contains("schema") || normalized.contains("parameters") {
+        return "O provedor recusou o schema de ferramenta (HTTP 400). Confira a compatibilidade do modelo.".into();
+    }
+    if normalized.contains("reasoning_effort") {
+        return "O modelo recusou a configuração de raciocínio enviada (HTTP 400). Confira a compatibilidade do modelo.".into();
+    }
+    provider_http_error(status)
 }
 
 pub(super) fn header_value(value: &str) -> Result<header::HeaderValue, String> {
@@ -86,5 +104,78 @@ pub(super) fn safe_transport_error(error: &reqwest::Error) -> String {
         "Não foi possível conectar ao provedor. Verifique sua conexão.".into()
     } else {
         "A comunicação segura com o provedor falhou.".into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::provider_http_error_with_body;
+    use std::{
+        io::{Read, Write},
+        time::Duration,
+    };
+
+    #[tokio::test]
+    async fn mock_http_provider_statuses_are_classified_without_echoing_response_bodies() {
+        let cases = [
+            (
+                400,
+                r#"{"error":{"message":"Invalid function name: files.read private-user-content"}}"#,
+                "nome de uma ferramenta",
+            ),
+            (
+                401,
+                r#"{"error":{"message":"invalid api key private-user-content"}}"#,
+                "HTTP 401",
+            ),
+            (
+                403,
+                r#"{"error":{"message":"model access denied private-user-content"}}"#,
+                "negou permissão",
+            ),
+            (
+                429,
+                r#"{"error":{"message":"rate limit private-user-content"}}"#,
+                "HTTP 429",
+            ),
+            (
+                500,
+                r#"{"error":{"message":"internal error private-user-content"}}"#,
+                "HTTP 500",
+            ),
+        ];
+
+        for (status, body, expected) in cases {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let address = listener.local_addr().unwrap();
+            let response_body = body.to_owned();
+            let server = std::thread::spawn(move || {
+                let (mut socket, _) = listener.accept().unwrap();
+                socket
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut request = [0_u8; 1024];
+                let _ = socket.read(&mut request);
+                write!(
+                    socket,
+                    "HTTP/1.1 {status} Error\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response_body}",
+                    response_body.len()
+                )
+                .unwrap();
+            });
+            let response = reqwest::Client::new()
+                .get(format!("http://{address}/mock"))
+                .send()
+                .await
+                .unwrap();
+            let actual_status = response.status().as_u16();
+            let response_body = response.text().await.unwrap();
+            let safe_error = provider_http_error_with_body(actual_status, &response_body);
+            server.join().unwrap();
+
+            assert_eq!(actual_status, status);
+            assert!(safe_error.contains(expected), "{safe_error}");
+            assert!(!safe_error.contains("private-user-content"));
+        }
     }
 }

@@ -157,13 +157,12 @@ pub fn agent_availability(
             workspace_path: Some(workspace.to_string_lossy().into_owned()),
         });
     }
-    if !security::skills::registry()
-        .iter()
-        .any(|skill| security::skills::is_skill_enabled(&app, skill.id).unwrap_or(false))
-    {
+    if security::skills::skills_exposed_to_agent(&app)?.is_empty() {
         return Ok(AgentAvailability {
             available: false,
-            reason: Some("Ative uma habilidade em Configurações → Habilidades.".into()),
+            reason: Some(
+                "Ative uma habilidade disponível e conclua os requisitos da integração em Configurações → Habilidades.".into(),
+            ),
             workspace_path: Some(workspace.to_string_lossy().into_owned()),
         });
     }
@@ -549,17 +548,10 @@ async fn agent_run_inner(context: AgentRunContext<'_>) -> Result<String, String>
             data_base64,
         });
     }
-    let mut active_skills = Vec::new();
-    for skill in security::skills::registry() {
-        if security::skills::skill_available(skill.id)
-            && security::skills::is_skill_enabled(&app, skill.id)?
-        {
-            active_skills.push(skill);
-        }
-    }
+    let active_skills = security::skills::skills_exposed_to_agent(&app)?;
     if active_skills.is_empty() {
         return Err(
-            "Modo agente indisponível: ative ao menos uma habilidade em Habilidades.".into(),
+            "Modo agente indisponível: ative uma habilidade disponível e conclua os requisitos da integração em Configurações → Habilidades.".into(),
         );
     }
     if let Some(reason) =

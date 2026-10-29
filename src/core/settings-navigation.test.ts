@@ -5,6 +5,7 @@ import agentHomeSource from '../ui/AgentHome.tsx?raw';
 import assistantSource from '../ui/screens/Assistant.tsx?raw';
 import computerSource from '../ui/screens/Computer.tsx?raw';
 import settingsModalSource from '../ui/SettingsModal.tsx?raw';
+import appNavigationSource from '../ui/hooks/useNavigation.ts?raw';
 import securityCenterSource from '../ui/SecurityCenter.tsx?raw';
 import privacyConfigurationsSource from '../ui/PrivacyConfigurations.tsx?raw';
 import discordSettingsSource from '../ui/DiscordWebhooksSettings.tsx?raw';
@@ -52,6 +53,25 @@ describe('navegação das configurações', () => {
       'identity-memory',
     );
     expect(filterSettingsMenu('privacidade').map((section) => section.id)).toContain('privacidade');
+    expect(
+      filterSettingsIndex('habilidades').some((entry) => entry.section === 'habilidades'),
+    ).toBe(true);
+    expect(
+      filterSettingsIndex('provedor principal').some((entry) => entry.section === 'conectores'),
+    ).toBe(true);
+  });
+
+  it('mapeia cada seção de configurações para um componente e evita âncoras duplicadas', () => {
+    for (const section of SETTINGS_MENU) {
+      expect(settingsModalSource).toContain(`case '${section.id}'`);
+    }
+    expect(new Set(SETTINGS_INDEX.map((entry) => entry.anchor)).size).toBe(SETTINGS_INDEX.length);
+    expect(settingsModalSource).not.toContain('Preferências globais');
+    expect(settingsModalSource).toContain("onOpenPage={() => onOpenPage('skills')}");
+    expect(settingsModalSource).toContain("onOpenPage={() => onOpenPage('providers')}");
+    expect(appNavigationSource).toContain(
+      'const nextView: NavigationView = { ...next, settingsOpen: false }',
+    );
   });
 
   it('garante que cada opção do índice aponta para um ID existente na tela correspondente', () => {

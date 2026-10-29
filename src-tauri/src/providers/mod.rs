@@ -26,7 +26,10 @@ mod failover;
 mod http;
 mod llm_provider;
 use endpoint::provider_endpoint;
-use http::{provider_client, provider_http_error, safe_transport_error, AuthRequest};
+use http::{
+    provider_client, provider_http_error, provider_http_error_with_body, safe_transport_error,
+    AuthRequest,
+};
 mod perplexity;
 mod stream;
 mod types;
@@ -1041,7 +1044,7 @@ fn valid_tools(tools: &[ToolDef]) -> bool {
                 && tool
                     .name
                     .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
                 && tool.description.len() <= 4_000
                 && tool.json_schema.is_object()
                 && tool.json_schema.to_string().len() <= 64 * 1024
@@ -1056,6 +1059,12 @@ async fn request_provider(
     on_chunk: Option<EventSink>,
     observed_output: Option<Arc<AtomicBool>>,
 ) -> Result<ProviderReply, String> {
+    let (request_data, api_tool_names) = if provider_id == "openai" {
+        let (request, names) = chat_completions::normalize_tool_names(request_data)?;
+        (request, Some(names))
+    } else {
+        (request_data, None)
+    };
     if request_data.messages.iter().any(|message| {
         message
             .blocks
@@ -1140,55 +1149,81 @@ async fn request_provider(
     };
     let status = response.status();
     if !status.is_success() {
-        if status.as_u16() == 400 && !request_data.tools.is_empty() {
-            let response_body = response.text().await.unwrap_or_default();
-            if cache_unsupported_tools_response(status.as_u16(), true, &response_body, || {
+        let status_code = status.as_u16();
+        let response_body = if status_code == 400 {
+            response.text().await.unwrap_or_default()
+        } else {
+            String::new()
+        };
+        if status_code == 400
+            && !request_data.tools.is_empty()
+            && cache_unsupported_tools_response(status.as_u16(), true, &response_body, || {
                 crate::history::cache_tools_unsupported(app, provider_id, &request_data.model)
-            })? {
-                let message =
-                    "Este modelo recusou o uso de ferramentas. O OdeKrai guardou essa informação para este modelo."
-                        .to_string();
-                if let Some(channel) = on_chunk.as_ref() {
-                    channel.send(ProviderEvent::Error {
-                        kind: "unsupported_tools".into(),
-                        status: Some(400),
-                        message: message.clone(),
-                    });
-                }
-                return Err(message);
+            })?
+        {
+            let message =
+                "Este modelo recusou o uso de ferramentas. O OdeKrai guardou essa informação para este modelo."
+                    .to_string();
+            if let Some(channel) = on_chunk.as_ref() {
+                channel.send(ProviderEvent::Error {
+                    kind: "unsupported_tools".into(),
+                    status: Some(400),
+                    message: message.clone(),
+                });
             }
+            return Err(message);
         }
         if let Some(channel) = on_chunk.as_ref() {
-            let status_code = status.as_u16();
+            let message = provider_http_error_with_body(status_code, &response_body);
             channel.send(ProviderEvent::Error {
                 kind: "http".into(),
                 status: Some(status_code),
-                message: provider_http_error(status_code),
+                message,
             });
         }
-        return Err(provider_http_error(status.as_u16()));
+        return Err(provider_http_error_with_body(status_code, &response_body));
     }
     if let Some(channel) = on_chunk {
         if provider_id != "perplexity" {
-            return consume_stream_response(provider_id, response, move |event| {
+            let event_names = api_tool_names.clone();
+            let mut reply = consume_stream_response(provider_id, response, move |mut event| {
                 if matches!(
-                    event,
+                    &event,
                     ProviderEvent::TextDelta { .. } | ProviderEvent::ToolCallComplete { .. }
                 ) {
                     if let Some(observed_output) = observed_output.as_ref() {
                         observed_output.store(true, Ordering::SeqCst);
                     }
                 }
-                channel.send(event);
+                let valid_tool_name = event_names
+                    .as_ref()
+                    .is_none_or(|names| chat_completions::restore_event_name(&mut event, names));
+                if valid_tool_name {
+                    channel.send(event);
+                } else {
+                    channel.send(ProviderEvent::Error {
+                        kind: "invalid_response".into(),
+                        status: None,
+                        message: "O provedor retornou uma ferramenta que não foi anunciada.".into(),
+                    });
+                }
             })
-            .await;
+            .await?;
+            if let Some(names) = api_tool_names.as_ref() {
+                chat_completions::restore_tool_names(&mut reply, names)?;
+            }
+            return Ok(reply);
         }
     }
     let payload: Value = response
         .json()
         .await
         .map_err(|_| "O provedor retornou uma resposta inválida.".to_string())?;
-    parse_provider_reply(provider_id, &payload)
+    let mut reply = parse_provider_reply(provider_id, &payload)?;
+    if let Some(names) = api_tool_names.as_ref() {
+        chat_completions::restore_tool_names(&mut reply, names)?;
+    }
+    Ok(reply)
 }
 
 fn openai_reasoning_effort(
@@ -1207,6 +1242,9 @@ pub(crate) async fn agent_model_turn(
     tools: &[ToolDef],
     daily_token_limit: u64,
 ) -> Result<ProviderReply, String> {
+    if !valid_tools(tools) {
+        return Err("As ferramentas disponíveis para o agente têm definições inválidas.".into());
+    }
     let targets = configured_targets
         .into_iter()
         .map(|target| ProviderTarget {
@@ -1859,6 +1897,8 @@ mod tests {
             }}]
         });
         assert!(parse_provider_reply("openai", &response).is_err());
+        assert!(parse_provider_reply("openai", &json!({})).is_err());
+        assert!(parse_provider_reply("openai", &json!({ "choices": [] })).is_err());
     }
 
     #[test]
@@ -1894,6 +1934,22 @@ mod tests {
         assert_eq!(openai_reasoning_effort("openai", "gpt-6-luna", false), None);
         assert_eq!(openai_reasoning_effort("local", "gpt-6-luna", true), None);
         assert_eq!(openai_reasoning_effort("openai", "other-model", true), None);
+    }
+
+    #[test]
+    fn validates_internal_skill_ids_before_provider_name_normalization() {
+        let skill_tool = ToolDef {
+            name: "google.calendar.update_event".into(),
+            description: "Atualiza um evento".into(),
+            json_schema: json!({ "type": "object", "properties": {}, "required": [], "additionalProperties": false }),
+        };
+        assert!(valid_tools(std::slice::from_ref(&skill_tool)));
+
+        let invalid_tool = ToolDef {
+            name: "google calendar".into(),
+            ..skill_tool
+        };
+        assert!(!valid_tools(&[invalid_tool]));
     }
 
     #[test]

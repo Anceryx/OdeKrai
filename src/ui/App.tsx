@@ -186,6 +186,11 @@ function MainApp() {
     request,
     companionStateTimer,
   } = appState;
+  const emitCompanionState = (payload: { type: 'activity'; state: string; message: string }) => {
+    void emit('companion-state', payload).catch(() =>
+      reportDiagnostic('companion-state', 'Não foi possível atualizar o estado visual do pet.'),
+    );
+  };
   const usedProvider = usedProviderId
     ? AI_PROVIDERS.find((item) => item.id === usedProviderId)
     : undefined;
@@ -194,7 +199,10 @@ function MainApp() {
   const shownProviderId = usedProviderId ?? settings.activeProviderId;
   const shownProviderModel = shownProviderSettings?.model ?? activeProvider.model;
   useEffect(() => {
-    if (isTauri()) void invoke('set_microphone_opt_in', { enabled: settings.microphoneEnabled });
+    if (isTauri())
+      void invoke('set_microphone_opt_in', { enabled: settings.microphoneEnabled }).catch(() =>
+        setToast('Não foi possível atualizar a permissão do microfone.'),
+      );
   }, [settings.microphoneEnabled]);
 
   useEffect(() => {
@@ -232,11 +240,23 @@ function MainApp() {
           }),
         );
     void checkAvailability();
+    let disposed = false;
+    let stopSkillsUpdated: (() => void) | undefined;
+    void listen('skills-updated', () => void checkAvailability())
+      .then((stop) => {
+        if (disposed) stop();
+        else stopSkillsUpdated = stop;
+      })
+      .catch(() => setToast('Não foi possível acompanhar as alterações das habilidades.'));
     const onFocus = () => {
       void checkAvailability();
     };
     window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
+    return () => {
+      disposed = true;
+      stopSkillsUpdated?.();
+      window.removeEventListener('focus', onFocus);
+    };
   }, [
     activeProvider.providerId,
     activeProvider.model,
@@ -290,10 +310,12 @@ function MainApp() {
         }));
         setToast('O pet foi silenciado.');
       }
-    }).then((stop) => {
-      if (disposed) stop();
-      else unlisten = stop;
-    });
+    })
+      .then((stop) => {
+        if (disposed) stop();
+        else unlisten = stop;
+      })
+      .catch(() => setToast('Não foi possível iniciar os comandos do pet.'));
     return () => {
       disposed = true;
       unlisten?.();
@@ -309,15 +331,22 @@ function MainApp() {
         .then((count) => {
           if (!disposed) setPendingApprovalCount(count);
         })
-        .catch(() => undefined);
+        .catch(() =>
+          reportDiagnostic(
+            'get_pending_approval_count',
+            'Não foi possível atualizar a contagem de aprovações pendentes.',
+          ),
+        );
     };
-    void listen('approval-updated', refresh).then((stop) => {
-      if (disposed) stop();
-      else {
-        unlisten = stop;
-        refresh();
-      }
-    });
+    void listen('approval-updated', refresh)
+      .then((stop) => {
+        if (disposed) stop();
+        else {
+          unlisten = stop;
+          refresh();
+        }
+      })
+      .catch(() => setToast('Não foi possível acompanhar as aprovações pendentes.'));
     return () => {
       disposed = true;
       unlisten?.();
@@ -346,10 +375,12 @@ function MainApp() {
         normalizeSoundPreferences(loadSettings().companion.sounds),
         { petVisible: payload.petVisible },
       );
-    }).then((stop) => {
-      if (disposed) stop();
-      else unlisten = stop;
-    });
+    })
+      .then((stop) => {
+        if (disposed) stop();
+        else unlisten = stop;
+      })
+      .catch(() => setToast('Não foi possível iniciar os avisos de áudio.'));
     return () => {
       disposed = true;
       unlisten?.();
@@ -470,7 +501,7 @@ function MainApp() {
       void playSound('thinking', normalizeSoundPreferences(settings.companion.sounds));
     }
     if (isTauri())
-      void emit('companion-state', {
+      emitCompanionState({
         type: 'activity',
         state: 'thinking',
         message: 'Aguardando resposta do provedor',
@@ -558,14 +589,14 @@ function MainApp() {
           } else if (event.type === 'awaitingApproval') {
             setAgentAwaitingApproval(true);
             void playSound('approval_needed', normalizeSoundPreferences(settings.companion.sounds));
-            void emit('companion-state', {
+            emitCompanionState({
               type: 'activity',
               state: 'awaiting_approval',
               message: 'Aguardando aprovação na janela nativa',
             });
           } else if (event.type === 'toolCall' || event.type === 'step') {
             setAgentAwaitingApproval(false);
-            void emit('companion-state', {
+            emitCompanionState({
               type: 'activity',
               state: event.type === 'toolCall' ? 'task' : 'thinking',
               message: event.type === 'toolCall' ? 'Executando habilidade' : 'Pensando',
@@ -577,7 +608,7 @@ function MainApp() {
             } else {
               void playSound('action_done', normalizeSoundPreferences(settings.companion.sounds));
             }
-            void emit('companion-state', {
+            emitCompanionState({
               type: 'activity',
               state: event.isError ? 'error' : 'task',
               message: event.isError ? 'A ação não foi concluída' : 'Ação concluída',
@@ -589,7 +620,7 @@ function MainApp() {
               { role: 'assistant', content, created_at: Math.floor(Date.now() / 1000) },
             ]);
             void playSound('success', normalizeSoundPreferences(settings.companion.sounds));
-            void emit('companion-state', {
+            emitCompanionState({
               type: 'activity',
               state: 'completed',
               message: 'Resposta pronta',
@@ -598,7 +629,7 @@ function MainApp() {
             setError(event.message ?? 'O agente não conseguiu concluir a execução.');
             setAgentErrorDetails(event.technicalDetails ?? '');
             void playSound('error', normalizeSoundPreferences(settings.companion.sounds));
-            void emit('companion-state', {
+            emitCompanionState({
               type: 'activity',
               state: 'error',
               message: 'Falha no agente',
@@ -606,7 +637,7 @@ function MainApp() {
           } else if (event.type === 'stopped') {
             setAgentAwaitingApproval(false);
             void playSound('halted', normalizeSoundPreferences(settings.companion.sounds));
-            void emit('companion-state', {
+            emitCompanionState({
               type: 'activity',
               state: 'paused',
               message: 'Agente parado',
@@ -717,14 +748,14 @@ function MainApp() {
       void playSound('success', normalizeSoundPreferences(settings.companion.sounds));
       window.clearTimeout(companionStateTimer.current);
       if (isTauri()) {
-        void emit('companion-state', {
+        emitCompanionState({
           type: 'activity',
           state: 'responding',
           message: 'Resposta pronta',
         });
         companionStateTimer.current = window.setTimeout(
           () =>
-            void emit('companion-state', {
+            emitCompanionState({
               type: 'activity',
               state: 'completed',
               message: 'Resposta recebida',
@@ -750,7 +781,7 @@ function MainApp() {
         );
         void playSound('error', normalizeSoundPreferences(settings.companion.sounds));
         if (isTauri())
-          void emit('companion-state', {
+          emitCompanionState({
             type: 'activity',
             state: 'error',
             message: 'Não foi possível concluir a solicitação',
@@ -781,7 +812,10 @@ function MainApp() {
       );
       return;
     }
-    if (request.current) void invoke('cancel_provider_request', { requestId: request.current });
+    if (request.current)
+      void invoke('cancel_provider_request', { requestId: request.current }).catch(() =>
+        console.warn('[OdeKrai diagnóstico] Não foi possível cancelar a solicitação do provedor.'),
+      );
   }
 
   async function stopAll() {
@@ -899,6 +933,7 @@ function MainApp() {
         <SidebarProfileMenu
           profile={profile}
           compact={settings.layout.sidebarCollapsed}
+          section={section}
           onMyProfile={() => navigate('agent')}
           onSettings={() => navigate('settings')}
           onPermissions={() => navigate('permissions')}
@@ -1162,7 +1197,14 @@ function MainApp() {
               {section === 'computer' && <ComputerScreen />}
               {section === 'calendar' && <CalendarScreen />}
               {section === 'skills' && (
-                <SkillsScreen onOpenPrivacy={() => navigate('permissions')} />
+                <SkillsScreen
+                  onOpenPrivacy={() => navigate('permissions')}
+                  agentRuntime={{
+                    modeEnabled: agentEnabled,
+                    available: agentAvailability.available,
+                    reason: agentAvailability.reason,
+                  }}
+                />
               )}
               {section === 'companion' && (
                 <AssistantScreen

@@ -6,6 +6,7 @@ import {
   navigationItems,
   nextProfileMenuFocus,
   PendingApprovalIndicator,
+  positionProfileMenu,
   profileMenuItems,
   SidebarNavigation,
   SidebarProfileMenu,
@@ -61,6 +62,7 @@ describe('SidebarNavigation', () => {
       <SidebarProfileMenu
         profile={{ displayName: '', nickname: '', avatarDataUrl: null }}
         compact={false}
+        section="overview"
         onMyProfile={() => undefined}
         onSettings={() => undefined}
         onPermissions={() => undefined}
@@ -72,6 +74,37 @@ describe('SidebarNavigation', () => {
     expect(markup).toContain('class="avatar-small">U');
     expect(styles).toMatch(/\.sidebar-profile-footer\s*\{[^}]*margin-top:\s*auto/s);
     expect(styles).toMatch(/\.nav-list\s*\{[^}]*overflow-y:\s*auto/s);
+    expect(styles).toMatch(/\.sidebar-profile-popover\s*\{[^}]*position:\s*fixed/s);
+  });
+
+  it('posiciona o menu junto ao cartão expandido e limita a área visível', () => {
+    expect(
+      positionProfileMenu(
+        { top: 700, right: 250, bottom: 748, left: 16 },
+        { width: 270, height: 230 },
+        { width: 1000, height: 800 },
+        false,
+      ),
+    ).toEqual({ left: 16, top: 462, width: 270, maxHeight: 230 });
+  });
+
+  it('abre o menu compacto ao lado do cartão e o mantém dentro de uma janela estreita', () => {
+    expect(
+      positionProfileMenu(
+        { top: 740, right: 72, bottom: 788, left: 8 },
+        { width: 270, height: 230 },
+        { width: 320, height: 600 },
+        true,
+      ),
+    ).toEqual({ left: 80, top: 358, width: 228, maxHeight: 230 });
+    expect(
+      positionProfileMenu(
+        { top: 740, right: 72, bottom: 788, left: 8 },
+        { width: 270, height: 230 },
+        { width: 240, height: 180 },
+        true,
+      ),
+    ).toEqual({ left: 80, top: 12, width: 148, maxHeight: 156 });
   });
 
   it('declara as cinco ações do menu do perfil na ordem esperada', () => {

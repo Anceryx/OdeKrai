@@ -60,7 +60,88 @@ const registryFixture: CatalogSkill[] = [
 
 const noOperation = () => undefined;
 
+const discordSkill: CatalogSkill = {
+  id: 'discord.send',
+  name: 'Enviar mensagem ao Discord',
+  description: 'Envia mensagem por webhook, sempre após aprovação.',
+  risk: 'comunicacao_externa',
+  resultTrust: 'local',
+  enabled: true,
+  morePermissive: false,
+  fixedBlocked: true,
+  category: 'integration',
+  status: 'installed',
+  configurationRequired: false,
+  family: 'mensagens',
+  icon: 'message',
+  examples: ['Envie uma mensagem aprovada.'],
+  origin: { kind: 'builtin' },
+};
+
 describe('catálogo de habilidades', () => {
+  it('distingue habilidade Discord ativa de ferramenta exposta ao agente', () => {
+    const render = (agentRuntime: {
+      modeEnabled: boolean;
+      available: boolean;
+      reason: string | null;
+    }) =>
+      renderToStaticMarkup(
+        <SkillsCatalogView
+          skills={[discordSkill]}
+          initialFamily="mensagens"
+          agentRuntime={agentRuntime}
+          onFamilyToggle={noOperation}
+          onSkillToggle={noOperation}
+          onOverrideToggle={noOperation}
+        />,
+      );
+
+    expect(render({ modeEnabled: false, available: true, reason: null })).toContain(
+      'habilidade ativa, mas não exposta: o modo agente está desligado nesta conversa.',
+    );
+    expect(
+      render({
+        modeEnabled: false,
+        available: false,
+        reason: 'Este modelo não tem suporte verificado a ferramentas.',
+      }),
+    ).toContain('Este modelo não tem suporte verificado a ferramentas.');
+    expect(render({ modeEnabled: true, available: true, reason: null })).toContain(
+      'ferramenta disponível para esta conversa; cada envio ainda exige aprovação.',
+    );
+    expect(
+      renderToStaticMarkup(
+        <SkillsCatalogView
+          skills={[
+            {
+              ...discordSkill,
+              enabled: false,
+              status: 'configuration_required',
+              configurationRequired: true,
+            },
+          ]}
+          initialFamily="mensagens"
+          agentRuntime={{ modeEnabled: true, available: true, reason: null }}
+          onFamilyToggle={noOperation}
+          onSkillToggle={noOperation}
+          onOverrideToggle={noOperation}
+        />,
+      ),
+    ).toContain('configure e teste um webhook válido');
+    expect(
+      renderToStaticMarkup(
+        <SkillsCatalogView
+          skills={[{ ...discordSkill, enabled: false, status: 'available' }]}
+          initialFamily="mensagens"
+          agentRuntime={{ modeEnabled: true, available: true, reason: null }}
+          onFamilyToggle={noOperation}
+          onSkillToggle={noOperation}
+          onOverrideToggle={noOperation}
+        />,
+      ),
+    ).toContain('habilidade desativada; ela não é enviada ao modelo.');
+  });
+
   it('não mantém estilos dos cartões individuais substituídos pelo catálogo por família', () => {
     const styles = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
     const legacySelectors = [
@@ -121,11 +202,66 @@ describe('catálogo de habilidades', () => {
 
   it('adapta os cartões a janelas estreitas e mantém o foco visível', () => {
     const css = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
-    expect(css).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr))');
+    expect(css).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr))');
+    expect(css).toMatch(
+      /\.skills-family-card-heading\s*\{[^}]*grid-template-columns:\s*40px minmax\(0, 1fr\)/,
+    );
+    expect(css).toMatch(/\.skills-family-card-heading \.risk-badge\s*\{[^}]*grid-column:\s*2/);
+    expect(css).toMatch(/\.skills-family-copy h2\s*\{[^}]*word-break:\s*normal/);
     expect(css).toMatch(
       /@media \(max-width: 760px\)[\s\S]*?\.skills-family-grid\s*\{\s*grid-template-columns: minmax\(0, 1fr\)/,
     );
     expect(css).toContain('.skills-catalog-page :is(button, input):focus-visible');
+  });
+
+  it('mantém nomes, descrições, etiquetas de risco e categorias legíveis no catálogo e em Gerenciar', () => {
+    const longName = `${'Habilidade com nome extenso '.repeat(5)}identificadorsemseparadores`;
+    const longDescription = 'Descrição detalhada da habilidade. '.repeat(20);
+    const skills: CatalogSkill[] = [
+      ...registryFixture,
+      discordSkill,
+      {
+        ...discordSkill,
+        id: 'mcp.long-description',
+        name: longName,
+        description: longDescription,
+        risk: 'destrutivo_financeiro',
+        category: 'integration',
+        family: 'integracoes_mcp',
+        origin: { kind: 'mcp', server: 'servidor-de-integracao-com-nome-extenso' },
+        examples: [`${'Exemplo de solicitação longo '.repeat(8)}sem-separadores`],
+      },
+    ];
+    const catalog = renderToStaticMarkup(
+      <SkillsCatalogView
+        skills={skills}
+        onFamilyToggle={noOperation}
+        onSkillToggle={noOperation}
+        onOverrideToggle={noOperation}
+      />,
+    );
+    const details = renderToStaticMarkup(
+      <SkillsCatalogView
+        skills={skills}
+        initialFamily="integracoes_mcp"
+        onFamilyToggle={noOperation}
+        onSkillToggle={noOperation}
+        onOverrideToggle={noOperation}
+      />,
+    );
+    const css = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
+
+    expect(catalog.match(/class="skills-family-card"/g)).toHaveLength(4);
+    expect(catalog).toContain('Risco: Destrutivo ou financeiro');
+    expect(catalog).toContain('Integrações MCP');
+    expect(details).toContain(longName);
+    expect(details).toContain(longDescription);
+    expect(details).toContain('Exemplo de solicitação longo');
+    expect(details).toContain('Risco: Destrutivo ou financeiro');
+    expect(css).toMatch(/\.skills-detail-title h4\s*\{[^}]*overflow-wrap:\s*anywhere/);
+    expect(css).toMatch(
+      /\.skills-detail-copy > p,[\s\S]*?overflow-wrap:\s*break-word;\s*word-break:\s*normal/,
+    );
   });
 
   it('mantém estados de carregamento e erro acessíveis', () => {

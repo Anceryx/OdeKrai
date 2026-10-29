@@ -282,6 +282,31 @@ mod explicit_approval_tests {
             Decision::AskUser(_)
         ));
         assert!(!summary(&action).contains(text));
+        assert!(!audit_params(&action).contains(text));
+    }
+
+    #[test]
+    fn discord_message_from_untrusted_content_still_requires_user_approval() {
+        let action = SimulatedAction::Productivity {
+            skill_id: "discord.send".into(),
+            params: json!({"webhook_id":"discord-123456789012345678","text":"mensagem citada"}),
+        };
+        let origin = Origin::ExternalContent("conteúdo citado pelo usuário".into());
+        let (_, risk, inside, fixed) = action_metadata(&action);
+        let decision = policy::decide_with_taint(
+            Mode::ControleTotal,
+            risk,
+            &origin,
+            inside,
+            fixed,
+            true,
+            true,
+        );
+
+        assert_eq!(
+            require_batch_approval(&action, decision),
+            Decision::AskUser("origin_tainted")
+        );
     }
 
     #[test]

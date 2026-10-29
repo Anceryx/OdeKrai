@@ -881,29 +881,49 @@ fn action_example(id: &str) -> SimulatedAction {
 }
 
 pub fn model_tools(app: &tauri::AppHandle) -> Result<Vec<crate::providers::ToolDef>, String> {
-    let skills = registry();
-    let mut enabled = std::collections::HashSet::new();
-    for skill in &skills {
-        if is_skill_enabled(app, skill.id)? {
-            enabled.insert(skill.id);
-        }
-    }
-    Ok(model_tools_for(&skills, &enabled))
+    Ok(skills_exposed_to_agent(app)?
+        .into_iter()
+        .map(|skill| crate::providers::ToolDef {
+            name: skill.id.into(),
+            description: skill.model_description.into(),
+            json_schema: skill.schema,
+        })
+        .collect())
 }
 
+fn skill_exposed_to_agent(skill_id: &str, enabled: bool, discord_configured: bool) -> bool {
+    skill_available(skill_id) && enabled && (skill_id != "discord.send" || discord_configured)
+}
+
+#[cfg(test)]
 fn model_tools_for(
     skills: &[Skill],
     enabled: &std::collections::HashSet<&str>,
+    discord_configured: bool,
 ) -> Vec<crate::providers::ToolDef> {
     skills
         .iter()
-        .filter(|skill| skill_available(skill.id) && enabled.contains(skill.id))
+        .filter(|skill| {
+            skill_exposed_to_agent(skill.id, enabled.contains(skill.id), discord_configured)
+        })
         .map(|skill| crate::providers::ToolDef {
             name: skill.id.into(),
             description: skill.model_description.into(),
             json_schema: skill.schema.clone(),
         })
         .collect()
+}
+
+pub(crate) fn skills_exposed_to_agent(app: &tauri::AppHandle) -> Result<Vec<Skill>, String> {
+    let discord_configured = crate::discord::discord_is_configured(app)?;
+    let mut exposed = Vec::new();
+    for skill in registry() {
+        let enabled = is_skill_enabled(app, skill.id)?;
+        if skill_exposed_to_agent(skill.id, enabled, discord_configured) {
+            exposed.push(skill);
+        }
+    }
+    Ok(exposed)
 }
 
 pub(crate) fn is_skill_enabled(app: &tauri::AppHandle, id: &str) -> Result<bool, String> {
@@ -1098,6 +1118,7 @@ pub fn get_skills(
     caller: tauri::WebviewWindow,
 ) -> Result<Vec<SkillView>, String> {
     crate::require_main(&caller)?;
+    let discord_configured = crate::discord::discord_is_configured(&app)?;
     registry()
         .into_iter()
         .map(|skill| {
@@ -1113,36 +1134,35 @@ pub fn get_skills(
                 }
                 params
             };
+            let stored_enabled = is_skill_enabled(&app, skill.id)?;
+            let enabled = skill_exposed_to_agent(skill.id, stored_enabled, discord_configured);
             Ok(SkillView {
                 id: skill.id.into(),
                 name: skill.name.into(),
                 description: skill.description.into(),
                 risk: skill.risk(&params)?,
                 result_trust: skill.result_trust,
-                enabled: skill_available(skill.id) && is_skill_enabled(&app, skill.id)?,
+                enabled,
                 more_permissive: super::override_enabled(&app, skill.id)?,
                 fixed_blocked: matches!(skill.id, "simulated.payment" | "discord.send"),
                 category: skill_category(skill.id).into(),
                 status: if !skill_available(skill.id) {
                     "unavailable"
                 } else if skill.id == "discord.send" {
-                    if crate::discord::discord_is_configured(&app)? {
-                        if is_skill_enabled(&app, skill.id)? {
-                            "installed"
-                        } else {
-                            "available"
-                        }
-                    } else {
+                    if !discord_configured {
                         "configuration_required"
+                    } else if enabled {
+                        "installed"
+                    } else {
+                        "available"
                     }
-                } else if is_skill_enabled(&app, skill.id)? {
+                } else if enabled {
                     "installed"
                 } else {
                     "available"
                 }
                 .into(),
-                configuration_required: skill.id == "discord.send"
-                    && !crate::discord::discord_is_configured(&app)?,
+                configuration_required: skill.id == "discord.send" && !discord_configured,
                 family: skill.family,
                 icon: skill.icon.into(),
                 examples: skill
@@ -1641,7 +1661,7 @@ mod tests {
     #[test]
     fn disabled_skills_are_not_offered_to_the_model() {
         let skills = registry();
-        let no_skills = model_tools_for(&skills, &std::collections::HashSet::new());
+        let no_skills = model_tools_for(&skills, &std::collections::HashSet::new(), true);
         assert!(no_skills.is_empty());
         assert!(!no_skills.iter().any(|tool| tool.name == "theme.set"));
         let theme = registry()
@@ -1650,7 +1670,7 @@ mod tests {
             .unwrap();
         assert!(theme.description.starts_with("experimental: usa uma configuração do Windows que a Microsoft não documenta oficialmente"));
         let theme_enabled = std::collections::HashSet::from(["theme.set"]);
-        assert!(model_tools_for(&skills, &theme_enabled)
+        assert!(model_tools_for(&skills, &theme_enabled, true)
             .iter()
             .any(|tool| tool.name == "theme.set"));
         assert_eq!(
@@ -1665,15 +1685,30 @@ mod tests {
             .unwrap();
         assert_eq!(restore.risk(&json!({})).unwrap(), Risk::EscritaReversivel);
         let enabled = std::collections::HashSet::from(["workspace.read_file"]);
-        let tools = model_tools_for(&skills, &enabled);
+        let tools = model_tools_for(&skills, &enabled, true);
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].name, "workspace.read_file");
         let calendar_enabled = std::collections::HashSet::from(["calendar.create_event"]);
-        let calendar_tools = model_tools_for(&skills, &calendar_enabled);
+        let calendar_tools = model_tools_for(&skills, &calendar_enabled, true);
         assert_eq!(calendar_tools.len(), 1);
         assert_eq!(calendar_tools[0].name, "calendar.create_event");
         let legacy_simulated_enabled = std::collections::HashSet::from(["simulated.send_message"]);
-        assert!(model_tools_for(&skills, &legacy_simulated_enabled).is_empty());
+        assert!(model_tools_for(&skills, &legacy_simulated_enabled, true).is_empty());
+    }
+
+    #[test]
+    fn discord_tool_requires_both_enabled_skill_and_valid_configured_destination() {
+        let skills = registry();
+        let discord_enabled = std::collections::HashSet::from(["discord.send"]);
+        let disabled = model_tools_for(&skills, &std::collections::HashSet::new(), true);
+        let no_destination = model_tools_for(&skills, &discord_enabled, false);
+        let ready = model_tools_for(&skills, &discord_enabled, true);
+
+        assert!(!disabled.iter().any(|tool| tool.name == "discord.send"));
+        assert!(!no_destination
+            .iter()
+            .any(|tool| tool.name == "discord.send"));
+        assert!(ready.iter().any(|tool| tool.name == "discord.send"));
     }
 
     #[test]

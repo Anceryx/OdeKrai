@@ -60,6 +60,14 @@ struct SimulatedMessageArgs {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 #[allow(dead_code)]
+struct DiscordSendArgs {
+    webhook_id: String,
+    text: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
 struct SimulatedPaymentArgs {
     amount_cents: u64,
     currency: String,
@@ -366,6 +374,7 @@ fn validate_tool_call(call: &ToolCall, tools: &[ToolDef]) -> Result<(), String> 
         "simulated.send_message" => {
             serde_json::from_value::<SimulatedMessageArgs>(call.args.clone()).is_ok()
         }
+        "discord.send" => serde_json::from_value::<DiscordSendArgs>(call.args.clone()).is_ok(),
         "simulated.payment" => {
             serde_json::from_value::<SimulatedPaymentArgs>(call.args.clone()).is_ok()
                 && call
@@ -415,20 +424,67 @@ fn fail_with_details(
 
 pub(crate) fn classify_provider_error(error: &str) -> ProviderFailure {
     let normalized = error.to_ascii_lowercase();
+    if normalized.contains("http 401") {
+        return ProviderFailure {
+            kind: "invalid_credential",
+            message: "O provedor recusou a credencial. Confira a chave em Conectores de IA.",
+            technical_details: "Etapa: autenticação do provedor; status HTTP: 401.",
+        };
+    }
+    if normalized.contains("http 403") || normalized.contains("negou permissão") {
+        return ProviderFailure {
+            kind: "permission_denied",
+            message:
+                "O provedor negou acesso a este modelo ou operação. Confira as permissões da chave.",
+            technical_details: "Etapa: autorização do provedor; status HTTP: 403.",
+        };
+    }
     if normalized.contains("http 404")
         || normalized.contains("model not found")
         || normalized.contains("modelo n\u{00e3}o foi encontrado")
     {
         return ProviderFailure { kind: "model_not_found", message: "O modelo ou endpoint não foi encontrado. Confira o identificador em Conectores de IA.", technical_details: "Etapa: resposta do provedor; status HTTP: 404." };
     }
-    if normalized.contains("http 400")
-        || normalized.contains("resposta inv\u{00e1}lida")
+    if normalized.contains("nome de uma ferramenta") {
+        return ProviderFailure {
+            kind: "invalid_tool_name",
+            message:
+                "O provedor rejeitou o nome de uma ferramenta. Confira a compatibilidade do modelo.",
+            technical_details:
+                "Etapa: validação de ferramentas; status HTTP: 400; categoria: nome.",
+        };
+    }
+    if normalized.contains("schema de ferramenta") {
+        return ProviderFailure {
+            kind: "invalid_tool_schema",
+            message: "O provedor rejeitou o schema de uma ferramenta. Confira a compatibilidade do modelo.",
+            technical_details: "Etapa: validação de ferramentas; status HTTP: 400; categoria: schema.",
+        };
+    }
+    if normalized.contains("reasoning_effort") || normalized.contains("configuração de raciocínio")
+    {
+        return ProviderFailure {
+            kind: "model_configuration",
+            message:
+                "O modelo recusou uma configuração da solicitação. Confira o modelo selecionado.",
+            technical_details:
+                "Etapa: validação do modelo; status HTTP: 400; categoria: configuração.",
+        };
+    }
+    if normalized.contains("http 400") {
+        return ProviderFailure {
+            kind: "invalid_request",
+            message: "O provedor rejeitou a solicitação (HTTP 400). Confira o modelo e os parâmetros enviados.",
+            technical_details: "Etapa: validação da solicitação; status HTTP: 400; corpo omitido.",
+        };
+    }
+    if normalized.contains("resposta inv\u{00e1}lida")
         || (normalized.contains("resposta") && normalized.contains("inv"))
         || (normalized.contains("payload") && normalized.contains("inv"))
         || normalized.contains("formato inesperado")
         || normalized.contains("argumentos de ferramenta inv\u{00e1}lidos")
     {
-        return ProviderFailure { kind: "invalid_response", message: "O provedor rejeitou a solicitação ou retornou uma resposta inválida. Confira o modelo e escolha um compatível com ferramentas.", technical_details: "Etapa: validação da solicitação ou resposta; status HTTP: 400 ou payload inválido." };
+        return ProviderFailure { kind: "invalid_response", message: "O provedor retornou uma resposta em formato inválido. Tente novamente ou confira o modelo selecionado.", technical_details: "Etapa: leitura do payload; resposta vazia ou estrutura inválida; corpo omitido." };
     }
     if normalized.contains("http 408") {
         return ProviderFailure { kind: "timeout", message: "O provedor demorou para responder. Tente novamente ou escolha outro provedor conectado.", technical_details: "Etapa: resposta do provedor; status HTTP: 408." };
@@ -470,10 +526,7 @@ fn classify_provider_error_legacy(error: &str) -> (&'static str, &'static str, &
             "A consulta ao Gerenciador do Windows falhou.",
         );
     }
-    if normalized.contains("http 401")
-        || normalized.contains("http 403")
-        || normalized.contains("credencial")
-    {
+    if normalized.contains("http 401") || normalized.contains("credencial") {
         return (
             "invalid_credential",
             "O provedor recusou a credencial. Confira a chave em Conectores de IA.",
@@ -636,19 +689,41 @@ mod tests {
             ),
             (
                 "O provedor rejeitou os par\u{00e2}metros (HTTP 400).",
-                "invalid_response",
+                "invalid_request",
                 "400",
             ),
             (
                 "O provedor retornou uma resposta inv\u{00e1}lida.",
                 "invalid_response",
-                "payload inv\u{00e1}lido",
+                "estrutura inv\u{00e1}lida",
             ),
         ] {
             let failure = classify_provider_error(technical);
             assert_eq!(failure.kind, expected_kind);
             assert!(failure.technical_details.contains(status));
             assert!(!failure.technical_details.contains("pedido privado"));
+        }
+        for (technical, expected_kind) in [
+            (
+                "O provedor negou permissão para esta operação (HTTP 403).",
+                "permission_denied",
+            ),
+            (
+                "O provedor recusou o nome de uma ferramenta (HTTP 400).",
+                "invalid_tool_name",
+            ),
+            (
+                "O provedor recusou o schema de ferramenta (HTTP 400).",
+                "invalid_tool_schema",
+            ),
+            (
+                "O provedor recusou a configuração de raciocínio enviada (HTTP 400).",
+                "model_configuration",
+            ),
+        ] {
+            let failure = classify_provider_error(technical);
+            assert_eq!(failure.kind, expected_kind);
+            assert!(!failure.technical_details.contains("private-user-content"));
         }
     }
 
@@ -736,7 +811,7 @@ mod tests {
             Box::pin(async move {
                 self.turns += 1;
                 if self.turns == 1 {
-                    Ok(reply("", vec![call("workspace.read_file")]))
+                    Ok(reply("", vec![call("discord.send")]))
                 } else {
                     self.saw_denial = messages.iter().any(|message| {
                         message.blocks.iter().any(|block| matches!(block, Block::ToolResult { content, .. } if content.contains("Ação negada")))
@@ -752,6 +827,7 @@ mod tests {
             _: bool,
             cancel: &'a CancellationToken,
         ) -> Pin<Box<dyn Future<Output = Result<ToolExecution, String>> + Send + 'a>> {
+            let external_communication = call.name == "discord.send";
             Box::pin(async move {
                 let ticket = self
                     .broker
@@ -769,15 +845,15 @@ mod tests {
                 self.executed = decision == crate::security::ApprovalDecision::Aprovada;
                 Ok(ToolExecution {
                     content: if self.executed {
-                        "arquivo lido"
+                        "envio Discord simulado após aprovação"
                     } else {
                         "Ação negada pelo usuário"
                     }
                     .into(),
                     audit_id: Some("audit-test".into()),
                     denied: !self.executed,
-                    external_communication: false,
-                    untrusted: true,
+                    external_communication: external_communication && self.executed,
+                    untrusted: false,
                 })
             })
         }
@@ -824,11 +900,32 @@ mod tests {
             name: name.into(),
             args: match name {
                 "workspace.write_file" => json!({"path":"a.txt","content":"conteúdo"}),
+                "discord.send" => {
+                    json!({"webhook_id":"discord-123456789012345678","text":"mensagem de teste"})
+                }
                 "simulated.send_message" => json!({"recipient":"contato","message":"texto"}),
                 "simulated.payment" => json!({"amount_cents":100,"currency":"BRL"}),
                 _ => json!({"path":"a.txt"}),
             },
         }
+    }
+
+    fn discord_tool_definitions() -> Vec<ToolDef> {
+        let mut tools = tool_definitions();
+        tools.push(tool(
+            "discord.send",
+            "Envia uma mensagem aprovada por webhook.",
+            json!({
+                "type":"object",
+                "properties":{
+                    "webhook_id":{"type":"string"},
+                    "text":{"type":"string"}
+                },
+                "required":["webhook_id","text"],
+                "additionalProperties":false
+            }),
+        ));
+        tools
     }
 
     #[tokio::test]
@@ -883,10 +980,11 @@ mod tests {
                     text: "leia".into(),
                 }],
             }];
+            let tools = discord_tool_definitions();
             let answer = run_agent(
                 &mut backend,
                 &mut messages,
-                &tool_definitions(),
+                &tools,
                 AgentLimits::default(),
                 &CancellationToken::new(),
                 |_| {},
@@ -932,10 +1030,11 @@ mod tests {
                     text: "leia".into(),
                 }],
             }];
+            let tools = discord_tool_definitions();
             let answer = run_agent(
                 &mut backend,
                 &mut messages,
-                &tool_definitions(),
+                &tools,
                 AgentLimits::default(),
                 &CancellationToken::new(),
                 |_| {},
@@ -1230,6 +1329,12 @@ mod tests {
         assert!(validate_tool_call(&invalid, &tools).is_err());
         invalid.args = json!({"path":"a.txt"});
         assert!(validate_tool_call(&invalid, &tools).is_ok());
+
+        let discord_tools = discord_tool_definitions();
+        let mut discord = call("discord.send");
+        assert!(validate_tool_call(&discord, &discord_tools).is_ok());
+        discord.args["unexpected"] = json!(true);
+        assert!(validate_tool_call(&discord, &discord_tools).is_err());
     }
 
     struct FailedToolBackend {

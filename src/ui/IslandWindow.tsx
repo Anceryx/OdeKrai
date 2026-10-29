@@ -39,7 +39,11 @@ export function IslandWindow() {
           return;
         }
         if (payload.state === 'awaiting_approval') return;
-        void invoke('enqueue_pet_activity', { state: payload.state }).catch(() => {});
+        void invoke('enqueue_pet_activity', { state: payload.state }).catch(() =>
+          console.warn(
+            '[OdeKrai diagnóstico] Falha no comando enqueue_pet_activity da janela do pet.',
+          ),
+        );
       }),
       listen<{
         alertId?: string;
@@ -71,14 +75,20 @@ export function IslandWindow() {
       listen<string>('selected-pet-updated', ({ payload }) => {
         if (PETS.some((pet) => pet.id === payload)) setSelectedPetId(payload);
       }),
-    ]).then((off) => {
-      unlisten = off;
-    });
+    ])
+      .then((off) => {
+        unlisten = off;
+      })
+      .catch(() => {
+        console.error('[OdeKrai diagnóstico] Falha ao registrar eventos da janela do pet.');
+      });
     void invoke<string>('get_selected_pet')
       .then((petId) => {
         if (PETS.some((pet) => pet.id === petId)) setSelectedPetId(petId);
       })
-      .catch(() => {});
+      .catch(() =>
+        console.warn('[OdeKrai diagnóstico] Falha no comando get_selected_pet da janela do pet.'),
+      );
     void invoke<{
       alertId?: string;
       state: IslandSnapshot['state'];
@@ -100,7 +110,11 @@ export function IslandWindow() {
           }),
         ),
       )
-      .catch(() => {});
+      .catch(() =>
+        console.warn(
+          '[OdeKrai diagnóstico] Falha no comando get_pet_alert_state da janela do pet.',
+        ),
+      );
     return () => {
       document.body.classList.remove('island-window-body');
       document.documentElement.classList.remove('island-window-html');
@@ -125,7 +139,9 @@ export function IslandWindow() {
         layoutRef.current = { width, height };
         await new Promise((resolve) => window.setTimeout(resolve, 18));
       }
-    })();
+    })().catch(() => {
+      console.error('[OdeKrai diagnóstico] Falha no comando set_pet_size da janela do pet.');
+    });
     return () => {
       active = false;
     };
@@ -149,7 +165,11 @@ export function IslandWindow() {
     const id = snapshot.alertId;
     const timer = window.setTimeout(
       () => {
-        void invoke('dismiss_pet_alert', { alertId: id }).catch(() => {});
+        void invoke('dismiss_pet_alert', { alertId: id }).catch(() =>
+          console.warn(
+            '[OdeKrai diagnóstico] Falha no comando dismiss_pet_alert da janela do pet.',
+          ),
+        );
       },
       snapshot.state === 'notification' ? 5000 : 2400,
     );
@@ -157,8 +177,14 @@ export function IslandWindow() {
   }, [snapshot.alertId, snapshot.pinned, snapshot.state]);
   const send = async (event: IslandEvent, sound?: Parameters<typeof playSound>[0]) => {
     setSnapshot((current) => transitionIsland(current, event));
-    if (sound) await playSound(sound, normalizeSoundPreferences(settings.companion.sounds));
-    await emit('companion-state', event);
+    try {
+      if (sound) await playSound(sound, normalizeSoundPreferences(settings.companion.sounds));
+      await emit('companion-state', event);
+    } catch {
+      console.error(
+        `[OdeKrai diagnóstico] Falha ao emitir companion-state (${event.type}) na janela pet.`,
+      );
+    }
   };
   const state = snapshot.state;
   return (
@@ -227,7 +253,9 @@ export function IslandWindow() {
                 void playSound('click', normalizeSoundPreferences(settings.companion.sounds), {
                   petVisible: true,
                 });
-                void emit('pet-action', 'open');
+                void emit('pet-action', 'open').catch(() =>
+                  console.error('[OdeKrai diagnóstico] Falha ao emitir pet-action/open.'),
+                );
               }}
             >
               <Icon name="home" />
@@ -239,7 +267,9 @@ export function IslandWindow() {
                 void playSound('click', normalizeSoundPreferences(settings.companion.sounds), {
                   petVisible: true,
                 });
-                void emit('pet-action', 'new-chat');
+                void emit('pet-action', 'new-chat').catch(() =>
+                  console.error('[OdeKrai diagnóstico] Falha ao emitir pet-action/new-chat.'),
+                );
               }}
             >
               <Icon name="chat" />
@@ -251,7 +281,9 @@ export function IslandWindow() {
                 void playSound('click', normalizeSoundPreferences(settings.companion.sounds), {
                   petVisible: true,
                 });
-                void emit('pet-action', 'stop');
+                void emit('pet-action', 'stop').catch(() =>
+                  console.error('[OdeKrai diagnóstico] Falha ao emitir pet-action/stop.'),
+                );
               }}
             >
               <Icon name="stop" />
@@ -263,7 +295,9 @@ export function IslandWindow() {
                 void playSound('click', normalizeSoundPreferences(settings.companion.sounds), {
                   petVisible: true,
                 });
-                void emit('pet-action', 'mute');
+                void emit('pet-action', 'mute').catch(() =>
+                  console.error('[OdeKrai diagnóstico] Falha ao emitir pet-action/mute.'),
+                );
               }}
             >
               <Icon name="mute" />

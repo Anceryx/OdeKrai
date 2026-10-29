@@ -1,18 +1,42 @@
 # Testes e validação
 
-## Fase 4 — lacuna de cobertura
+## Fase 4 — cobertura parcial do agente
 
-Os testes atuais não implementam nem validam um loop de agente. O mock de provedores existente
-verifica o chat de texto; ele não verifica tool calls parciais/completas, multi-turno com resultado,
-usage, capabilities, failover, orçamento diário, nem que um failover jamais repete uma tool. Os
-testes de política cobrem a decisão isolada da Fase 3, mas não a propagação tainted de ToolResult.
-Não há teste de limite de voltas/tempo/tokens, cancelamento de execução, concorrência por conversa,
-schema deny-unknown-fields para ferramentas do modelo, persistência de mensagens de tool ou UI do
-modo agente. A matriz detalhada está em [`TRACEABILITY.md`](TRACEABILITY.md).
+O loop de agente e o motor de políticas têm cobertura unitária, mas continuam pendentes cenários
+integrados de multi-turno, failover sem repetição de ferramentas, propagação tainted de ToolResult,
+cancelamento, concorrência por conversa e UI completa. A matriz detalhada está em
+[`TRACEABILITY.md`](TRACEABILITY.md).
 
 Após implementação, todos esses testes devem usar servidor/mock local e zero chamadas a APIs reais.
 Validação visual no Windows deverá cobrir estados do chat, aprovação, parada e integração com
 island/mascote.
+
+## Regressões do adaptador OpenAI (Lote 6 — E3)
+
+Os testes Rust cobrem mapeamento reversível de nomes internos de habilidades, nomes em histórico de
+tool calls, contrato de nomes OpenAI, preservação do schema, chat sem ferramentas, classificações
+HTTP simuladas (400, 401, 403, 429 e 500) sem ecoar corpo privado e rejeição de respostas vazias ou
+inválidas. São testes locais; não usam credenciais nem APIs reais. Compatibilidade de um modelo de
+terceiro pode depender de sua configuração e permanece sujeita à resposta real do endpoint.
+
+## Lote 6 — E10: diagnósticos e avisos do WebView
+
+`password-forms.test.ts` verifica campos de credenciais em formulários HTML; `favicon.test.ts`
+confere a declaração e o cabeçalho ICO do recurso público copiado pelo Vite; `diagnostics.test.ts`
+verifica sanitização de stack trace. `diagnostics.rs` testa redação de dados pessoais e gravações
+concorrentes em linhas completas. Falhas de registro de listeners e chamadas assíncronas conhecidas
+são tratadas nos componentes, e o listener global continua relatando erros sem cancelar o evento.
+
+A busca no código não encontrou emissão própria de `OPTIONS` ou evento chamado `preflight`. O
+workflow mantém DevTools fora das features padrão; o recurso `diagnostics` apenas habilita o DevTools
+do Tauri. “Simulação” aparece no centro de Segurança e nas tools locais para descrever uma operação
+que não foi executada. Portanto, esses termos não justificam alterar transporte ou remover os avisos
+do inspetor. A requisição específica vista anteriormente não pôde ser capturada neste ambiente.
+
+O favicon nativo listado em `tauri.conf.json` é ícone do pacote; o WebView usa o `favicon.ico` em
+`public/`, copiado para `dist/` pelo Vite. O código de diagnóstico não registra payloads de erro;
+referências locais apresentam seção, comando, categoria, resultado e ID de correlação, enquanto
+detalhes sanitizados de stack ficam limitados ao painel local da interface.
 
 ## Verificações automatizadas
 
@@ -175,7 +199,7 @@ O histórico local guarda o provedor e modelo da última resposta de cada conver
 
 ## Fechamento e bandeja do Windows
 
-O padrão é Encerrar. Nessa opção, o X tenta cancelar solicitações registradas de provedor e fechar as janelas auxiliares; a saída tem limite de três segundos. Em Minimizar para a bandeja, o X oculta a janela principal e o menu nativo oferece Abrir e Sair; Sair também encerra o processo. Os testes unitários cobrem a escolha entre ocultar e encerrar e o limite da limpeza; a interação real com a bandeja, reabertura por segunda instância e encerramento de WebView2 ainda requer teste visual/nativo em Windows.
+O padrão é Encerrar. Nessa opção, o X tenta cancelar solicitações registradas de provedor e fechar as janelas auxiliares; a limpeza tem limite de três segundos e, mesmo se excedido, o encerramento segue pelo ciclo normal do Tauri. Antes da saída, o ícone da bandeja é removido. Em Minimizar para a bandeja, o X oculta a janela principal e o menu nativo oferece Abrir e Sair; Abrir e uma segunda instância desminimizam, exibem e focam a janela existente. Sair também encerra o processo. Testes unitários cobrem a escolha entre ocultar e encerrar, o limite e a finalização da limpeza e a restauração da janela simulada. A interação real com a bandeja, reabertura por segunda instância, encerramento de WebView2 e verificação de ícones residuais ainda requer teste visual/nativo em Windows; consulte `docs/qa/LOTE-6-E2.md`.
 
 ## Identidade e memória
 

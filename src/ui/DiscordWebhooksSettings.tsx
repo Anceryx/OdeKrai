@@ -107,55 +107,65 @@ export function DiscordWebhooksSettings({ onChanged }: { onChanged?: () => Promi
           {notice}
         </div>
       )}
-      <label className="discord-secret-field">
-        Nome do destino
-        <input
-          value={name}
-          maxLength={60}
-          autoComplete="off"
-          onChange={(event) => {
-            setName(event.target.value);
-            setConnectionTested(false);
-          }}
-        />
-      </label>
-      <label className="discord-secret-field">
-        Endereço de conexão do Discord
-        <input
-          type="password"
-          autoComplete="new-password"
-          value={url}
-          onChange={(event) => {
-            setUrl(event.target.value);
-            setConnectionTested(false);
-          }}
-        />
-      </label>
-      <label className="discord-consent">
-        <input
-          type="checkbox"
-          checked={authorized}
-          onChange={(event) => setAuthorized(event.target.checked)}
-        />
-        Autorizo enviar os dados de conexão ao Discord para verificar este destino e salvar o acesso
-        no Gerenciador de Credenciais do Windows. Cada mensagem ainda pede aprovação.
-      </label>
-      <div className="folder-shortcuts">
-        <Button
-          variant="secondary"
-          disabled={busy || !isTauri() || !url || !authorized}
-          onClick={() => void testConnection()}
-        >
-          Testar conexão
-        </Button>
-        <Button
-          variant="secondary"
-          disabled={busy || !isTauri() || !name.trim() || !url || !authorized || !connectionTested}
-          onClick={() => void save()}
-        >
-          Autorizar e salvar
-        </Button>
-      </div>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void testConnection();
+        }}
+      >
+        <label className="discord-secret-field">
+          Nome do destino
+          <input
+            value={name}
+            maxLength={60}
+            autoComplete="off"
+            onChange={(event) => {
+              setName(event.target.value);
+              setConnectionTested(false);
+            }}
+          />
+        </label>
+        <label className="discord-secret-field">
+          Endereço de conexão do Discord
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={url}
+            onChange={(event) => {
+              setUrl(event.target.value);
+              setConnectionTested(false);
+            }}
+          />
+        </label>
+        <label className="discord-consent">
+          <input
+            type="checkbox"
+            checked={authorized}
+            onChange={(event) => setAuthorized(event.target.checked)}
+          />
+          Autorizo enviar os dados de conexão ao Discord para verificar este destino e salvar o
+          acesso no Gerenciador de Credenciais do Windows. Cada mensagem ainda pede aprovação.
+        </label>
+        <div className="folder-shortcuts">
+          <Button
+            variant="secondary"
+            disabled={busy || !isTauri() || !url || !authorized}
+            type="submit"
+          >
+            Testar conexão
+          </Button>
+          <Button
+            variant="secondary"
+            type="button"
+            disabled={
+              busy || !isTauri() || !name.trim() || !url || !authorized || !connectionTested
+            }
+            onClick={() => void save()}
+          >
+            Autorizar e salvar
+          </Button>
+        </div>
+      </form>
       <ul className="allowed-folder-list">
         {webhooks.map((webhook) => (
           <li key={webhook.id}>
@@ -164,6 +174,7 @@ export function DiscordWebhooksSettings({ onChanged }: { onChanged?: () => Promi
             </div>
             <Button
               variant="ghost"
+              type="button"
               disabled={busy}
               onClick={() => void remove(webhook)}
               aria-label={`Remover destino ${webhook.name} do Discord e do aplicativo`}

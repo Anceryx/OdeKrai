@@ -161,6 +161,7 @@ pub fn discord_save(
         "INSERT INTO discord_webhooks(id,name,last_sent) VALUES (?1,?2,0) ON CONFLICT(id) DO UPDATE SET name=excluded.name",
         rusqlite::params![id, name],
     ).map_err(|_| "Não foi possível salvar o webhook.".to_string())?;
+    let _ = app.emit("skills-updated", ());
     Ok(())
 }
 
