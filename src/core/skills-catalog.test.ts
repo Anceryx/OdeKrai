@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  canEnableSkill,
+  familyEnableTarget,
   filterSkills,
-  groupEnableTarget,
-  groupSkills,
+  groupSkillFamilies,
+  nextSkillsTab,
   setSkillEnabledCommand,
   setSkillGroupEnabledCommand,
   type CatalogSkill,
@@ -14,62 +14,135 @@ const skills: CatalogSkill[] = [
     id: 'files.read',
     name: 'Ler arquivo',
     description: 'Lê arquivos permitidos',
+    risk: 'leitura',
+    resultTrust: 'local',
+    enabled: false,
+    morePermissive: false,
+    fixedBlocked: false,
     category: 'local',
     status: 'available',
-    enabled: false,
+    configurationRequired: false,
+    family: 'arquivos',
+    icon: 'folder',
+    examples: ['Leia o relatório da pasta permitida'],
+    origin: { kind: 'builtin' },
+  },
+  {
+    id: 'workspace.write_file',
+    name: 'Salvar arquivo',
+    description: 'Grava texto com cópia reversível',
+    risk: 'escrita_reversivel',
+    resultTrust: 'local',
+    enabled: true,
+    morePermissive: false,
     fixedBlocked: false,
+    category: 'local',
+    status: 'installed',
+    configurationRequired: false,
+    family: 'arquivos',
+    icon: 'folder',
+    examples: ['Salve este resumo no arquivo notas.txt'],
+    origin: { kind: 'builtin' },
   },
   {
     id: 'discord.send',
     name: 'Enviar ao Discord',
     description: 'Envia mensagens por webhook',
+    risk: 'comunicacao_externa',
+    resultTrust: 'local',
+    enabled: false,
+    morePermissive: false,
+    fixedBlocked: true,
     category: 'integration',
     status: 'configuration_required',
-    enabled: false,
-    fixedBlocked: false,
+    configurationRequired: true,
+    family: 'mensagens',
+    icon: 'chat_text',
+    examples: ['Envie a mensagem aprovada ao canal'],
+    origin: { kind: 'builtin' },
   },
   {
-    id: 'mcp.placeholder',
-    name: 'MCP indisponível',
-    description: 'Não registrado',
-    category: 'integration',
-    status: 'unavailable',
+    id: 'theme.set',
+    name: 'Alterar tema do Windows',
+    description: 'Experimental: altera entre claro e escuro e permite desfazer.',
+    risk: 'escrita_reversivel',
+    resultTrust: 'local',
     enabled: false,
-    fixedBlocked: true,
+    morePermissive: false,
+    fixedBlocked: false,
+    category: 'local',
+    status: 'available',
+    configurationRequired: false,
+    family: 'computador',
+    icon: 'desktop',
+    examples: ['Altere o tema do Windows para escuro'],
+    origin: { kind: 'builtin' },
   },
 ];
 
 describe('catálogo de habilidades', () => {
-  it('filtra por nome, descrição ou identificador sem diferenciar caixa', () => {
-    expect(filterSkills(skills, 'ARQUIVOS').map(({ id }) => id)).toEqual(['files.read']);
+  it('agrupa somente as famílias e habilidades recebidas do registro', () => {
+    const families = groupSkillFamilies(skills);
+    expect(families.map(({ family }) => family)).toEqual(['arquivos', 'mensagens', 'computador']);
+    expect(families.flatMap(({ skills: members }) => members.map(({ id }) => id))).toEqual(
+      skills.map(({ id }) => id),
+    );
+    expect(families[0].activeCount).toBe(1);
+    expect(families[0].highestRisk).toBe('escrita_reversivel');
+    expect(families[1].status).toBe('configuration_required');
+    const withUnavailable = groupSkillFamilies([
+      ...skills.slice(0, 2),
+      {
+        ...skills[0],
+        id: 'simulated.payment',
+        risk: 'destrutivo_financeiro',
+        status: 'unavailable',
+      },
+    ]);
+    expect(withUnavailable[0].highestRisk).toBe('escrita_reversivel');
+  });
+
+  it('procura por nome, descrição, exemplo e família sem diferenciar caixa', () => {
+    expect(filterSkills(skills, 'ARQUIVOS').map(({ id }) => id)).toEqual([
+      'files.read',
+      'workspace.write_file',
+    ]);
+    expect(filterSkills(skills, 'relatório da pasta').map(({ id }) => id)).toEqual(['files.read']);
+    expect(filterSkills(skills, 'Grava texto').map(({ id }) => id)).toEqual([
+      'workspace.write_file',
+    ]);
     expect(filterSkills(skills, 'discord.send')).toHaveLength(1);
-    expect(filterSkills(skills, '  desconhecida ')).toEqual([]);
+    expect(filterSkills(skills, 'inexistente')).toEqual([]);
   });
 
-  it('separa habilidades locais e integrações pelo registro recebido', () => {
-    expect(groupSkills(skills, 'local').map(({ id }) => id)).toEqual(['files.read']);
-    expect(groupSkills(skills, 'integration')).toHaveLength(2);
+  it('percorre as abas com setas e extremos do teclado', () => {
+    expect(nextSkillsTab('pessoal', 'ArrowRight')).toBe('publico');
+    expect(nextSkillsTab('publico', 'ArrowLeft')).toBe('pessoal');
+    expect(nextSkillsTab('publico', 'Home')).toBe('pessoal');
+    expect(nextSkillsTab('pessoal', 'End')).toBe('publico');
+    expect(nextSkillsTab('pessoal', 'Enter')).toBeNull();
   });
 
-  it('não permite ativar itens indisponíveis ou ainda sem configuração', () => {
-    expect(canEnableSkill(skills[0])).toBe(true);
-    expect(canEnableSkill(skills[1], false)).toBe(false);
-    expect(canEnableSkill(skills[1], true)).toBe(true);
-    expect(canEnableSkill(skills[2], true)).toBe(false);
+  it('calcula o interruptor de família sem ativar itens que exigem configuração ou estão indisponíveis', () => {
+    expect(familyEnableTarget(skills.slice(0, 2))).toBe(true);
+    expect(familyEnableTarget([skills[2]])).toBeUndefined();
+    expect(
+      familyEnableTarget([
+        { ...skills[0], status: 'unavailable', enabled: false },
+        { ...skills[2], status: 'available', configurationRequired: false },
+      ]),
+    ).toBe(true);
   });
 
-  it('define ativação por grupo somente para itens elegíveis', () => {
-    expect(groupEnableTarget(skills.slice(0, 1))).toBe(true);
-    expect(groupEnableTarget(skills.slice(1), false)).toBeUndefined();
-  });
-
-  it('envia ativação individual e por grupo aos comandos Rust com parâmetros fechados', async () => {
+  it('envia ativações individuais e por família aos comandos Rust com parâmetros fechados', async () => {
     const command = vi.fn(async (_name: string, _args?: Record<string, unknown>) => undefined);
     await setSkillEnabledCommand('files.read', true, command);
-    await setSkillGroupEnabledCommand('local', false, command);
+    await setSkillGroupEnabledCommand('arquivos', false, command);
+    await setSkillGroupEnabledCommand('local', true, command);
     expect(command.mock.calls).toEqual([
       ['set_skill_enabled', { skillId: 'files.read', enabled: true }],
-      ['set_skill_group_enabled', { category: 'local', enabled: false }],
+      ['set_skill_group_enabled', { category: 'arquivos', enabled: false }],
+      ['set_skill_group_enabled', { category: 'local', enabled: true }],
     ]);
   });
 });

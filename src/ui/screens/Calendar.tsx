@@ -227,7 +227,7 @@ export function CalendarScreen() {
         <small>
           {calendarDefault.googleAvailable
             ? 'Conexão autorizada para eventos Google.'
-            : 'Conecte Google Calendar em Habilidades > Integrações para habilitar esta opção.'}
+            : 'Conecte Google Calendar em Habilidades > Agenda e lembretes > Gerenciar para habilitar esta opção.'}
         </small>
       </section>
       <div className="calendar-toolbar">

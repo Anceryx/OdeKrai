@@ -1,32 +1,37 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import {
-  canEnableSkill,
+  familyEnableTarget,
   filterSkills,
-  groupEnableTarget,
-  groupSkills,
+  groupSkillFamilies,
+  nextSkillsTab,
   setSkillEnabledCommand,
   setSkillGroupEnabledCommand,
-  type SkillCategory,
-  type SkillStatus,
+  skillStatusLabel,
+  type CatalogFamily,
+  type CatalogSkill,
+  type SkillFamily,
+  type SkillsCatalogTab,
 } from '../core/skills-catalog';
 import { Button, PageHeader, Toggle } from './DesignSystem';
-import { RiskBadge, type RiskLevel } from './RiskBadge';
+import { Icon } from './Icon';
+import { RiskBadge } from './RiskBadge';
 import { PrivacyConfigurationSummary } from './PrivacyConfigurations';
 
-type Skill = {
-  id: string;
-  name: string;
-  description: string;
-  risk: RiskLevel;
-  resultTrust: 'local' | 'untrusted';
-  enabled: boolean;
-  morePermissive: boolean;
-  fixedBlocked: boolean;
-  category: SkillCategory;
-  status: SkillStatus;
-  configurationRequired: boolean;
+type SkillsCatalogViewProps = {
+  skills: CatalogSkill[];
+  loading?: boolean;
+  busy?: boolean;
+  error?: string;
+  initialTab?: SkillsCatalogTab;
+  initialFamily?: SkillFamily;
+  onOpenPrivacy?: () => void;
+  onFamilyToggle: (family: SkillFamily, enabled: boolean) => void;
+  onSkillToggle: (skill: CatalogSkill, enabled: boolean) => void;
+  onOverrideToggle: (skill: CatalogSkill, enabled: boolean) => void;
+  googleConnection?: ReactNode;
 };
+
 type GoogleOAuthStatus = {
   connected: boolean;
   clientId: string | null;
@@ -34,29 +39,388 @@ type GoogleOAuthStatus = {
   reauthorize: boolean;
 };
 
-export function SkillsScreen({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
-  const [skills, setSkills] = useState<Skill[]>([]);
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+const skillStatusLabels = {
+  installed: 'Ativa',
+  available: 'Desativada',
+  configuration_required: 'Não configurada',
+  unavailable: 'Indisponível',
+} as const;
+
+function statusClass(status: CatalogFamily['status']): string {
+  return `skills-family-status--${status}`;
+}
+
+export function SkillsCatalogView({
+  skills,
+  loading = false,
+  busy = false,
+  error = '',
+  initialTab = 'pessoal',
+  initialFamily,
+  onFamilyToggle,
+  onSkillToggle,
+  onOverrideToggle,
+  onOpenPrivacy,
+  googleConnection,
+}: SkillsCatalogViewProps) {
   const [query, setQuery] = useState('');
-  const [googleClientId, setGoogleClientId] = useState('');
-  const [googleClientSecret, setGoogleClientSecret] = useState('');
-  const [googleScopes, setGoogleScopes] = useState('');
+  const [tab, setTab] = useState<SkillsCatalogTab>(initialTab);
+  const [selectedFamily, setSelectedFamily] = useState<SkillFamily | null>(initialFamily ?? null);
+  const tabRefs = useRef<Record<SkillsCatalogTab, HTMLButtonElement | null>>({
+    pessoal: null,
+    publico: null,
+  });
+  const filteredSkills = filterSkills(skills, query);
+  const families = groupSkillFamilies(filteredSkills);
+  const installedFamilies = groupSkillFamilies(skills).filter((family) => family.activeCount > 0);
+  const showFamily = (family: SkillFamily) => {
+    setTab('pessoal');
+    setSelectedFamily((selected) => (selected === family ? null : family));
+  };
+
+  return (
+    <div className="page subpage skills-page skills-catalog-page">
+      <PageHeader
+        eyebrow="CAPACIDADES DO APLICATIVO"
+        title="Habilidades"
+        subtitle="Veja o que o OdeKrai pode fazer, encontre habilidades e escolha quais ficam ativas."
+      />
+
+      {error && (
+        <div className="error-banner" role="alert">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="skills-catalog-loading" role="status" aria-live="polite">
+          <span className="skills-loading-indicator" aria-hidden="true" />
+          Carregando habilidades…
+        </div>
+      ) : (
+        <>
+          <section className="skills-installed" aria-labelledby="skills-installed-heading">
+            <div className="skills-catalog-section-heading">
+              <div>
+                <p className="skills-catalog-eyebrow">ATALHOS</p>
+                <h2 id="skills-installed-heading">Instaladas</h2>
+              </div>
+              <span className="skills-installed-count">
+                {installedFamilies.length}{' '}
+                {installedFamilies.length === 1 ? 'família ativa' : 'famílias ativas'}
+              </span>
+            </div>
+            {installedFamilies.length > 0 ? (
+              <div className="skills-installed-list" aria-label="Famílias ativas">
+                {installedFamilies.map((family) => (
+                  <button
+                    className={`skills-installed-item ${selectedFamily === family.family ? 'selected' : ''}`}
+                    key={family.family}
+                    type="button"
+                    aria-label={`Abrir detalhes de ${family.name}`}
+                    aria-expanded={selectedFamily === family.family}
+                    onClick={() => showFamily(family.family)}
+                  >
+                    <Icon name={family.icon} size={18} />
+                    <span>{family.name}</span>
+                    <span className="skills-installed-item-count">{family.activeCount}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="skills-installed-empty">As famílias ativadas aparecerão aqui.</p>
+            )}
+          </section>
+
+          <div className="skills-tabs" role="tablist" aria-label="Catálogo de habilidades">
+            <button
+              id="skills-tab-personal"
+              className="skills-tab"
+              type="button"
+              role="tab"
+              aria-selected={tab === 'pessoal'}
+              aria-controls="skills-panel-personal"
+              ref={(element) => {
+                tabRefs.current.pessoal = element;
+              }}
+              onKeyDown={(event) => {
+                const next = nextSkillsTab(tab, event.key);
+                if (next) {
+                  event.preventDefault();
+                  setTab(next);
+                  tabRefs.current[next]?.focus();
+                }
+              }}
+              onClick={() => setTab('pessoal')}
+            >
+              Pessoal
+            </button>
+            <button
+              id="skills-tab-public"
+              className="skills-tab"
+              type="button"
+              role="tab"
+              aria-selected={tab === 'publico'}
+              aria-controls="skills-panel-public"
+              ref={(element) => {
+                tabRefs.current.publico = element;
+              }}
+              onKeyDown={(event) => {
+                const next = nextSkillsTab(tab, event.key);
+                if (next) {
+                  event.preventDefault();
+                  setTab(next);
+                  tabRefs.current[next]?.focus();
+                }
+              }}
+              onClick={() => setTab('publico')}
+            >
+              Público
+            </button>
+          </div>
+
+          <section
+            id="skills-panel-personal"
+            className="skills-tab-panel"
+            role="tabpanel"
+            aria-labelledby="skills-tab-personal"
+            hidden={tab !== 'pessoal'}
+            tabIndex={0}
+          >
+            <div className="skills-search-section">
+              <label htmlFor="skills-search">Procurar habilidades</label>
+              <input
+                id="skills-search"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Nome, descrição, exemplo ou família"
+              />
+              <p role="status" aria-live="polite">
+                {filteredSkills.length}{' '}
+                {filteredSkills.length === 1 ? 'habilidade encontrada' : 'habilidades encontradas'}
+              </p>
+            </div>
+
+            {families.length === 0 ? (
+              <p className="skills-empty" role="status">
+                {skills.length === 0
+                  ? 'Nenhuma habilidade está registrada nesta versão.'
+                  : 'Nenhuma habilidade corresponde à busca.'}
+              </p>
+            ) : (
+              <div className="skills-family-grid">
+                {families.map((family) => (
+                  <SkillFamilyCard
+                    key={family.family}
+                    family={family}
+                    busy={busy}
+                    expanded={selectedFamily === family.family}
+                    onExpand={() =>
+                      setSelectedFamily((selected) =>
+                        selected === family.family ? null : family.family,
+                      )
+                    }
+                    onToggle={(enabled) => onFamilyToggle(family.family, enabled)}
+                    onSkillToggle={onSkillToggle}
+                    onOverrideToggle={onOverrideToggle}
+                    googleConnection={
+                      family.family === 'agenda_lembretes' &&
+                      skills.some((skill) => skill.id.startsWith('google.calendar.'))
+                        ? googleConnection
+                        : undefined
+                    }
+                  />
+                ))}
+              </div>
+            )}
+            {onOpenPrivacy && <PrivacyConfigurationSummary onOpen={onOpenPrivacy} />}
+          </section>
+          <section
+            id="skills-panel-public"
+            className="skills-tab-panel skills-public-panel"
+            role="tabpanel"
+            aria-labelledby="skills-tab-public"
+            hidden={tab !== 'publico'}
+            tabIndex={0}
+          >
+            <div className="skills-public-empty">
+              <Icon name="connectors" size={28} />
+              <h2>Plugins públicos em breve</h2>
+              <p>O catálogo público ainda não tem plugins publicados.</p>
+            </div>
+            <div className="skills-public-sections" aria-label="Seções do catálogo público">
+              <section aria-labelledby="skills-public-popular">
+                <h3 id="skills-public-popular">Populares</h3>
+                <p>Nenhum plugin publicado.</p>
+              </section>
+              <section aria-labelledby="skills-public-new">
+                <h3 id="skills-public-new">Novidades</h3>
+                <p>Nenhum plugin publicado.</p>
+              </section>
+              <section aria-labelledby="skills-public-all">
+                <h3 id="skills-public-all">Todas as categorias</h3>
+                <p>As categorias serão exibidas quando houver plugins publicados.</p>
+              </section>
+            </div>
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
+function SkillFamilyCard({
+  family,
+  busy,
+  expanded,
+  onExpand,
+  onToggle,
+  onSkillToggle,
+  onOverrideToggle,
+  googleConnection,
+}: {
+  family: CatalogFamily;
+  busy: boolean;
+  expanded: boolean;
+  onExpand: () => void;
+  onToggle: (enabled: boolean) => void;
+  onSkillToggle: SkillsCatalogViewProps['onSkillToggle'];
+  onOverrideToggle: SkillsCatalogViewProps['onOverrideToggle'];
+  googleConnection?: ReactNode;
+}) {
+  const eligible = family.skills.filter(
+    (skill) => skill.status === 'available' || skill.status === 'installed',
+  );
+  const allEnabled = eligible.length > 0 && eligible.every((skill) => skill.enabled);
+  const target = familyEnableTarget(family.skills);
+  const detailsId = `skills-family-${family.family}-details`;
+
+  return (
+    <article className={`skills-family-card${expanded ? ' expanded' : ''}`}>
+      <div className="skills-family-card-heading">
+        <span className="skills-family-icon" aria-hidden="true">
+          <Icon name={family.icon} size={20} />
+        </span>
+        <div className="skills-family-copy">
+          <h2>{family.name}</h2>
+          <p>{family.description}</p>
+        </div>
+        <RiskBadge risk={family.highestRisk} />
+      </div>
+      <div className="skills-family-card-footer">
+        <span className={`skills-family-status ${statusClass(family.status)}`} role="status">
+          {skillStatusLabel(family.status)}
+        </span>
+        <span className="skills-family-count">
+          {family.skills.length} {family.skills.length === 1 ? 'habilidade' : 'habilidades'}
+        </span>
+      </div>
+      <div className="skills-family-actions">
+        <Button
+          variant="secondary"
+          aria-expanded={expanded}
+          aria-controls={expanded ? detailsId : undefined}
+          onClick={onExpand}
+        >
+          {expanded ? 'Fechar detalhes' : 'Gerenciar'}
+        </Button>
+        <Toggle
+          checked={allEnabled}
+          label={`${allEnabled ? 'Desativar' : 'Ativar'} todas as habilidades de ${family.name}`}
+          disabled={busy || target === undefined}
+          aria-describedby={`${detailsId}-description`}
+          onClick={() => target !== undefined && onToggle(target)}
+        />
+      </div>
+      <span className="skills-family-switch-description" id={`${detailsId}-description`}>
+        {allEnabled ? 'Desativar família' : 'Ativar família'}
+      </span>
+      {expanded && (
+        <div className="skills-family-details" id={detailsId}>
+          <h3>Habilidades desta família</h3>
+          {googleConnection}
+          {family.skills.map((skill) => (
+            <article className="skills-detail-item" key={skill.id}>
+              <div className="skills-detail-copy">
+                <div className="skills-detail-title">
+                  <h4>{skill.name}</h4>
+                  <span className={`skills-detail-status skills-detail-status--${skill.status}`}>
+                    {skillStatusLabels[skill.status]}
+                  </span>
+                  {skill.description.toLocaleLowerCase('pt-BR').includes('experimental') && (
+                    <span className="skills-experimental-badge">Experimental</span>
+                  )}
+                </div>
+                <p>{skill.description}</p>
+                {skill.examples.length > 0 && (
+                  <ul aria-label={`Exemplos para ${skill.name}`}>
+                    {skill.examples.map((example) => (
+                      <li key={example}>{example}</li>
+                    ))}
+                  </ul>
+                )}
+                <span className="skills-detail-origin">
+                  {skill.origin.kind === 'builtin'
+                    ? 'Incluída no OdeKrai'
+                    : `Servidor: ${skill.origin.server}`}
+                </span>
+              </div>
+              <div className="skills-detail-controls">
+                <Toggle
+                  checked={skill.enabled}
+                  label={`${skill.enabled ? 'Desativar' : 'Ativar'} ${skill.name}`}
+                  disabled={
+                    busy ||
+                    skill.status === 'unavailable' ||
+                    skill.status === 'configuration_required'
+                  }
+                  onClick={() => onSkillToggle(skill, !skill.enabled)}
+                />
+                {!skill.fixedBlocked && skill.status !== 'unavailable' && (
+                  <Toggle
+                    checked={skill.morePermissive}
+                    label={`${skill.morePermissive ? 'Remover' : 'Permitir'} modo mais permissivo para ${skill.name}`}
+                    disabled={busy}
+                    onClick={() => onOverrideToggle(skill, !skill.morePermissive)}
+                  />
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </article>
+  );
+}
+
+export function SkillsScreen({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
+  const [skills, setSkills] = useState<CatalogSkill[]>([]);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [googleStatus, setGoogleStatus] = useState<GoogleOAuthStatus | null>(null);
 
-  const refresh = useCallback(async () => {
-    if (!isTauri()) return;
+  const refresh = useCallback(async (silent = false) => {
+    if (!isTauri()) {
+      setError('As habilidades só podem ser carregadas no aplicativo OdeKrai.');
+      setLoading(false);
+      return;
+    }
+    if (!silent) setLoading(true);
     try {
-      const [nextSkills, nextGoogleStatus] = await Promise.all([
-        invoke<Skill[]>('get_skills'),
-        invoke<GoogleOAuthStatus>('google_oauth_status'),
-      ]);
+      const nextSkills = await invoke<CatalogSkill[]>('get_skills');
       setSkills(nextSkills);
-      setGoogleStatus(nextGoogleStatus);
-      if (nextGoogleStatus.clientId) setGoogleClientId(nextGoogleStatus.clientId);
+      if (nextSkills.some((skill) => skill.id.startsWith('google.calendar.'))) {
+        setGoogleStatus(await invoke<GoogleOAuthStatus>('google_oauth_status'));
+      } else {
+        setGoogleStatus(null);
+      }
       setError('');
     } catch (cause) {
       setError(String(cause));
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -64,294 +428,165 @@ export function SkillsScreen({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
     void refresh();
   }, [refresh]);
 
-  async function setEnabled(skill: Skill, enabled: boolean) {
+  async function runCommand(action: () => Promise<void>) {
     setBusy(true);
     try {
-      await setSkillEnabledCommand(skill.id, enabled, invoke);
-      await refresh();
+      await action();
+      await refresh(true);
     } catch (cause) {
       setError(String(cause));
     } finally {
       setBusy(false);
     }
-  }
-
-  async function setGroupEnabled(category: SkillCategory) {
-    const members = groupSkills(skills, category);
-    const target = groupEnableTarget(members, true);
-    if (target === undefined) return;
-    setBusy(true);
-    try {
-      await setSkillGroupEnabledCommand(category, target, invoke);
-      await refresh();
-    } catch (cause) {
-      setError(String(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function setOverride(skill: Skill, morePermissive: boolean) {
-    setBusy(true);
-    try {
-      await invoke('set_tool_override', { tool: skill.id, morePermissive });
-      await refresh();
-    } catch (cause) {
-      setError(String(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const filteredSkills = filterSkills(skills, query);
-  const localSkills = groupSkills(filteredSkills, 'local');
-  const integrationSkills = groupSkills(filteredSkills, 'integration');
-  const statusLabels: Record<SkillStatus, string> = {
-    installed: 'INSTALADO',
-    available: 'DISPONÍVEL',
-    configuration_required: 'REQUER CONFIGURAÇÃO',
-    unavailable: 'INDISPONÍVEL',
-  };
-
-  function renderGroup(category: SkillCategory, items: Skill[]) {
-    if (query.trim() && items.length === 0) return null;
-    const allMembers = groupSkills(skills, category);
-    const configured = !allMembers.some((skill) => skill.status === 'configuration_required');
-    const target = groupEnableTarget(allMembers, configured);
-    return (
-      <section
-        className="settings-section skills-catalog-group"
-        aria-labelledby={`skills-${category}-heading`}
-      >
-        <div className="section-heading-row">
-          <div>
-            <h2 id={`skills-${category}-heading`}>
-              {category === 'local' ? 'Habilidades locais' : 'Integrações'}
-            </h2>
-            <p>
-              {category === 'local'
-                ? 'Arquivos, sistema, agenda, lembretes, memória, áudio e mídia neste computador.'
-                : 'Serviços externos disponíveis no registro do aplicativo. Integrações novas exigem atualização do OdeKrai.'}
-            </p>
-          </div>
-          <Button
-            variant="secondary"
-            disabled={busy || !isTauri() || target === undefined || items.length === 0}
-            aria-label={`${target ? 'Ativar' : 'Desativar'} todas as ${category === 'local' ? 'habilidades locais' : 'integrações disponíveis'}`}
-            onClick={() => void setGroupEnabled(category)}
-          >
-            {target ? 'Ativar todas do grupo' : 'Desativar grupo'}
-          </Button>
-        </div>
-        {items.length === 0 ? (
-          <p className="skills-empty">Nenhuma capacidade corresponde à pesquisa.</p>
-        ) : (
-          items.map((skill) => (
-            <article className="skill-card" key={skill.id}>
-              <div>
-                <div className="skill-title-row">
-                  <h3>{skill.name}</h3>
-                  <span className={`skill-status skill-status--${skill.status}`}>
-                    {statusLabels[skill.status]}
-                  </span>
-                </div>
-                <p>{skill.description}</p>
-                <RiskBadge risk={skill.risk} />
-              </div>
-              <div className="skill-switch">
-                <label htmlFor={`skill-${skill.id}`}>Ativar capacidade</label>
-                <Toggle
-                  id={`skill-${skill.id}`}
-                  checked={skill.enabled}
-                  label={`Ativar ${skill.name}`}
-                  disabled={
-                    busy ||
-                    !isTauri() ||
-                    !canEnableSkill(skill, skill.status !== 'configuration_required')
-                  }
-                  onClick={() => void setEnabled(skill, !skill.enabled)}
-                />
-              </div>
-              <details className="skill-advanced">
-                <summary>Detalhes avançados e permissões</summary>
-                <p>
-                  Identificador: <code>{skill.id}</code>. Resultados externos podem conter
-                  instruções maliciosas e são tratados como dados, nunca como autorização.
-                </p>
-                {!skill.fixedBlocked && skill.status !== 'unavailable' && (
-                  <div className="skill-switch">
-                    <label htmlFor={`override-${skill.id}`}>
-                      Permitir modo mais permissivo para esta ferramenta
-                    </label>
-                    <Toggle
-                      id={`override-${skill.id}`}
-                      checked={skill.morePermissive}
-                      label={`Permitir modo mais permissivo para ${skill.name}`}
-                      disabled={busy || !isTauri()}
-                      onClick={() => void setOverride(skill, !skill.morePermissive)}
-                    />
-                  </div>
-                )}
-                {skill.status === 'unavailable' && (
-                  <p>
-                    Esta entrada existe apenas para informar que a capacidade não está implementada
-                    e não pode ser ativada.
-                  </p>
-                )}
-              </details>
-            </article>
-          ))
-        )}
-      </section>
-    );
   }
 
   return (
-    <div className="page subpage skills-page">
-      <PageHeader
-        eyebrow="CAPACIDADES DO APLICATIVO"
-        title="Habilidades"
-        subtitle="Pesquise as capacidades disponíveis, confira o que fazem e escolha quais podem ser usadas pelo assistente."
-      />
-      {error && (
-        <div className="error-banner" role="alert">
-          {error}
+    <SkillsCatalogView
+      skills={skills}
+      loading={loading}
+      busy={busy}
+      error={error}
+      onOpenPrivacy={onOpenPrivacy}
+      googleConnection={
+        googleStatus ? (
+          <GoogleCalendarConnection
+            status={googleStatus}
+            onStatusChange={setGoogleStatus}
+            onError={setError}
+          />
+        ) : undefined
+      }
+      onFamilyToggle={(family, enabled) =>
+        void runCommand(() => setSkillGroupEnabledCommand(family, enabled, invoke))
+      }
+      onSkillToggle={(skill, enabled) =>
+        void runCommand(() => setSkillEnabledCommand(skill.id, enabled, invoke))
+      }
+      onOverrideToggle={(skill, enabled) =>
+        void runCommand(async () => {
+          await invoke('set_tool_override', { tool: skill.id, morePermissive: enabled });
+        })
+      }
+    />
+  );
+}
+
+function GoogleCalendarConnection({
+  status,
+  onStatusChange,
+  onError,
+}: {
+  status: GoogleOAuthStatus;
+  onStatusChange: (status: GoogleOAuthStatus) => void;
+  onError: (message: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [clientId, setClientId] = useState(status.clientId ?? '');
+  const [clientSecret, setClientSecret] = useState('');
+  const [scopes, setScopes] = useState('');
+
+  return (
+    <section className="skills-google-connection" aria-labelledby="skills-google-heading">
+      <div className="skills-google-heading">
+        <div>
+          <h4 id="skills-google-heading">Conexão com o Google</h4>
+          <p>Necessária para usar as habilidades do Google Calendar.</p>
+        </div>
+        <span
+          className={`skills-family-status ${status.connected ? 'skills-family-status--active' : 'skills-family-status--configuration_required'}`}
+          role="status"
+        >
+          {status.connected ? 'Conectado' : 'Desconectado'}
+        </span>
+      </div>
+      {status.connected ? (
+        <p className="skills-google-scopes">
+          Identificador: <code>{status.clientId}</code>
+          <br />
+          Acessos autorizados: {status.scopes.join(', ')}
+        </p>
+      ) : (
+        <div className="skills-google-fields">
+          <label htmlFor="google-client-id">Identificador do cliente Google</label>
+          <input
+            id="google-client-id"
+            value={clientId}
+            onChange={(event) => setClientId(event.target.value)}
+            autoComplete="off"
+          />
+          <label htmlFor="google-client-secret">Chave opcional do cliente Google</label>
+          <input
+            id="google-client-secret"
+            type="password"
+            value={clientSecret}
+            onChange={(event) => setClientSecret(event.target.value)}
+            autoComplete="new-password"
+          />
+          <label htmlFor="google-oauth-scopes">
+            Acessos solicitados pelo recurso que você vai usar
+          </label>
+          <input
+            id="google-oauth-scopes"
+            value={scopes}
+            onChange={(event) => setScopes(event.target.value)}
+            placeholder="https://www.googleapis.com/auth/calendar.events.owned"
+          />
+          <p>
+            Para a Agenda Google, informe somente
+            https://www.googleapis.com/auth/calendar.events.owned. Aplicativos de computador não
+            conseguem manter uma chave de cliente em segredo.
+          </p>
+          <Button
+            disabled={busy || !isTauri() || !clientId.trim() || !scopes.trim()}
+            onClick={() => {
+              setBusy(true);
+              void invoke<GoogleOAuthStatus>('google_oauth_connect', {
+                clientId,
+                clientSecret: clientSecret || null,
+                scopes: scopes.trim().split(/\s+/),
+              })
+                .then((nextStatus) => {
+                  onStatusChange(nextStatus);
+                  setClientSecret('');
+                })
+                .catch((cause) => onError(String(cause)))
+                .finally(() => setBusy(false));
+            }}
+          >
+            Conectar conta Google
+          </Button>
         </div>
       )}
-      <section className="settings-section skills-search-section">
-        <label htmlFor="skills-search">Pesquisar capacidades</label>
-        <input
-          id="skills-search"
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Ex.: agenda, arquivos, Discord"
-        />
-        <p role="status" aria-live="polite">
-          {filteredSkills.length} capacidades encontradas
-        </p>
-        <p>
-          INSTALADO está ativo para o assistente; DISPONÍVEL existe no aplicativo e pode ser
-          ativado; REQUER CONFIGURAÇÃO depende de concluir o assistente da integração; INDISPONÍVEL
-          não pode ser ativado nesta versão.
-        </p>
-      </section>
-      {filteredSkills.length === 0 && query.trim() ? (
-        <p className="skills-empty" role="status">
-          Nenhuma capacidade corresponde à pesquisa.
-        </p>
-      ) : null}
-      {!query.trim() && (
-        <section className="settings-section" aria-labelledby="google-oauth-heading">
-          <div className="section-heading-row">
-            <div>
-              <h2 id="google-oauth-heading">Conexão com o Google</h2>
-              <p>Conecte sua conta para os recursos que precisam acessar serviços do Google.</p>
-            </div>
-            <span
-              className={`skill-status ${googleStatus?.connected ? 'skill-status--installed' : 'skill-status--configuration_required'}`}
-              role="status"
-            >
-              {googleStatus?.connected ? 'CONECTADO' : 'DESCONECTADO'}
-            </span>
-          </div>
-          {googleStatus?.connected && (
-            <p>
-              Client ID: <code>{googleStatus.clientId}</code>
-              <br />
-              Escopos autorizados: {googleStatus.scopes.join(', ')}
-            </p>
-          )}
-          {!googleStatus?.connected && (
-            <>
-              <label htmlFor="google-client-id">Identificador do cliente Google</label>
-              <input
-                id="google-client-id"
-                value={googleClientId}
-                onChange={(event) => setGoogleClientId(event.target.value)}
-                autoComplete="off"
-              />
-              <label htmlFor="google-client-secret">Chave opcional do cliente Google</label>
-              <input
-                id="google-client-secret"
-                type="password"
-                value={googleClientSecret}
-                onChange={(event) => setGoogleClientSecret(event.target.value)}
-                autoComplete="new-password"
-              />
-              <label htmlFor="google-oauth-scopes">
-                Acessos solicitados pelo recurso que você vai usar
-              </label>
-              <input
-                id="google-oauth-scopes"
-                value={googleScopes}
-                onChange={(event) => setGoogleScopes(event.target.value)}
-                placeholder="https://www.googleapis.com/auth/calendar.events.owned"
-              />
-              <p>
-                Para a Agenda Google, informe apenas
-                https://www.googleapis.com/auth/calendar.events.owned. Aplicativos de computador não
-                conseguem manter uma chave de cliente em segredo.
-              </p>
-              <Button
-                disabled={busy || !isTauri() || !googleClientId.trim() || !googleScopes.trim()}
-                onClick={() => {
-                  setBusy(true);
-                  void invoke<GoogleOAuthStatus>('google_oauth_connect', {
-                    clientId: googleClientId,
-                    clientSecret: googleClientSecret || null,
-                    scopes: googleScopes.trim().split(/\s+/),
-                  })
-                    .then((status) => {
-                      setGoogleStatus(status);
-                      setGoogleClientSecret('');
-                    })
-                    .catch((cause) => setError(String(cause)))
-                    .finally(() => setBusy(false));
-                }}
-              >
-                Conectar conta Google
-              </Button>
-            </>
-          )}
-          {googleStatus?.connected && (
-            <Button
-              variant="secondary"
-              disabled={busy || !isTauri()}
-              onClick={() => {
-                setBusy(true);
-                void invoke('google_oauth_disconnect')
-                  .then(() => {
-                    setGoogleStatus({
-                      connected: false,
-                      clientId: null,
-                      scopes: [],
-                      reauthorize: false,
-                    });
-                    setGoogleClientSecret('');
-                  })
-                  .catch(async (cause) => {
-                    setError(String(cause));
-                    const status = await invoke<GoogleOAuthStatus>('google_oauth_status');
-                    setGoogleStatus(status);
-                  })
-                  .finally(() => setBusy(false));
-              }}
-            >
-              Desconectar
-            </Button>
-          )}
-        </section>
+      {status.connected && (
+        <Button
+          variant="secondary"
+          disabled={busy || !isTauri()}
+          onClick={() => {
+            setBusy(true);
+            void invoke('google_oauth_disconnect')
+              .then(() => {
+                onStatusChange({
+                  connected: false,
+                  clientId: null,
+                  scopes: [],
+                  reauthorize: false,
+                });
+                setClientSecret('');
+              })
+              .catch(async (cause) => {
+                onError(String(cause));
+                try {
+                  onStatusChange(await invoke<GoogleOAuthStatus>('google_oauth_status'));
+                } catch {
+                  // Mantém o último estado conhecido se a leitura também falhar.
+                }
+              })
+              .finally(() => setBusy(false));
+          }}
+        >
+          Desconectar
+        </Button>
       )}
-      {renderGroup('local', localSkills)}
-      {!query.trim() && (
-        <p className="skills-empty">
-          Captura de tela: indisponível nesta versão; não há ferramenta registrada para essa
-          capacidade.
-        </p>
-      )}
-      {renderGroup('integration', integrationSkills)}
-      <PrivacyConfigurationSummary onOpen={onOpenPrivacy} />
-    </div>
+    </section>
   );
 }

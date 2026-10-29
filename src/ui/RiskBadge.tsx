@@ -7,13 +7,9 @@ import {
   Warning,
   type Icon as PhosphorIcon,
 } from '@phosphor-icons/react';
+import type { SkillRisk } from '../core/skills-catalog';
 
-export type RiskLevel =
-  | 'leitura'
-  | 'escrita_reversivel'
-  | 'comunicacao_externa'
-  | 'destrutivo_financeiro'
-  | 'execucao_de_codigo';
+export type RiskLevel = SkillRisk;
 
 const risks: Record<RiskLevel, { label: string; icon: PhosphorIcon }> = {
   leitura: { label: 'Leitura', icon: Eye },
