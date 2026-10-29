@@ -76,19 +76,15 @@ select:focus-visible {
 .sidebar-collapsed {
   padding: 12px 8px;
 }
-.sidebar-collapsed .profile-card {
+.sidebar-collapsed .sidebar-profile-trigger {
   justify-content: center;
   padding: 8px 4px;
-  margin-bottom: 18px;
 }
-.sidebar-collapsed .profile-copy {
+.sidebar-collapsed .sidebar-profile-trigger .profile-copy {
   display: none;
 }
 .nav-list-compact {
   gap: 12px;
-}
-.nav-list-compact .nav-group {
-  gap: 5px;
 }
 .nav-list-compact .nav-item {
   position: relative;
@@ -134,7 +130,7 @@ select:focus-visible {
   background: #ffffff06;
   border: 1px solid var(--line);
   border-radius: 9px;
-  margin-bottom: 26px;
+  margin: 0;
   width: 100%;
   color: inherit;
   text-align: left;
@@ -329,24 +325,21 @@ select:focus-visible {
 .nav-list {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-bottom: 12px;
 }
-.nav-group {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.nav-heading,
 .eyebrow {
   font: 10px var(--font-sans);
   letter-spacing: 1.2px;
   color: #a0a0a8;
 }
-.nav-heading {
-  padding: 0 9px 8px;
-}
 .nav-item {
-  height: 36px;
+  height: 40px;
+  min-height: 40px;
   border: 0;
   background: transparent;
   text-align: left;
@@ -385,6 +378,83 @@ select:focus-visible {
   flex: 0 0 20px;
   color: #92929a;
 }
+.sidebar-profile-footer {
+  position: relative;
+  flex: 0 0 auto;
+  margin-top: auto;
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: 12px;
+}
+.sidebar-profile-trigger {
+  min-height: 48px;
+  margin: 0;
+}
+.sidebar-profile-popover {
+  position: absolute;
+  z-index: 60;
+  bottom: calc(100% + 8px);
+  left: 0;
+  display: grid;
+  width: min(270px, calc(100vw - 24px));
+  gap: 3px;
+  padding: 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
+}
+.sidebar-profile-popover button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+}
+.sidebar-profile-popover button:hover,
+.sidebar-profile-popover button:focus-visible {
+  background: var(--color-surface);
+}
+.sidebar-collapsed .sidebar-profile-popover {
+  bottom: 0;
+  left: calc(100% + 8px);
+}
+.pending-approval-indicator,
+.stop-all-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.pending-approval-indicator {
+  border-color: var(--color-warning);
+  background: var(--color-warning-surface);
+  color: var(--color-warning);
+}
+.pending-approval-indicator > span:first-child {
+  display: grid;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 50%;
+  background: currentColor;
+  color: var(--color-surface);
+  font-size: 11px;
+  font-weight: 700;
+}
+.stop-all-button {
+  border-color: var(--color-danger);
+  background: var(--color-danger-surface);
+  color: var(--color-danger);
+}
 .active .nav-icon {
   color: #fdba74;
 }
@@ -394,6 +464,9 @@ select:focus-visible {
   border-radius: 50%;
   background: #55555b;
   margin-left: auto;
+}
+.nav-status.configured {
+  background: var(--color-success);
 }
 .user-row {
   display: flex;
@@ -2560,6 +2633,35 @@ html.island-window-html {
     width: 190px;
     padding-left: 10px;
     padding-right: 10px;
+  }
+  .topbar {
+    gap: 8px;
+    padding: 0 14px;
+  }
+  .breadcrumbs {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 6px;
+  }
+  .breadcrumbs strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .top-actions {
+    flex: 0 0 auto;
+    gap: 6px;
+  }
+  .provider-chip {
+    max-width: 120px;
+    padding: 6px 8px;
+  }
+  .pending-approval-indicator > span:last-child {
+    display: none;
+  }
+  .pending-approval-indicator,
+  .stop-all-button {
+    padding: 5px 8px;
   }
   .page {
     padding-left: 22px;

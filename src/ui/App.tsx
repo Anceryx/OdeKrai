@@ -70,11 +70,16 @@ const ActivityScreen = lazy(() =>
     default: withScreenBoundary(module.ActivityScreen),
   })),
 );
-import { initials } from './Profile';
 import { ApprovalWindow, isApprovalWindow } from './SecurityCenter';
 import { SkillsScreen } from './SkillsScreen';
 import { PETS } from '../core/pets';
-import { navigationItems, SidebarNavigation } from './SidebarNavigation';
+import {
+  navigationItems,
+  PendingApprovalIndicator,
+  SidebarNavigation,
+  SidebarProfileMenu,
+  shouldShowStopAll,
+} from './SidebarNavigation';
 import {
   loadSavedCredentialProviderIds,
   setPrimaryProviderSettings,
@@ -127,6 +132,7 @@ function MainApp() {
   const [agentErrorDetails, setAgentErrorDetails] = useState('');
   const [agentAwaitingApproval, setAgentAwaitingApproval] = useState(false);
   const [agentActionCards, setAgentActionCards] = useState<AgentActionCardData[]>([]);
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
   const agentRunConversation = useRef<string | null>(null);
   const thinkingSoundGate = useRef(new SoundTriggerGate());
   const lastThinkingSoundKey = useRef<string | null>(null);
@@ -286,6 +292,30 @@ function MainApp() {
       unlisten?.();
     };
   }, [setDraft, setMessages, navigate, setSettings, setConversationId, setToast]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    const refresh = () => {
+      void invoke<number>('get_pending_approval_count')
+        .then((count) => {
+          if (!disposed) setPendingApprovalCount(count);
+        })
+        .catch(() => undefined);
+    };
+    void listen('approval-updated', refresh).then((stop) => {
+      if (disposed) stop();
+      else {
+        unlisten = stop;
+        refresh();
+      }
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   async function choosePet(petId: string) {
     if (!PETS.some((pet) => pet.id === petId)) return;
@@ -747,6 +777,15 @@ function MainApp() {
     if (request.current) void invoke('cancel_provider_request', { requestId: request.current });
   }
 
+  async function stopAll() {
+    stopLocalSpeech();
+    try {
+      await invoke('halt_all');
+    } catch {
+      setToast('Não foi possível parar as ações.');
+    }
+  }
+
   async function deleteConversation(id: string) {
     if (busy || !window.confirm('Apagar esta conversa e suas mensagens?')) return;
     try {
@@ -829,26 +868,6 @@ function MainApp() {
         className={`sidebar ${settings.layout.sidebarCollapsed ? 'sidebar-collapsed' : ''}`}
         style={{ width: settings.layout.sidebarCollapsed ? 72 : settings.layout.sidebarWidth }}
       >
-        <button
-          className="profile-card"
-          onClick={() => {
-            navigate('agent');
-            setChatMode(false);
-          }}
-        >
-          <div className="avatar-small">
-            {profile.avatarDataUrl ? (
-              <img src={profile.avatarDataUrl} alt="" />
-            ) : (
-              initials(profile.displayName)
-            )}
-            <span className="online-dot" />
-          </div>
-          <div className="profile-copy">
-            <strong>{profile.displayName || 'Seu perfil'}</strong>
-            <span>{profile.nickname || 'Editar perfil'}</span>
-          </div>
-        </button>
         <SidebarNavigation
           section={section}
           onSelectSection={navigate}
@@ -870,6 +889,15 @@ function MainApp() {
             }
           />
         )}
+        <SidebarProfileMenu
+          profile={profile}
+          compact={settings.layout.sidebarCollapsed}
+          onMyProfile={() => navigate('agent')}
+          onSettings={() => navigate('settings')}
+          onPermissions={() => navigate('permissions')}
+          onHelp={() => void openResponseLink('https://github.com/Anceryx/OdeKrai/tree/main/docs')}
+          onAbout={() => selectSettingsSection('sobre')}
+        />
       </aside>
 
       <main className="main-area">
@@ -901,6 +929,15 @@ function MainApp() {
             </strong>
           </div>
           <div className="top-actions">
+            <PendingApprovalIndicator
+              count={pendingApprovalCount}
+              onOpen={() => navigate('activity')}
+            />
+            {shouldShowStopAll(busy, agentRunning) && (
+              <button type="button" className="stop-all-button" onClick={() => void stopAll()}>
+                Parar tudo
+              </button>
+            )}
             <button
               type="button"
               className="provider-chip"
@@ -936,12 +973,6 @@ function MainApp() {
                 CONTROLE TOTAL
               </button>
             )}
-            <button
-              className="help-button"
-              onClick={() => setToast('Central de ajuda ainda em desenvolvimento.')}
-            >
-              Ajuda
-            </button>
           </div>
         </header>
         {diagnostics.length > 0 && (
