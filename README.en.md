@@ -14,6 +14,7 @@ OdeKrai chats with the AI provider you configure and can run skills on your comp
 - **A named mascot:** 12 characters with animations and Island and Free modes.
 - **Local calendar:** organize events by day and month, set recurrence, and import or export `.ics` files.
 - **Local skills:** the agent can run actions registered by the app, subject to Rust-enforced permissions.
+- **Google Calendar:** connect your primary calendar under Skills > Integrations to view and manage events, with approval for changes. See [setup and scopes](docs/GOOGLE-CALENDAR.md).
 - **You stay in control:** permission modes, approvals, activity records, and a kill switch.
 - **Local settings:** provider credentials are stored by Rust in Windows Credential Manager.
 
@@ -29,7 +30,7 @@ Conversations are kept in local SQLite history. To generate a reply, submitted c
 
 ### Agent and skills
 
-Turn on agent mode in a conversation to let the model request skills registered in Rust. Available skills include reading and organizing files in allowed folders; creating, listing, and updating local calendar events, deleting them with approval, or creating events in a selected `.ics` file; creating Markdown, text, and CSV files; opening links, files, and Windows settings; notifications, clipboard, system information, volume, and media controls; email drafts; approved Discord webhook messages; reading web pages; and code delegation to Codex CLI or Claude Code.
+Turn on agent mode in a conversation to let the model request skills registered in Rust. Available skills include reading and organizing files in allowed folders; creating, listing, and updating local calendar events, deleting them with approval, or creating events in a selected `.ics` file; viewing and managing Google Calendar events, with approval for changes; creating Markdown, text, and CSV files; opening links, files, and Windows settings; notifications, clipboard, system information, volume, and media controls; email drafts; approved Discord webhook messages; reading web pages; and code delegation to Codex CLI or Claude Code.
 
 Skills start disabled and can be enabled on the Skills screen. Results from external content are treated as untrusted, and actions with side effects may require approval under the policy enforced by Rust.
 
