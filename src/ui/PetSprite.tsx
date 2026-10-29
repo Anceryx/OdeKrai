@@ -12,6 +12,7 @@ import {
   type PetAnimationState,
 } from '../core/pets';
 import { Icon, type IconName } from './Icon';
+import { canAnimateIdle, idleCue, idleCueDelay, type IdleCue } from '../core/idle-motion';
 
 export function PetSprite({
   estado,
@@ -33,6 +34,7 @@ export function PetSprite({
   const [storedPetId, setStoredPetId] = useState(DEFAULT_PET_ID);
   const [imageFailed, setImageFailed] = useState(false);
   const [sheetFailed, setSheetFailed] = useState(false);
+  const [idleCueState, setIdleCueState] = useState<IdleCue | null>(null);
   const [visualState, setVisualState] = useState(estado);
   const [documentVisible, setDocumentVisible] = useState(
     () => typeof document === 'undefined' || document.visibilityState === 'visible',
@@ -84,6 +86,42 @@ export function PetSprite({
   const pet = PETS.find((entry) => entry.id === selected);
   const accessibleDescription = pet?.altText ?? 'Mascote do OdeKrai';
   const motionDisabled = petMotionDisabled(reduceMotion, prefersReducedMotion);
+  const isIslandPet = className.split(/\s+/).includes('island-mascot-renderer');
+  useEffect(() => {
+    if (
+      !canAnimateIdle({
+        enabled: isIslandPet && !motionDisabled,
+        visible: documentVisible,
+        idle: estado === 'idle',
+      })
+    ) {
+      setIdleCueState(null);
+      return;
+    }
+    let cueTimer = 0;
+    let resetTimer = 0;
+    let active = true;
+    const scheduleCue = () => {
+      cueTimer = window.setTimeout(() => {
+        if (!active) return;
+        const cue = idleCue(Math.random());
+        setIdleCueState(cue);
+        resetTimer = window.setTimeout(
+          () => {
+            setIdleCueState(null);
+            scheduleCue();
+          },
+          cue === 'blink' ? 140 : 280,
+        );
+      }, idleCueDelay(Math.random()));
+    };
+    scheduleCue();
+    return () => {
+      active = false;
+      window.clearTimeout(cueTimer);
+      window.clearTimeout(resetTimer);
+    };
+  }, [className, documentVisible, estado, motionDisabled]);
   const sheet = avatar || staticImage ? null : petAnimationSheet(selected, visualState);
   useEffect(() => {
     setImageFailed(false);
@@ -93,7 +131,7 @@ export function PetSprite({
   const visualMode = petVisualMode(Boolean(sheet && !sheetFailed), Boolean(image));
   return (
     <span
-      className={`pet-sprite pet-state-${visualState} ${motionDisabled ? 'pet-reduce-motion' : ''} ${!documentVisible ? 'pet-hidden' : ''} ${avatar ? 'pet-avatar' : ''} ${className}`.trim()}
+      className={`pet-sprite pet-state-${visualState} ${idleCueState ? `pet-idle-${idleCueState}` : ''} ${motionDisabled ? 'pet-reduce-motion' : ''} ${!documentVisible ? 'pet-hidden' : ''} ${avatar ? 'pet-avatar' : ''} ${className}`.trim()}
       role="img"
       aria-label={avatar ? `Avatar do OdeKrai: ${accessibleDescription}` : accessibleDescription}
       title={accessibleDescription}
@@ -113,7 +151,7 @@ export function PetSprite({
                 '--pet-duration': `${sheet.frames / sheet.fps}s`,
                 '--pet-last-frame': `-${((sheet.frames - 1) / sheet.frames) * 100}%`,
                 width: `${sheet.frames * 100}%`,
-                animationPlayState: documentVisible ? 'running' : 'paused',
+                animationPlayState: documentVisible && !motionDisabled ? 'running' : 'paused',
               } as CSSProperties
             }
             onAnimationEnd={() => {

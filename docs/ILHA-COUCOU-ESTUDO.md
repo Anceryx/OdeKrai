@@ -77,6 +77,8 @@ Em 2026-10-29, o plano passou à execução em passos pequenos. A janela usa tra
 
 Arquivos da fila: `src-tauri/src/pet_alerts.rs` (implementação própria), `src-tauri/src/security/dispatch.rs` (vínculo com aprovações), `src-tauri/src/security/kill_switch.rs` (estado pausado), `src-tauri/src/reminders.rs` (notificação local), `src-tauri/src/lib.rs` (estado e comandos), `src/core/island.ts` e `src/ui/IslandWindow.tsx` (apresentação), além de `src/ui/styles.css`. Nenhum código Coucou foi copiado nesta fila.
 
-Próxima etapa: adicionar animações esparsas de olhar e piscar sobre a apresentação dos sprites existentes. Timers deverão existir somente com janela/documento visível, estado idle e movimento permitido; serão cancelados ao sair dessas condições. Não serão adicionados assets, loops contínuos, polling ou rede.
+As animações esparsas foram implementadas em `src/ui/PetSprite.tsx`, `src/core/idle-motion.ts` e `src/ui/styles.css`: a cada 4,5–8,5 segundos, o sprite recebe uma microtransformação de piscar ou olhar. O timer só existe para o pet da ilha visível, em idle, e com movimento permitido; ao sair dessas condições ele é cancelado. Movimento reduzido pausa também a folha animada. Não foram adicionados assets, loops contínuos, polling ou rede.
+
+CPU e memória não foram medidas em execução no Windows. O desenho limita trabalho adicional a timers esparsos e transforms, sem criar canvas, janela ou WebView. O ciclo de quadros idle já existente permanece; redução de movimento o pausa.
 
 Validação automatizada cobre fila limitada/prioridade/deduplicação, sincronização do snapshot e geometria. Foco real, vários monitores, DPI misto, fechar/reabrir e medição de CPU/memória em Windows continuam pendentes de validação visual/nativa.

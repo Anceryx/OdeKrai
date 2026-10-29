@@ -4365,6 +4365,29 @@ html.island-window-html {
   inset: 0;
   overflow: hidden;
   pointer-events: none;
+  transition: transform 180ms ease-out;
+}
+.pet-idle-gaze-left .pet-sheet-viewport,
+.pet-idle-gaze-left .pet-image,
+.pet-idle-gaze-left .pet-fallback {
+  transform: translateX(-1.2%);
+}
+.pet-idle-gaze-right .pet-sheet-viewport,
+.pet-idle-gaze-right .pet-image,
+.pet-idle-gaze-right .pet-fallback {
+  transform: translateX(1.2%);
+}
+.pet-idle-blink .pet-sheet-viewport,
+.pet-idle-blink .pet-image,
+.pet-idle-blink .pet-fallback {
+  transform: scaleY(0.97);
+  transition-duration: 100ms;
+}
+.pet-reduce-motion .pet-sheet-viewport,
+.pet-reduce-motion .pet-image,
+.pet-reduce-motion .pet-fallback {
+  transform: none !important;
+  transition: none !important;
 }
 .pet-sheet {
   position: absolute;
