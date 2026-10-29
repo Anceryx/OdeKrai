@@ -2,7 +2,11 @@
 
 ## Código
 
-Nenhum código-fonte do Coucou foi copiado para o repositório. Foram estudados os módulos Windows de FSM (`windows/src/island/fsm.ts`), ilha (`island.ts` e `island.rs`), desktop (`desktop.ts` e `desktop.rs`), animação, layout e áudio (`sound.ts`). A consulta ao arquivo `sounds.rs` não foi concluída por falha de recuperação da fonte. A FSM e o carregador de áudio do Odekrai foram escritos para os contratos próprios do projeto. Referência: [Louis-CFM/coucou](https://github.com/Louis-CFM/coucou), sob licença MIT. Como nenhum arquivo de origem foi incorporado, não há trecho MIT a redistribuir nesta alteração.
+### Coucou — estudo, sem código incorporado
+
+Referência examinada: [Louis-CFM/coucou](https://github.com/Louis-CFM/coucou), clone local `C:\Users\Daniel oliveira\Documents\Projetos Olivera\coucou\coucou`, tag `windows-v0.5.3`, commit `47d1c2da12bf1dce8fb28b825757d497c1e1d88d`. A licença MIT (`LICENSE`, copyright Louis Raillé, 2026) abrange o código-fonte. `LICENSE-ASSETS.md` reserva os nomes Coucou e Mochi, o personagem, ícones, sons e imagens/GIFs/vídeos. Esses nomes, personagem, ícones, sons e mídias não podem ser copiados para OdeKrai.
+
+Esta alteração contém apenas estudo e plano em `docs/ILHA-COUCOU-ESTUDO.md`; nenhum código Coucou foi adaptado e nenhum asset foi usado. Portanto, não se declara aqui material MIT incorporado. Se uma mudança futura adaptar código, incluir no mesmo commit dessa adaptação o aviso de copyright e a licença MIT aplicáveis, identificando origem, revisão e arquivos efetivamente derivados.
 
 ## Áudio e artes
 
