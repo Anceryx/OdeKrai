@@ -1,3 +1,6 @@
+// A animação direcional da janela usa uma abordagem inspirada na ilha Windows
+// de Coucou; geometria reimplementada para os contratos nativos do OdeKrai.
+// Referência MIT: Louis-CFM/coucou, windows-v0.5.3, © Louis Raillé, 2026.
 use pet_position::{fit_size, WindowPosition, WindowSize};
 use std::{
     fs,
@@ -292,6 +295,8 @@ struct PetPositionStore {
     saved: Mutex<Option<pet_position::PersistedPetPosition>>,
     last_write: Mutex<Option<Instant>>,
     expected_move: Mutex<Option<WindowPosition>>,
+    transitioning: AtomicBool,
+    visibility_transition: tokio::sync::Mutex<()>,
 }
 
 const PET_POSITION_FILE: &str = "pet-position.json";
@@ -389,6 +394,55 @@ fn window_size_logical(window: &WebviewWindow) -> Result<WindowSize, String> {
         width: size.width as f64 / scale,
         height: size.height as f64 / scale,
     })
+}
+
+fn pet_window_transition_positions(
+    window: &WebviewWindow,
+) -> Result<(WindowPosition, WindowPosition, f64), String> {
+    let monitor = window
+        .current_monitor()
+        .map_err(|error| error.to_string())?
+        .or_else(|| window.primary_monitor().ok().flatten())
+        .ok_or("Não foi possível localizar o monitor do pet.")?;
+    let scale = window.scale_factor().map_err(|error| error.to_string())?;
+    let physical = window.outer_position().map_err(|error| error.to_string())?;
+    let position = WindowPosition {
+        x: physical.x as f64 / scale,
+        y: physical.y as f64 / scale,
+    };
+    let size = window_size_logical(window)?;
+    let edge = pet_position::nearest_edge(position, size, monitor_work_area(&monitor));
+    let outside = pet_position::outside_edge_position(position, size, edge);
+    Ok((position, outside, scale))
+}
+
+async fn animate_pet_window(
+    app: &tauri::AppHandle,
+    window: &WebviewWindow,
+    start: WindowPosition,
+    end: WindowPosition,
+    scale: f64,
+) -> Result<(), String> {
+    const STEPS: u32 = 12;
+    const STEP_DURATION: Duration = Duration::from_millis(16);
+    if let Some(store) = app.try_state::<PetPositionStore>() {
+        store.transitioning.store(true, Ordering::SeqCst);
+    }
+    let result = async {
+        for step in 1..=STEPS {
+            tokio::time::sleep(STEP_DURATION).await;
+            let position =
+                pet_position::transition_position(start, end, step as f64 / STEPS as f64);
+            set_physical_position_expected(window, app, position, scale)?;
+        }
+        Ok(())
+    }
+    .await;
+    tokio::time::sleep(STEP_DURATION).await;
+    if let Some(store) = app.try_state::<PetPositionStore>() {
+        store.transitioning.store(false, Ordering::SeqCst);
+    }
+    result
 }
 
 fn saved_position_for_monitor(
@@ -624,6 +678,12 @@ async fn ensure_pet_window(app: &tauri::AppHandle) -> Result<WebviewWindow, Stri
             if !moved_window.is_visible().unwrap_or(false) {
                 return;
             }
+            if handle
+                .try_state::<PetPositionStore>()
+                .is_some_and(|store| store.transitioning.load(Ordering::SeqCst))
+            {
+                return;
+            }
             let scale = moved_window.scale_factor().unwrap_or(1.0);
             if consume_expected_move(&handle, *position, scale) {
                 return;
@@ -688,27 +748,39 @@ async fn set_pet_visible(
     visible: bool,
 ) -> Result<(), String> {
     require_caller(&caller, &["main", "pet"])?;
+    let transition_lock = app.state::<PetPositionStore>();
+    let _transition = transition_lock.visibility_transition.lock().await;
     let existing = app.get_webview_window("pet");
     match visibility_action(visible, existing.is_some()) {
         VisibilityAction::CreateOrShow => {
             let window = ensure_pet_window(&app).await?;
-            restore_pet_position(&app, &window)?;
-            window.show()
+            if window.is_visible().unwrap_or(false) {
+                window.show().map_err(|error| error.to_string())?;
+            } else {
+                restore_pet_position(&app, &window)?;
+                let (target, outside, scale) = pet_window_transition_positions(&window)?;
+                set_physical_position_expected(&window, &app, outside, scale)?;
+                window.show().map_err(|error| error.to_string())?;
+                let _ = app.emit("pet-window-visibility", true);
+                animate_pet_window(&app, &window, outside, target, scale).await?;
+            }
         }
         VisibilityAction::Close => {
-            if let Some(window) = existing.as_ref() {
+            let window = existing.ok_or("Janela do pet indisponível para fechar.")?;
+            if window.is_visible().unwrap_or(false) {
                 if let Ok(position) = window.outer_position() {
-                    let _ = record_window_position(&app, window, position, true);
+                    let _ = record_window_position(&app, &window, position, true);
                 }
+                let (position, outside, scale) = pet_window_transition_positions(&window)?;
+                animate_pet_window(&app, &window, position, outside, scale).await?;
             }
-            existing
-                .ok_or("Janela do pet indisponível para fechar.")?
-                .close()
+            window.close().map_err(|error| error.to_string())?;
         }
-        VisibilityAction::Noop => Ok(()),
+        VisibilityAction::Noop => {}
     }
-    .map_err(|error| error.to_string())?;
-    let _ = app.emit("pet-window-visibility", visible);
+    if !visible {
+        let _ = app.emit("pet-window-visibility", false);
+    }
     Ok(())
 }
 

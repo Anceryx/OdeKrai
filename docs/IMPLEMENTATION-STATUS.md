@@ -66,6 +66,8 @@ Atualizado em 24/10/2026 após a verificação de fechamento da Fase 3. Requisit
 
 ## Limites e validação pendente
 
+- A janela do pet agora entra da borda mais próxima do monitor e sai pela mesma borda em 12 passos nativos (~208 ms); a posição salva é registrada antes da saída e transições não persistem posições intermediárias. O cálculo usa a área útil e escala do monitor. Testes de geometria passaram; inspeção visual em Windows, DPI misto e múltiplos monitores ainda está pendente.
+
 - Um erro WebView2 `0x800700AA` ocorreu anteriormente ao abrir o executável. A causa não foi confirmada; qualquer conclusão exige repetição com o binário atualizado em Windows com acesso à janela visível.
 - Histórico SQLite não é criptografado pelo aplicativo. Proteção em repouso depende do dispositivo.
 - Ainda são necessários testes com contas e chaves reais dos provedores, Credential Manager do Windows, streaming com respostas reais, reinício do aplicativo e inspeção visual do Hub, ilha e mascote.

@@ -23,7 +23,13 @@ Este documento é um estudo estático do clone local informado, sem execução d
 | Atalhos                    | `src/island/shortcuts.ts` mapeia ações da ilha; `src-tauri/src/shortcuts.rs` registra atalhos globais pelo plugin e envia eventos. Escape dentro da janela recolhe/fecha view; a configuração restringe quando a ilha pode capturar teclado.                                                                               | OdeKrai tem `set_kill_shortcut` e atalho global de parada de emergência no subsistema Security; não há atalho de abrir/ocultar a ilha listado no fluxo examinado.                                                                                                                                               | Não reutilizar atalhos do Coucou sem nova especificação. Qualquer atalho de ilha deve ser registrado/validado em Rust e não pode interceptar nem enfraquecer o kill switch.                                                                 |
 | Desempenho                 | `island.rs` descreve polling de cursor de cerca de 60 Hz enquanto ativa e dorme quando recolhida; o comentário afirma custo zero para a ilha oculta. `island.ts` usa `requestAnimationFrame`, canvas e flag `dirty`, com pausas para reduzir trabalho quando estática. Isto é leitura do desenho do código, não benchmark. | `PetSprite.tsx` pausa folhas animadas quando documento/janela fica invisível e respeita movimento reduzido; a ilha anima redimensionamento em oito passos espaçados por 18 ms. Não foi identificado loop contínuo de renderização na janela do pet.                                                             | Evitar portar polling contínuo ou canvas por conveniência. Preferir eventos nativos, timers canceláveis, animação suspensa em idle/oculta e medir CPU/memória no Windows antes de aceitar qualquer ciclo periódico.                         |
 
-## Plano futuro por arquivo (não executado)
+## Estado da implementação deste plano
+
+O primeiro passo foi implementado: a janela própria do OdeKrai desliza para fora e retorna pela borda mais próxima, usando a área útil e escala do monitor. O movimento usa 12 passos temporizados apenas na transição, sem polling em idle. Testes puros cobrem os quatro lados, coordenadas negativas e interpolação. A validação visual/nativa em Windows, DPI misto e múltiplos monitores continua pendente.
+
+Os passos de foco sem roubo do teclado, fila de alertas e animações de idle ainda não foram iniciados. Os itens abaixo permanecem como referência de sequência e arquivos.
+
+## Plano futuro por arquivo (ordem de execução)
 
 Os caminhos Coucou abaixo servem somente como referência para estudar a técnica. O conteúdo não foi copiado. MIT permite adaptar código coberto, sujeito à preservação do aviso e da licença; a exceção de assets acima continua integral.
 
@@ -63,4 +69,4 @@ Os caminhos Coucou abaixo servem somente como referência para estudar a técnic
 
 ## Estado deste estudo
 
-Estudo e plano documental concluídos. Nenhum código, asset, nome, personagem, ícone, som ou mídia do Coucou foi incorporado. Não há alteração funcional da ilha do OdeKrai; a implementação futura permanece não iniciada e depende de escopo autorizado e validação nativa.
+Primeiro passo implementado: transição direcional da janela, sem polling em idle. Nenhum asset, nome, personagem, ícone, som ou mídia do Coucou foi incorporado.

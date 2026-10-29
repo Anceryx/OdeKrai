@@ -2,11 +2,35 @@
 
 ## Código
 
-### Coucou — estudo, sem código incorporado
+### Coucou — técnica da ilha Windows adaptada sob MIT
 
 Referência examinada: [Louis-CFM/coucou](https://github.com/Louis-CFM/coucou), clone local `C:\Users\Daniel oliveira\Documents\Projetos Olivera\coucou\coucou`, tag `windows-v0.5.3`, commit `47d1c2da12bf1dce8fb28b825757d497c1e1d88d`. A licença MIT (`LICENSE`, copyright Louis Raillé, 2026) abrange o código-fonte. `LICENSE-ASSETS.md` reserva os nomes Coucou e Mochi, o personagem, ícones, sons e imagens/GIFs/vídeos. Esses nomes, personagem, ícones, sons e mídias não podem ser copiados para OdeKrai.
 
-Esta alteração contém apenas estudo e plano em `docs/ILHA-COUCOU-ESTUDO.md`; nenhum código Coucou foi adaptado e nenhum asset foi usado. Portanto, não se declara aqui material MIT incorporado. Se uma mudança futura adaptar código, incluir no mesmo commit dessa adaptação o aviso de copyright e a licença MIT aplicáveis, identificando origem, revisão e arquivos efetivamente derivados.
+`src-tauri/src/lib.rs` e `src-tauri/src/pet_position.rs` reimplementam a transição direcional de janela com base no estudo da abordagem Windows do Coucou; os contratos de posição, escala, persistência e janelas são próprios do OdeKrai. Aviso nos arquivos adaptados: “Referência MIT: Louis-CFM/coucou, windows-v0.5.3, © Louis Raillé, 2026.” Nenhum trecho-fonte, nome, personagem, ícone, som ou mídia foi copiado. As restrições de `LICENSE-ASSETS.md` permanecem aplicáveis.
+
+```text
+MIT License
+
+Copyright (c) 2026 Louis Raillé
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ## Áudio e artes
 
