@@ -950,6 +950,7 @@ pub(super) async fn submit_agent_action(
     if let Ok(mut pending) = lock_pending(state) {
         pending.retain(|item| item.id != ticket_id);
     }
+    let _ = app.emit("approval-updated", ());
     let latency = created_at.elapsed().as_millis() as u64;
     match result {
         ApprovalDecision::Aprovada if !state.is_halted() && !cancel.is_cancelled() => {
@@ -1188,6 +1189,13 @@ pub(super) async fn get_pending_approval_inner(
         expires_at: item.expires_at,
         display_hash: item.digest.clone(),
     }))
+}
+
+pub(super) fn get_pending_approval_count_inner(
+    state: State<'_, SecurityState>,
+) -> Result<usize, String> {
+    let pending = lock_pending(&state)?;
+    Ok(active_pending_count(&pending, Instant::now()))
 }
 
 pub(super) fn get_full_approval_preview_inner(

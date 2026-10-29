@@ -29,6 +29,7 @@ fn set_halted(
             .map_err(|_| "Fila de aprovação indisponível.".to_string())?;
         pending.clear();
         drop(pending);
+        let _ = app.emit("approval-updated", ());
         if let Some(window) = app.get_webview_window("approval") {
             let _ = window.close();
         }

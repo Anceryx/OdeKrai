@@ -29,8 +29,8 @@ pub(crate) mod workspace;
 pub(crate) use approvals::ApprovalBroker;
 pub(crate) use approvals::ApprovalDecision;
 use approvals::{
-    display_hash_matches, is_expired, lock_pending, queue_has_capacity, take_pending_approval,
-    PendingAction,
+    active_pending_count, display_hash_matches, is_expired, lock_pending, queue_has_capacity,
+    take_pending_approval, PendingAction,
 };
 use audit::verify_audit_path;
 use dispatch::*;
@@ -57,6 +57,15 @@ pub async fn get_pending_approval(
 ) -> Result<Option<PendingView>, String> {
     crate::require_caller(&caller, &["approval"])?;
     dispatch::get_pending_approval_inner(app, state).await
+}
+
+#[tauri::command]
+pub fn get_pending_approval_count(
+    caller: tauri::WebviewWindow,
+    state: State<'_, SecurityState>,
+) -> Result<usize, String> {
+    crate::require_main(&caller)?;
+    dispatch::get_pending_approval_count_inner(state)
 }
 
 #[tauri::command]
@@ -915,6 +924,12 @@ mod tests {
             });
         }
         assert!(!queue_has_capacity(&queue));
+        assert_eq!(active_pending_count(&queue, Instant::now()), MAX_PENDING);
+        queue.front_mut().unwrap().expires = Instant::now() - Duration::from_secs(1);
+        assert_eq!(
+            active_pending_count(&queue, Instant::now()),
+            MAX_PENDING - 1
+        );
         let consumed = take_pending_approval(&mut queue, "0", &expected).unwrap();
         assert!(take_pending_approval(&mut queue, &consumed.id, &expected).is_err());
         assert!(queue_has_capacity(&queue));

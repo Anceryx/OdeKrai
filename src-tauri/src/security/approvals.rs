@@ -205,6 +205,13 @@ pub(super) fn queue_has_capacity(queue: &VecDeque<PendingAction>) -> bool {
     queue.len() < MAX_PENDING
 }
 
+pub(super) fn active_pending_count(queue: &VecDeque<PendingAction>, now: Instant) -> usize {
+    queue
+        .iter()
+        .filter(|item| !is_expired(item.expires, now))
+        .count()
+}
+
 pub(super) fn is_expired(expires: Instant, now: Instant) -> bool {
     now >= expires
 }

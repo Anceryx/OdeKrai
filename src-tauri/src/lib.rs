@@ -1087,6 +1087,7 @@ pub fn run() -> Result<(), tauri::Error> {
             security::resume_all,
             security::list_audit,
             security::verify_audit,
+            security::get_pending_approval_count,
             security::get_pending_approval,
             security::get_full_approval_preview,
             security::approval_respond,
