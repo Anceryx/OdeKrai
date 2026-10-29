@@ -10,6 +10,7 @@ import type { ProfileData } from './Profile';
 import type { Section } from './screens/types';
 import { Button, Toggle } from './DesignSystem';
 import { Modal } from './Modal';
+import { ScreenErrorBoundary } from './ScreenErrorBoundary';
 
 const SettingsScreen = lazy(() =>
   import('./screens/Settings').then((module) => ({ default: module.SettingsScreen })),
@@ -235,7 +236,11 @@ export function SettingsModal({
             </label>
           </nav>
           <section className="settings-modal-panel" aria-label={activeTitle} ref={contentRef}>
-            <Suspense fallback={<p role="status">Carregando configurações…</p>}>{content}</Suspense>
+            <ScreenErrorBoundary key={section}>
+              <Suspense fallback={<p role="status">Carregando configurações…</p>}>
+                {content}
+              </Suspense>
+            </ScreenErrorBoundary>
           </section>
         </div>
       </div>

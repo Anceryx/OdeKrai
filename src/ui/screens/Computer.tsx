@@ -5,6 +5,8 @@ import { open } from '@tauri-apps/plugin-dialog';
 import {
   LOCAL_MODELS,
   formatBytes,
+  isHardwareProfile,
+  isLocalModelInventory,
   recommendLocalModel,
   type HardwareProfile,
   type LocalModelInventory,
@@ -19,11 +21,29 @@ const groups = [
   { profile: 'pesado', title: 'Pesado', accepts: ['pesado'] },
 ];
 
+function reportComputerError(command: string, error: unknown) {
+  const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  window.dispatchEvent(new ErrorEvent('error', { error: new Error(`${command}: ${detail}`) }));
+}
+
+function readSavedModelFolder() {
+  try {
+    return { value: localStorage.getItem('odekrai.modelFolder') ?? '', error: null };
+  } catch (error) {
+    return { value: '', error };
+  }
+}
+
 export function ComputerScreen({ embedded = false }: { embedded?: boolean }) {
+  const [savedFolder] = useState(readSavedModelFolder);
   const [hardware, setHardware] = useState<HardwareProfile | null>(null);
+  const [hardwareLoading, setHardwareLoading] = useState(true);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState('');
-  const [modelFolder, setModelFolder] = useState(localStorage.getItem('odekrai.modelFolder') ?? '');
+  const [modelFolder, setModelFolder] = useState(savedFolder.value);
+  const [storageError, setStorageError] = useState(
+    savedFolder.error ? 'Não foi possível carregar a pasta de modelos salva.' : '',
+  );
   const [download, setDownload] = useState<{
     modelId: string;
     receivedBytes: number;
@@ -31,51 +51,112 @@ export function ComputerScreen({ embedded = false }: { embedded?: boolean }) {
   } | null>(null);
   const [downloadError, setDownloadError] = useState('');
   const [inventory, setInventory] = useState<LocalModelInventory[]>([]);
+  const [inventoryLoading, setInventoryLoading] = useState(false);
   const [inventoryError, setInventoryError] = useState('');
+  useEffect(() => {
+    if (savedFolder.error) reportComputerError('read_model_folder', savedFolder.error);
+  }, [savedFolder.error]);
+
   async function refreshInventory(folder = modelFolder) {
     if (!isTauri() || !folder) {
       setInventory([]);
+      setInventoryLoading(false);
+      setInventoryError('');
       return;
     }
+    setInventoryLoading(true);
     try {
-      setInventory(
-        await invoke<LocalModelInventory[]>('inspect_local_models', { destination: folder }),
-      );
+      const result: unknown = await invoke('inspect_local_models', { destination: folder });
+      if (!isLocalModelInventory(result)) {
+        throw new TypeError('Resposta IPC inválida em inspect_local_models.');
+      }
+      setInventory(result);
       setInventoryError('');
     } catch (error) {
       setInventory([]);
-      setInventoryError(String(error));
+      setInventoryError('Não foi possível consultar os arquivos de modelos nesta pasta.');
+      reportComputerError('inspect_local_models', error);
+    } finally {
+      setInventoryLoading(false);
     }
   }
   useEffect(() => {
     if (!isTauri()) return;
     let unlisten: (() => void) | undefined;
+    let active = true;
     void listen<{ modelId: string; receivedBytes: number; totalBytes: number }>(
       'local-model-download-progress',
       (event) => setDownload(event.payload),
-    ).then((dispose) => (unlisten = dispose));
-    return () => unlisten?.();
+    )
+      .then((dispose) => {
+        if (active) unlisten = dispose;
+        else dispose();
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setDownloadError('Não foi possível acompanhar o progresso do download.');
+        reportComputerError('listen_local_model_download_progress', error);
+      });
+    return () => {
+      active = false;
+      unlisten?.();
+    };
   }, []);
   useEffect(() => {
-    if (!isTauri()) return;
-    void invoke<HardwareProfile>('get_hardware_profile')
-      .then(setHardware)
-      .catch(() => setError('Não foi possível consultar o hardware deste computador.'));
+    let active = true;
+    if (!isTauri()) {
+      setError('A consulta de hardware está disponível no aplicativo Windows.');
+      setHardwareLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+    void invoke<unknown>('get_hardware_profile')
+      .then((result) => {
+        if (!active) return;
+        if (!isHardwareProfile(result)) {
+          throw new TypeError('Resposta IPC inválida em get_hardware_profile.');
+        }
+        setHardware(result);
+        setError('');
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setError('Não foi possível consultar o hardware deste computador.');
+        reportComputerError('get_hardware_profile', error);
+      })
+      .finally(() => {
+        if (active) setHardwareLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
   useEffect(() => {
     void refreshInventory();
   }, [modelFolder]);
   const recommendation = hardware ? recommendLocalModel(hardware) : null;
   async function chooseModelFolder() {
-    const folder = await open({
-      directory: true,
-      multiple: false,
-      title: 'Escolha a pasta dos modelos',
-    });
-    if (typeof folder !== 'string') return;
-    setModelFolder(folder);
-    localStorage.setItem('odekrai.modelFolder', folder);
-    await refreshInventory(folder);
+    try {
+      const folder = await open({
+        directory: true,
+        multiple: false,
+        title: 'Escolha a pasta dos modelos',
+      });
+      if (typeof folder !== 'string') return;
+      setModelFolder(folder);
+      try {
+        localStorage.setItem('odekrai.modelFolder', folder);
+        setStorageError('');
+      } catch (error) {
+        setStorageError('A pasta foi escolhida para esta sessão, mas não pôde ser salva.');
+        reportComputerError('save_model_folder', error);
+      }
+      await refreshInventory(folder);
+    } catch (error) {
+      setError('Não foi possível abrir a seleção de pasta.');
+      reportComputerError('choose_model_folder', error);
+    }
   }
   async function downloadModel(model: (typeof LOCAL_MODELS)[number]) {
     if (!modelFolder) {
@@ -92,14 +173,29 @@ export function ComputerScreen({ embedded = false }: { embedded?: boolean }) {
       setDownload(null);
       await refreshInventory();
     } catch (error) {
-      setDownloadError(String(error));
+      setDownloadError('Não foi possível baixar o modelo escolhido.');
+      reportComputerError('download_local_model', error);
       setDownload(null);
       await refreshInventory();
     }
   }
   async function deleteModel(model: (typeof LOCAL_MODELS)[number]) {
     if (!modelFolder) return;
-    await invoke('delete_local_model', { modelId: model.id, destination: modelFolder });
+    try {
+      await invoke('delete_local_model', { modelId: model.id, destination: modelFolder });
+    } catch (error) {
+      setInventoryError('Não foi possível apagar o arquivo de modelo.');
+      reportComputerError('delete_local_model', error);
+    }
+  }
+
+  async function cancelDownload(modelId: string) {
+    try {
+      await invoke('cancel_local_model_download', { modelId });
+    } catch (error) {
+      setDownloadError('Não foi possível cancelar o download.');
+      reportComputerError('cancel_local_model_download', error);
+    }
   }
 
   return (
@@ -120,6 +216,11 @@ export function ComputerScreen({ embedded = false }: { embedded?: boolean }) {
         <div className="ui-banner ui-banner--warning" role="status">
           {error} Você ainda pode escolher um modelo manualmente; a execução e os requisitos mínimos
           não são verificados pelo aplicativo.
+        </div>
+      )}
+      {storageError && (
+        <div className="ui-banner ui-banner--warning" role="status">
+          {storageError}
         </div>
       )}
       {hardware ? (
@@ -174,7 +275,7 @@ export function ComputerScreen({ embedded = false }: { embedded?: boolean }) {
           )}
           {recommendation && <p className="recommendation-reason">{recommendation.reason}</p>}
         </Card>
-      ) : !error ? (
+      ) : hardwareLoading ? (
         <p role="status">Consultando recursos do computador…</p>
       ) : null}
       <section className="model-choice-section">
@@ -205,12 +306,7 @@ export function ComputerScreen({ embedded = false }: { embedded?: boolean }) {
           </p>
         )}
         {download && (
-          <Button
-            variant="secondary"
-            onClick={() =>
-              void invoke('cancel_local_model_download', { modelId: download.modelId })
-            }
-          >
+          <Button variant="secondary" onClick={() => void cancelDownload(download.modelId)}>
             Cancelar download
           </Button>
         )}
@@ -224,6 +320,7 @@ export function ComputerScreen({ embedded = false }: { embedded?: boolean }) {
             Inventário indisponível: {inventoryError}
           </div>
         )}
+        {inventoryLoading && <p role="status">Consultando arquivos de modelos…</p>}
         <div className="local-model-cards">
           {groups.map((group) => {
             const entries = LOCAL_MODELS.filter((model) => group.accepts.includes(model.profile));

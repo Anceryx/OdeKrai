@@ -48,4 +48,18 @@ describe('telas embutidas em Configurações', () => {
       expect(markup).not.toContain('class="page-heading"');
     },
   );
+
+  it('continua renderizando Seu computador quando o armazenamento local falha', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new Error('Acesso negado');
+      },
+    });
+
+    const markup = renderToStaticMarkup(<ComputerScreen embedded />);
+
+    expect(markup).toContain('id="computer-resources"');
+    expect(markup).toContain('Não foi possível carregar a pasta de modelos salva.');
+    expect(markup).toContain('Escolher modelo');
+  });
 });

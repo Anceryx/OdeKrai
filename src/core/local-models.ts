@@ -23,6 +23,64 @@ export type LocalModelInventory = {
   ramVramEstimate: string;
 };
 
+const inventoryStatuses = new Set<LocalModelInventory['status']>([
+  'NAO_BAIXADO',
+  'BAIXANDO',
+  'PARCIAL',
+  'BAIXADO',
+  'VERIFICADO',
+  'ERRO',
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+export function isHardwareProfile(value: unknown): value is HardwareProfile {
+  if (!isRecord(value)) return false;
+  return (
+    isNonNegativeSafeInteger(value.total_ram_bytes) &&
+    isNonNegativeSafeInteger(value.available_ram_bytes) &&
+    isNonNegativeSafeInteger(value.models_free_bytes) &&
+    isNonNegativeSafeInteger(value.cpu_cores) &&
+    typeof value.avx === 'boolean' &&
+    typeof value.avx2 === 'boolean' &&
+    typeof value.avx512 === 'boolean' &&
+    Array.isArray(value.adapters) &&
+    value.adapters.every(
+      (adapter) =>
+        isRecord(adapter) &&
+        typeof adapter.name === 'string' &&
+        isNonNegativeSafeInteger(adapter.dedicated_vram_bytes),
+    ) &&
+    Array.isArray(value.warnings) &&
+    value.warnings.every((warning) => typeof warning === 'string')
+  );
+}
+
+export function isLocalModelInventory(value: unknown): value is LocalModelInventory[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        isRecord(entry) &&
+        typeof entry.modelId === 'string' &&
+        typeof entry.name === 'string' &&
+        typeof entry.fileName === 'string' &&
+        typeof entry.path === 'string' &&
+        isNonNegativeSafeInteger(entry.sizeBytes) &&
+        typeof entry.status === 'string' &&
+        inventoryStatuses.has(entry.status as LocalModelInventory['status']) &&
+        typeof entry.engine === 'string' &&
+        typeof entry.ramVramEstimate === 'string',
+    )
+  );
+}
+
 export const LOCAL_MODELS = manifest.models;
 
 export function recommendLocalModel(hardware: HardwareProfile) {

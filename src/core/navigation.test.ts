@@ -5,6 +5,7 @@ import {
   persistSettingsSection,
   readLastPage,
   readLastSettingsSection,
+  type NavigationView,
   resolveAgentReason,
   resolveConfigurationReason,
   resolveLegacySettingsNavigation,
@@ -75,6 +76,32 @@ describe('modelo de navegação', () => {
       route: { page: 'chat', settingsSection },
       section: 'chat',
       settingsOpen: true,
+    });
+  });
+
+  it('preserva a conversa ao abrir, fechar e reabrir Seu computador repetidamente', () => {
+    const chatView = {
+      route: { page: 'chat' as const },
+      section: 'chat' as const,
+      settingsOpen: false,
+    };
+    let current: NavigationView = chatView;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const opened = resolveLegacySettingsNavigation('computer', current);
+      if (!opened) throw new Error('A seção de computador deve estar registrada.');
+      expect(opened).toMatchObject({
+        route: { page: 'chat', settingsSection: 'computador' },
+        section: 'chat',
+        settingsOpen: true,
+      });
+      current = { ...opened, settingsOpen: false };
+    }
+
+    expect(current).toEqual({
+      route: { page: 'chat', settingsSection: 'computador' },
+      section: 'chat',
+      settingsOpen: false,
     });
   });
 
