@@ -675,6 +675,8 @@ impl Tool for Productivity {
                 | "display.set_brightness"
                 | "display.restore_brightness"
                 | "power.sleep"
+                | "theme.set"
+                | "theme.restore"
         ) {
             let skill_id = skill_id.clone();
             let params = params.clone();

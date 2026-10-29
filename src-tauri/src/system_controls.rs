@@ -14,9 +14,24 @@ pub(crate) trait SystemAdapter {
     fn brightness(&mut self) -> Result<Option<u8>, String>;
     fn set_brightness(&mut self, value: u8) -> Result<(), String>;
     fn sleep(&mut self) -> Result<(), String>;
+    fn theme_values(&mut self) -> Result<ThemeSnapshot, String>;
+    fn set_theme(&mut self, light: bool) -> Result<(), String>;
+    fn restore_theme(&mut self, snapshot: &ThemeSnapshot) -> Result<(), String>;
 }
 
 const UNSUPPORTED_BRIGHTNESS: &str = "este monitor não permite controlar o brilho por software";
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ThemeSnapshot {
+    pub apps_use_light_theme: Option<RegistryValue>,
+    pub system_uses_light_theme: Option<RegistryValue>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RegistryValue {
+    pub kind: u32,
+    pub data: Vec<u8>,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum MediaKey {
@@ -95,6 +110,19 @@ pub(crate) fn execute_with<A: SystemAdapter>(
             adapter.sleep()?;
             Ok("O computador vai suspender agora.".into())
         }
+        "theme.set" => {
+            let mode = params["mode"]
+                .as_str()
+                .ok_or("Informe o tema claro ou escuro.")?;
+            let light = match mode {
+                "claro" => true,
+                "escuro" => false,
+                _ => return Err("O tema precisa ser claro ou escuro.".into()),
+            };
+            adapter.set_theme(light)?;
+            Ok("Tema alterado; o Windows foi avisado para atualizar os aplicativos.".into())
+        }
+        "theme.restore" => Err("A habilidade requer persistência SQLite.".into()),
         _ => Err("Habilidade de controle local desconhecida.".into()),
     }
 }
@@ -109,6 +137,7 @@ pub(crate) struct SimulatedAdapter {
     pub locked: bool,
     pub brightness: Option<u8>,
     pub sleep_requested: bool,
+    pub theme: ThemeSnapshot,
 }
 
 #[cfg(test)]
@@ -154,7 +183,28 @@ impl SystemAdapter for SimulatedAdapter {
         self.sleep_requested = true;
         Ok(())
     }
+    fn theme_values(&mut self) -> Result<ThemeSnapshot, String> {
+        Ok(self.theme.clone())
+    }
+    fn set_theme(&mut self, light: bool) -> Result<(), String> {
+        let value = if light { 1_u32 } else { 0_u32 }.to_le_bytes().to_vec();
+        let registry_value = Some(RegistryValue {
+            kind: REG_DWORD_VALUE,
+            data: value,
+        });
+        self.theme = ThemeSnapshot {
+            apps_use_light_theme: registry_value.clone(),
+            system_uses_light_theme: registry_value,
+        };
+        Ok(())
+    }
+    fn restore_theme(&mut self, snapshot: &ThemeSnapshot) -> Result<(), String> {
+        self.theme = snapshot.clone();
+        Ok(())
+    }
 }
+
+const REG_DWORD_VALUE: u32 = 4;
 
 pub(crate) fn execute(skill_id: &str, params: &Value) -> Result<String, String> {
     execute_with(&mut NativeAdapter, skill_id, params)
@@ -189,6 +239,8 @@ pub(crate) fn execute_managed_with<A: SystemAdapter>(
         .map_err(|_| "Não foi possível preparar o histórico do papel de parede.".to_string())?;
     db.execute_batch("CREATE TABLE IF NOT EXISTS brightness_history (id INTEGER PRIMARY KEY, previous_value INTEGER NOT NULL, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER)")
         .map_err(|_| "Não foi possível preparar o histórico do brilho.".to_string())?;
+    db.execute_batch("CREATE TABLE IF NOT EXISTS theme_history (id INTEGER PRIMARY KEY, apps_type INTEGER, apps_data BLOB, system_type INTEGER, system_data BLOB, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER)")
+        .map_err(|_| "Não foi possível preparar o histórico do tema.".to_string())?;
     match skill_id {
         "wallpaper.set" => {
             let raw = args["path"]
@@ -247,6 +299,38 @@ pub(crate) fn execute_managed_with<A: SystemAdapter>(
                 .map_err(|_| "Não foi possível registrar a restauração do brilho.".to_string())?;
             Ok("Brilho anterior restaurado.".into())
         }
+        "theme.set" => {
+            let mode = args["mode"]
+                .as_str()
+                .ok_or("Informe o tema claro ou escuro.")?;
+            let light = match mode {
+                "claro" => true,
+                "escuro" => false,
+                _ => return Err("O tema precisa ser claro ou escuro.".into()),
+            };
+            let previous = adapter.theme_values()?;
+            db.execute("INSERT INTO theme_history(apps_type,apps_data,system_type,system_data,created_at,origin) VALUES (?1,?2,?3,?4,?5,?6)", params![previous.apps_use_light_theme.as_ref().map(|value| value.kind as i64), previous.apps_use_light_theme.as_ref().map(|value| value.data.as_slice()), previous.system_uses_light_theme.as_ref().map(|value| value.kind as i64), previous.system_uses_light_theme.as_ref().map(|value| value.data.as_slice()), unix_seconds(), origin])
+                .map_err(|_| "Não foi possível guardar o tema anterior.".to_string())?;
+            if let Err(error) = adapter.set_theme(light) {
+                db.execute("UPDATE theme_history SET restored_at=?1 WHERE id=(SELECT MAX(id) FROM theme_history)", [unix_seconds()]).map_err(|_| "Não foi possível registrar a falha ao alterar o tema.".to_string())?;
+                return Err(error);
+            }
+            Ok("Tema alterado; o Windows foi avisado para atualizar os aplicativos. Use theme.restore para desfazer.".into())
+        }
+        "theme.restore" => {
+            let row: Option<(Option<i64>, Option<Vec<u8>>, Option<i64>, Option<Vec<u8>>)> = db.query_row("SELECT apps_type,apps_data,system_type,system_data FROM theme_history WHERE restored_at IS NULL ORDER BY id DESC LIMIT 1", [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))).optional()
+                .map_err(|_| "Não foi possível consultar o tema anterior.".to_string())?;
+            let (apps_type, apps_data, system_type, system_data) =
+                row.ok_or("Não há tema anterior para restaurar.")?;
+            let snapshot = ThemeSnapshot {
+                apps_use_light_theme: registry_value_from_db(apps_type, apps_data)?,
+                system_uses_light_theme: registry_value_from_db(system_type, system_data)?,
+            };
+            adapter.restore_theme(&snapshot)?;
+            db.execute("UPDATE theme_history SET restored_at=?1 WHERE id=(SELECT id FROM theme_history WHERE restored_at IS NULL ORDER BY id DESC LIMIT 1)", [unix_seconds()])
+                .map_err(|_| "Não foi possível registrar a restauração do tema.".to_string())?;
+            Ok("Tema anterior restaurado.".into())
+        }
         _ => execute_with(adapter, skill_id, args),
     }
 }
@@ -297,6 +381,19 @@ pub(crate) fn validate_wallpaper_path(
         return Err("O caminho da imagem não pertence a uma pasta permitida.".into());
     }
     Ok(canonical)
+}
+
+fn registry_value_from_db(
+    kind: Option<i64>,
+    data: Option<Vec<u8>>,
+) -> Result<Option<RegistryValue>, String> {
+    match (kind, data) {
+        (None, None) => Ok(None),
+        (Some(kind), Some(data)) => u32::try_from(kind)
+            .map(|kind| Some(RegistryValue { kind, data }))
+            .map_err(|_| "O histórico do tema está inválido.".to_string()),
+        _ => Err("O histórico do tema está incompleto.".into()),
+    }
 }
 
 fn unix_seconds() -> i64 {
@@ -433,6 +530,248 @@ impl SystemAdapter for NativeAdapter {
     }
     fn sleep(&mut self) -> Result<(), String> {
         suspend_windows()
+    }
+    fn theme_values(&mut self) -> Result<ThemeSnapshot, String> {
+        registry_theme_values()
+    }
+    fn set_theme(&mut self, light: bool) -> Result<(), String> {
+        registry_set_theme(light)
+    }
+    fn restore_theme(&mut self, snapshot: &ThemeSnapshot) -> Result<(), String> {
+        registry_restore_theme(snapshot)
+    }
+}
+
+#[cfg(windows)]
+fn registry_theme_values() -> Result<ThemeSnapshot, String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::System::Registry::{
+        RegCloseKey, RegOpenKeyExW, HKEY_CURRENT_USER, KEY_QUERY_VALUE, KEY_SET_VALUE,
+    };
+    let path: Vec<u16> =
+        std::ffi::OsStr::new(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+            .encode_wide()
+            .chain(Some(0))
+            .collect();
+    unsafe {
+        let mut key = std::ptr::null_mut();
+        if RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            path.as_ptr(),
+            0,
+            KEY_QUERY_VALUE | KEY_SET_VALUE,
+            &mut key,
+        ) != 0
+        {
+            return Err("Não foi possível abrir as preferências de tema do usuário atual.".into());
+        }
+        let snapshot: Result<ThemeSnapshot, String> = (|| {
+            Ok(ThemeSnapshot {
+                apps_use_light_theme: registry_read_value(key, "AppsUseLightTheme")?,
+                system_uses_light_theme: registry_read_value(key, "SystemUsesLightTheme")?,
+            })
+        })();
+        RegCloseKey(key);
+        snapshot
+    }
+}
+
+#[cfg(windows)]
+unsafe fn registry_read_value(
+    key: windows_sys::Win32::System::Registry::HKEY,
+    name: &str,
+) -> Result<Option<RegistryValue>, String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::{
+        Foundation::ERROR_FILE_NOT_FOUND, System::Registry::RegQueryValueExW,
+    };
+    let name: Vec<u16> = std::ffi::OsStr::new(name)
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+    let mut kind = 0;
+    let mut size = 0;
+    let status = RegQueryValueExW(
+        key,
+        name.as_ptr(),
+        std::ptr::null_mut(),
+        &mut kind,
+        std::ptr::null_mut(),
+        &mut size,
+    );
+    if status == ERROR_FILE_NOT_FOUND {
+        return Ok(None);
+    }
+    if status != 0 || size > 4096 {
+        return Err("Não foi possível ler uma preferência de tema do usuário atual.".into());
+    }
+    let mut data = vec![0; size as usize];
+    let status = RegQueryValueExW(
+        key,
+        name.as_ptr(),
+        std::ptr::null_mut(),
+        &mut kind,
+        if data.is_empty() {
+            std::ptr::null_mut()
+        } else {
+            data.as_mut_ptr()
+        },
+        &mut size,
+    );
+    if status != 0 {
+        return Err("Não foi possível ler uma preferência de tema do usuário atual.".into());
+    }
+    data.truncate(size as usize);
+    Ok(Some(RegistryValue { kind, data }))
+}
+
+#[cfg(windows)]
+fn registry_set_theme(light: bool) -> Result<(), String> {
+    let raw = if light { 1_u32 } else { 0_u32 }.to_le_bytes().to_vec();
+    let value = RegistryValue {
+        kind: REG_DWORD_VALUE,
+        data: raw,
+    };
+    let snapshot = registry_theme_values()?;
+    registry_apply_theme_snapshot(
+        &ThemeSnapshot {
+            apps_use_light_theme: Some(value.clone()),
+            system_uses_light_theme: Some(value),
+        },
+        Some(&snapshot),
+    )?;
+    notify_theme_change();
+    Ok(())
+}
+
+#[cfg(windows)]
+fn registry_restore_theme(snapshot: &ThemeSnapshot) -> Result<(), String> {
+    registry_apply_theme_snapshot(snapshot, None)?;
+    notify_theme_change();
+    Ok(())
+}
+
+#[cfg(windows)]
+fn registry_apply_theme_snapshot(
+    snapshot: &ThemeSnapshot,
+    rollback: Option<&ThemeSnapshot>,
+) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::System::Registry::{
+        RegCloseKey, RegOpenKeyExW, HKEY_CURRENT_USER, KEY_QUERY_VALUE, KEY_SET_VALUE,
+    };
+    let path: Vec<u16> =
+        std::ffi::OsStr::new(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+            .encode_wide()
+            .chain(Some(0))
+            .collect();
+    unsafe {
+        let mut key = std::ptr::null_mut();
+        if RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            path.as_ptr(),
+            0,
+            KEY_QUERY_VALUE | KEY_SET_VALUE,
+            &mut key,
+        ) != 0
+        {
+            return Err("Não foi possível abrir as preferências de tema do usuário atual.".into());
+        }
+        let first = registry_write_or_delete(
+            key,
+            "AppsUseLightTheme",
+            snapshot.apps_use_light_theme.as_ref(),
+        );
+        let result = first.and_then(|()| {
+            registry_write_or_delete(
+                key,
+                "SystemUsesLightTheme",
+                snapshot.system_uses_light_theme.as_ref(),
+            )
+        });
+        if result.is_err() {
+            if let Some(previous) = rollback {
+                let _ = registry_write_or_delete(
+                    key,
+                    "AppsUseLightTheme",
+                    previous.apps_use_light_theme.as_ref(),
+                );
+                let _ = registry_write_or_delete(
+                    key,
+                    "SystemUsesLightTheme",
+                    previous.system_uses_light_theme.as_ref(),
+                );
+            }
+        }
+        RegCloseKey(key);
+        result
+    }
+}
+
+#[cfg(windows)]
+unsafe fn registry_write_or_delete(
+    key: windows_sys::Win32::System::Registry::HKEY,
+    name: &str,
+    value: Option<&RegistryValue>,
+) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::{
+        Foundation::ERROR_FILE_NOT_FOUND,
+        System::Registry::{RegDeleteValueW, RegSetValueExW},
+    };
+    let name: Vec<u16> = std::ffi::OsStr::new(name)
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+    let status = if let Some(value) = value {
+        RegSetValueExW(
+            key,
+            name.as_ptr(),
+            0,
+            value.kind,
+            if value.data.is_empty() {
+                std::ptr::null()
+            } else {
+                value.data.as_ptr()
+            },
+            value.data.len() as u32,
+        )
+    } else {
+        let result = RegDeleteValueW(key, name.as_ptr());
+        if result == ERROR_FILE_NOT_FOUND {
+            0
+        } else {
+            result
+        }
+    };
+    if status == 0 {
+        Ok(())
+    } else {
+        Err("Não foi possível gravar as preferências de tema do usuário atual.".into())
+    }
+}
+
+#[cfg(windows)]
+fn notify_theme_change() {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        SendMessageTimeoutW, HWND_BROADCAST, SMTO_ABORTIFHUNG, WM_SETTINGCHANGE,
+    };
+    let detail: Vec<u16> = std::ffi::OsStr::new("ImmersiveColorSet")
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+    let mut result = 0;
+    unsafe {
+        SendMessageTimeoutW(
+            HWND_BROADCAST,
+            WM_SETTINGCHANGE,
+            0,
+            detail.as_ptr() as isize,
+            SMTO_ABORTIFHUNG,
+            1000,
+            &mut result,
+        );
     }
 }
 
@@ -679,6 +1018,15 @@ impl SystemAdapter for NativeAdapter {
     }
     fn sleep(&mut self) -> Result<(), String> {
         Err("A suspensão só está disponível no Windows.".into())
+    }
+    fn theme_values(&mut self) -> Result<ThemeSnapshot, String> {
+        Err("O controle de tema só está disponível no Windows.".into())
+    }
+    fn set_theme(&mut self, _: bool) -> Result<(), String> {
+        Err("O controle de tema só está disponível no Windows.".into())
+    }
+    fn restore_theme(&mut self, _: &ThemeSnapshot) -> Result<(), String> {
+        Err("O controle de tema só está disponível no Windows.".into())
     }
 }
 
@@ -932,6 +1280,104 @@ mod tests {
     }
 
     #[test]
+    fn experimental_theme_validates_saves_previous_values_and_restores_them_in_the_simulator() {
+        let original = ThemeSnapshot {
+            apps_use_light_theme: Some(RegistryValue {
+                kind: REG_DWORD_VALUE,
+                data: 1_u32.to_le_bytes().to_vec(),
+            }),
+            system_uses_light_theme: Some(RegistryValue {
+                kind: REG_DWORD_VALUE,
+                data: 0_u32.to_le_bytes().to_vec(),
+            }),
+        };
+        let mut sim = SimulatedAdapter {
+            theme: original.clone(),
+            ..Default::default()
+        };
+        let db = Connection::open_in_memory().unwrap();
+        assert!(crate::system_actions::validate("theme.set", &json!({"mode":"blue"})).is_err());
+        assert!(crate::system_actions::validate(
+            "theme.set",
+            &json!({"mode":"escuro","extra":true})
+        )
+        .is_err());
+        let theme_skill = crate::security::skills::registry()
+            .into_iter()
+            .find(|skill| skill.id == "theme.set")
+            .unwrap();
+        assert_eq!(
+            theme_skill.risk(&json!({"mode":"escuro"})).unwrap(),
+            crate::policy::Risk::EscritaReversivel
+        );
+        assert!(execute_managed_with(
+            &mut sim,
+            "theme.set",
+            &json!({"mode":"blue"}),
+            &db,
+            &[],
+            "user"
+        )
+        .is_err());
+        assert_eq!(sim.theme, original);
+        execute_managed_with(
+            &mut sim,
+            "theme.set",
+            &json!({"mode":"escuro"}),
+            &db,
+            &[],
+            "user",
+        )
+        .unwrap();
+        let dark = Some(RegistryValue {
+            kind: REG_DWORD_VALUE,
+            data: 0_u32.to_le_bytes().to_vec(),
+        });
+        assert_eq!(
+            sim.theme,
+            ThemeSnapshot {
+                apps_use_light_theme: dark.clone(),
+                system_uses_light_theme: dark
+            }
+        );
+        let (apps_type, apps_data, system_type, system_data, origin): (
+            i64,
+            Vec<u8>,
+            i64,
+            Vec<u8>,
+            String,
+        ) = db
+            .query_row(
+                "SELECT apps_type,apps_data,system_type,system_data,origin FROM theme_history",
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            (apps_type, system_type, origin.as_str()),
+            (REG_DWORD_VALUE as i64, REG_DWORD_VALUE as i64, "user")
+        );
+        assert_eq!(apps_data, 1_u32.to_le_bytes());
+        assert_eq!(system_data, 0_u32.to_le_bytes());
+        execute_managed_with(&mut sim, "theme.restore", &json!({}), &db, &[], "user").unwrap();
+        assert_eq!(sim.theme, original);
+        let restored: Option<i64> = db
+            .query_row("SELECT restored_at FROM theme_history", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert!(restored.is_some());
+    }
+
+    #[test]
     fn registered_system_skills_use_closed_schemas_and_rust_risk() {
         for id in [
             "audio.get_volume",
@@ -947,6 +1393,8 @@ mod tests {
             "display.set_brightness",
             "display.restore_brightness",
             "power.sleep",
+            "theme.set",
+            "theme.restore",
         ] {
             let skill = crate::security::skills::registry()
                 .into_iter()
@@ -958,6 +1406,7 @@ mod tests {
                     "audio.mute" => json!({"muted": true}),
                     "wallpaper.set" => json!({"path":"C:\\wallpaper.png"}),
                     "display.set_brightness" => json!({"brightness": 50}),
+                    "theme.set" => json!({"mode":"escuro"}),
                     _ => json!({}),
                 })
                 .is_ok());

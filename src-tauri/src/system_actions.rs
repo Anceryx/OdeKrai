@@ -30,11 +30,13 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
         | "power.lock"
         | "display.get_brightness"
         | "display.restore_brightness"
-        | "power.sleep" => &[],
+        | "power.sleep"
+        | "theme.restore" => &[],
         "audio.set_volume" => &["volume"],
         "audio.mute" => &["muted"],
         "wallpaper.set" => &["path"],
         "display.set_brightness" => &["brightness"],
+        "theme.set" => &["mode"],
         "system.open_url" => &["url"],
         "system.open_path" | "system.reveal_in_folder" => &["path"],
         "settings.open" => &["page"],
@@ -58,7 +60,8 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
         | "power.lock"
         | "display.get_brightness"
         | "display.restore_brightness"
-        | "power.sleep" => {}
+        | "power.sleep"
+        | "theme.restore" => {}
         "wallpaper.set" => {
             let path = bounded_string(object, "path", 32767)?;
             if Path::new(path)
@@ -80,6 +83,14 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
                 .is_none_or(|value| value > 100)
             {
                 return Err("O brilho precisa ser um número inteiro entre 0 e 100.".into());
+            }
+        }
+        "theme.set" => {
+            if !matches!(
+                object.get("mode").and_then(Value::as_str),
+                Some("claro" | "escuro")
+            ) {
+                return Err("O tema precisa ser claro ou escuro.".into());
             }
         }
         "audio.set_volume" => {
@@ -167,6 +178,8 @@ pub(crate) fn preview(skill_id: &str, params: &Value, root: &Path) -> Result<Str
         "display.set_brightness" => format!("Alterar o brilho da tela para {}%.", params["brightness"]),
         "display.restore_brightness" => "Restaurar o brilho anterior da tela.".into(),
         "power.sleep" => "O computador vai suspender agora. A aprovação é obrigatória.".into(),
+        "theme.set" => format!("Alterar o tema experimental do Windows para {}.", params["mode"]),
+        "theme.restore" => "Restaurar o tema anterior do Windows.".into(),
         "system.open_url" => format!(
             "Abrir no navegador padrão: {}",
             params["url"].as_str().unwrap()
@@ -233,7 +246,9 @@ pub(crate) fn execute(
         | "display.get_brightness"
         | "display.set_brightness"
         | "display.restore_brightness"
-        | "power.sleep" => {
+        | "power.sleep"
+        | "theme.set"
+        | "theme.restore" => {
             Err("Esta habilidade precisa ser despachada com contexto de segurança.".into())
         }
         "system.open_url" => {
@@ -328,7 +343,7 @@ pub(crate) fn execute_managed_control(
 ) -> Result<String, String> {
     validate(skill_id, params)?;
     let db = crate::security::database(app)?;
-    db.execute_batch("CREATE TABLE IF NOT EXISTS wallpaper_history (id INTEGER PRIMARY KEY, previous_path TEXT, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER); CREATE TABLE IF NOT EXISTS brightness_history (id INTEGER PRIMARY KEY, previous_value INTEGER NOT NULL, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER)")
+    db.execute_batch("CREATE TABLE IF NOT EXISTS wallpaper_history (id INTEGER PRIMARY KEY, previous_path TEXT, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER); CREATE TABLE IF NOT EXISTS brightness_history (id INTEGER PRIMARY KEY, previous_value INTEGER NOT NULL, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER); CREATE TABLE IF NOT EXISTS theme_history (id INTEGER PRIMARY KEY, apps_type INTEGER, apps_data BLOB, system_type INTEGER, system_data BLOB, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER)")
         .map_err(|_| "Não foi possível preparar o histórico do papel de parede.".to_string())?;
     let mut roots = vec![crate::agent_home::workspace_path(app)?];
     let mut statement = db
@@ -408,6 +423,23 @@ pub(crate) fn preview_managed_control(
             Ok("Restaurar o brilho anterior.".into())
         }
         "power.sleep" => Ok("O computador vai suspender agora. A aprovação é obrigatória.".into()),
+        "theme.set" => Ok(format!(
+            "Alterar o tema experimental do Windows para {}.",
+            params["mode"]
+        )),
+        "theme.restore" => {
+            let available: bool = db
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM theme_history WHERE restored_at IS NULL)",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(|_| "Não foi possível consultar o histórico do tema.".to_string())?;
+            if !available {
+                return Err("Não há tema anterior para restaurar.".into());
+            }
+            Ok("Restaurar o tema anterior do Windows.".into())
+        }
         _ => Err("Habilidade de controle local desconhecida.".into()),
     }
 }

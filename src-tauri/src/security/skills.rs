@@ -150,7 +150,9 @@ fn action_id(action: &SimulatedAction) -> &str {
             | "display.get_brightness"
             | "display.set_brightness"
             | "display.restore_brightness"
-            | "power.sleep" => skill_id,
+            | "power.sleep"
+            | "theme.set"
+            | "theme.restore" => skill_id,
             _ => "",
         },
     }
@@ -193,6 +195,8 @@ fn parse_action(id: &str, params: &Value) -> Result<SimulatedAction, String> {
             | "display.set_brightness"
             | "display.restore_brightness"
             | "power.sleep"
+            | "theme.set"
+            | "theme.restore"
             | "calendar.create_event"
             | "calendar.list_events"
             | "calendar.update_event"
@@ -251,7 +255,7 @@ pub(super) fn resolve_action_target(
     if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "web.fetch") {
         return Ok((std::path::PathBuf::new(), action.clone()));
     }
-    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "calendar.create_event" | "calendar.list_events" | "calendar.update_event" | "calendar.delete_event" | "system.open_url" | "settings.open" | "notification.show" | "app.launch" | "clipboard.read" | "clipboard.write" | "system.info" | "audio.get_volume" | "audio.set_volume" | "audio.mute" | "media.play_pause" | "media.next" | "media.previous" | "wallpaper.set" | "wallpaper.restore" | "power.lock" | "display.get_brightness" | "display.set_brightness" | "display.restore_brightness" | "power.sleep"))
+    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "calendar.create_event" | "calendar.list_events" | "calendar.update_event" | "calendar.delete_event" | "system.open_url" | "settings.open" | "notification.show" | "app.launch" | "clipboard.read" | "clipboard.write" | "system.info" | "audio.get_volume" | "audio.set_volume" | "audio.mute" | "media.play_pause" | "media.next" | "media.previous" | "wallpaper.set" | "wallpaper.restore" | "power.lock" | "display.get_brightness" | "display.set_brightness" | "display.restore_brightness" | "power.sleep" | "theme.set" | "theme.restore"))
     {
         return Ok((std::path::PathBuf::new(), action.clone()));
     }
@@ -464,6 +468,8 @@ pub fn registry() -> Vec<Skill> {
         ("display.set_brightness", "Definir brilho", "Altera o brilho entre 0 e 100% e permite desfazer.", "Defina o brilho com um inteiro entre 0 e 100.", json!({"type":"object","properties":{"brightness":{"type":"integer","minimum":0,"maximum":100}},"required":["brightness"],"additionalProperties":false}), ResultTrust::Local),
         ("display.restore_brightness", "Restaurar brilho", "Restaura o brilho salvo antes da última alteração.", "Restaure o brilho anterior.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
         ("power.sleep", "Suspender computador", "Suspende o computador; sempre exige aprovação e não pode ser iniciada por conteúdo externo.", "O computador vai suspender agora.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
+        ("theme.set", "Alterar tema do Windows", "experimental: usa uma configuração do Windows que a Microsoft não documenta oficialmente. Altera entre claro e escuro e permite desfazer.", "Altere o tema do Windows para claro ou escuro. Habilidade experimental.", json!({"type":"object","properties":{"mode":{"type":"string","enum":["claro","escuro"]}},"required":["mode"],"additionalProperties":false}), ResultTrust::Local),
+        ("theme.restore", "Restaurar tema do Windows", "Restaura os valores de tema do usuário salvos antes da última alteração experimental.", "Restaure as preferências de tema anteriores do Windows.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
         ("files.list", "Listar arquivos", "Lista arquivos e pastas em uma pasta permitida, com limites.", "Liste itens de uma pasta usando profundidade e limite explícitos.", json!({"type":"object","properties":{"path":{"type":"string"},"depth":{"type":"integer","minimum":1,"maximum":8},"limit":{"type":"integer","minimum":1,"maximum":500}},"required":["path","depth","limit"],"additionalProperties":false}), ResultTrust::Local),
         ("files.search", "Pesquisar arquivos", "Pesquisa nomes ou conteúdo textual com limites explícitos.", "Pesquise arquivos por nome ou trecho de texto. Informe pasta, modo, profundidade, tamanho máximo e limite de resultados.", json!({"type":"object","properties":{"path":{"type":"string"},"query":{"type":"string","minLength":1,"maxLength":256},"by":{"type":"string","enum":["name","text"]},"depth":{"type":"integer","minimum":1,"maximum":8},"max_file_bytes":{"type":"integer","minimum":1,"maximum":65536},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["path","query","by","depth","max_file_bytes","limit"],"additionalProperties":false}), ResultTrust::Local),
         ("files.read", "Ler arquivo de texto", "Lê texto UTF-8 ou Windows-1252 de até 64 KiB; recusa binários.", "Leia um arquivo textual de até 64 KiB em pasta permitida.", json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}), ResultTrust::Local),
@@ -726,7 +732,8 @@ fn action_example(id: &str) -> SimulatedAction {
         | "power.lock"
         | "display.get_brightness"
         | "display.restore_brightness"
-        | "power.sleep" => SimulatedAction::Productivity {
+        | "power.sleep"
+        | "theme.restore" => SimulatedAction::Productivity {
             skill_id: id.into(),
             params: json!({}),
         },
@@ -737,6 +744,10 @@ fn action_example(id: &str) -> SimulatedAction {
         "display.set_brightness" => SimulatedAction::Productivity {
             skill_id: id.into(),
             params: json!({"brightness": 50}),
+        },
+        "theme.set" => SimulatedAction::Productivity {
+            skill_id: id.into(),
+            params: json!({"mode":"escuro"}),
         },
         "audio.set_volume" => SimulatedAction::Productivity {
             skill_id: id.into(),
@@ -1276,7 +1287,29 @@ mod tests {
     #[test]
     fn disabled_skills_are_not_offered_to_the_model() {
         let skills = registry();
-        assert!(model_tools_for(&skills, &std::collections::HashSet::new()).is_empty());
+        let no_skills = model_tools_for(&skills, &std::collections::HashSet::new());
+        assert!(no_skills.is_empty());
+        assert!(!no_skills.iter().any(|tool| tool.name == "theme.set"));
+        let theme = registry()
+            .into_iter()
+            .find(|skill| skill.id == "theme.set")
+            .unwrap();
+        assert!(theme.description.starts_with("experimental: usa uma configuração do Windows que a Microsoft não documenta oficialmente"));
+        let theme_enabled = std::collections::HashSet::from(["theme.set"]);
+        assert!(model_tools_for(&skills, &theme_enabled)
+            .iter()
+            .any(|tool| tool.name == "theme.set"));
+        assert_eq!(
+            theme.risk(&json!({"mode":"escuro"})).unwrap(),
+            Risk::EscritaReversivel
+        );
+        assert!(parse_action("theme.set", &json!({"mode":"azul"})).is_err());
+        assert!(parse_action("theme.set", &json!({"mode":"escuro","extra":true})).is_err());
+        let restore = registry()
+            .into_iter()
+            .find(|skill| skill.id == "theme.restore")
+            .unwrap();
+        assert_eq!(restore.risk(&json!({})).unwrap(), Risk::EscritaReversivel);
         let enabled = std::collections::HashSet::from(["workspace.read_file"]);
         let tools = model_tools_for(&skills, &enabled);
         assert_eq!(tools.len(), 1);

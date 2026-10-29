@@ -114,7 +114,9 @@ pub(super) fn action_metadata(
             | "display.get_brightness"
             | "display.set_brightness"
             | "display.restore_brightness"
-            | "power.sleep" => skill_id,
+            | "power.sleep"
+            | "theme.set"
+            | "theme.restore" => skill_id,
             _ => "productivity",
         },
         _ => tool.name(),
@@ -416,6 +418,8 @@ pub(super) fn preview_for(
                 | "display.set_brightness"
                 | "display.restore_brightness"
                 | "power.sleep"
+                | "theme.set"
+                | "theme.restore"
         ) {
             return crate::system_actions::preview_managed_control(app, skill_id, params);
         }
