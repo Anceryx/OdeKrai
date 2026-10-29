@@ -60,6 +60,14 @@ struct SimulatedMessageArgs {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 #[allow(dead_code)]
+struct DiscordSendArgs {
+    webhook_id: String,
+    text: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
 struct SimulatedPaymentArgs {
     amount_cents: u64,
     currency: String,
@@ -366,6 +374,7 @@ fn validate_tool_call(call: &ToolCall, tools: &[ToolDef]) -> Result<(), String> 
         "simulated.send_message" => {
             serde_json::from_value::<SimulatedMessageArgs>(call.args.clone()).is_ok()
         }
+        "discord.send" => serde_json::from_value::<DiscordSendArgs>(call.args.clone()).is_ok(),
         "simulated.payment" => {
             serde_json::from_value::<SimulatedPaymentArgs>(call.args.clone()).is_ok()
                 && call
@@ -802,7 +811,7 @@ mod tests {
             Box::pin(async move {
                 self.turns += 1;
                 if self.turns == 1 {
-                    Ok(reply("", vec![call("workspace.read_file")]))
+                    Ok(reply("", vec![call("discord.send")]))
                 } else {
                     self.saw_denial = messages.iter().any(|message| {
                         message.blocks.iter().any(|block| matches!(block, Block::ToolResult { content, .. } if content.contains("Ação negada")))
@@ -818,6 +827,7 @@ mod tests {
             _: bool,
             cancel: &'a CancellationToken,
         ) -> Pin<Box<dyn Future<Output = Result<ToolExecution, String>> + Send + 'a>> {
+            let external_communication = call.name == "discord.send";
             Box::pin(async move {
                 let ticket = self
                     .broker
@@ -835,15 +845,15 @@ mod tests {
                 self.executed = decision == crate::security::ApprovalDecision::Aprovada;
                 Ok(ToolExecution {
                     content: if self.executed {
-                        "arquivo lido"
+                        "envio Discord simulado após aprovação"
                     } else {
                         "Ação negada pelo usuário"
                     }
                     .into(),
                     audit_id: Some("audit-test".into()),
                     denied: !self.executed,
-                    external_communication: false,
-                    untrusted: true,
+                    external_communication: external_communication && self.executed,
+                    untrusted: false,
                 })
             })
         }
@@ -890,11 +900,32 @@ mod tests {
             name: name.into(),
             args: match name {
                 "workspace.write_file" => json!({"path":"a.txt","content":"conteúdo"}),
+                "discord.send" => {
+                    json!({"webhook_id":"discord-123456789012345678","text":"mensagem de teste"})
+                }
                 "simulated.send_message" => json!({"recipient":"contato","message":"texto"}),
                 "simulated.payment" => json!({"amount_cents":100,"currency":"BRL"}),
                 _ => json!({"path":"a.txt"}),
             },
         }
+    }
+
+    fn discord_tool_definitions() -> Vec<ToolDef> {
+        let mut tools = tool_definitions();
+        tools.push(tool(
+            "discord.send",
+            "Envia uma mensagem aprovada por webhook.",
+            json!({
+                "type":"object",
+                "properties":{
+                    "webhook_id":{"type":"string"},
+                    "text":{"type":"string"}
+                },
+                "required":["webhook_id","text"],
+                "additionalProperties":false
+            }),
+        ));
+        tools
     }
 
     #[tokio::test]
@@ -949,10 +980,11 @@ mod tests {
                     text: "leia".into(),
                 }],
             }];
+            let tools = discord_tool_definitions();
             let answer = run_agent(
                 &mut backend,
                 &mut messages,
-                &tool_definitions(),
+                &tools,
                 AgentLimits::default(),
                 &CancellationToken::new(),
                 |_| {},
@@ -998,10 +1030,11 @@ mod tests {
                     text: "leia".into(),
                 }],
             }];
+            let tools = discord_tool_definitions();
             let answer = run_agent(
                 &mut backend,
                 &mut messages,
-                &tool_definitions(),
+                &tools,
                 AgentLimits::default(),
                 &CancellationToken::new(),
                 |_| {},
@@ -1296,6 +1329,12 @@ mod tests {
         assert!(validate_tool_call(&invalid, &tools).is_err());
         invalid.args = json!({"path":"a.txt"});
         assert!(validate_tool_call(&invalid, &tools).is_ok());
+
+        let discord_tools = discord_tool_definitions();
+        let mut discord = call("discord.send");
+        assert!(validate_tool_call(&discord, &discord_tools).is_ok());
+        discord.args["unexpected"] = json!(true);
+        assert!(validate_tool_call(&discord, &discord_tools).is_err());
     }
 
     struct FailedToolBackend {

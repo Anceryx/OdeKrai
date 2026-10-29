@@ -60,7 +60,88 @@ const registryFixture: CatalogSkill[] = [
 
 const noOperation = () => undefined;
 
+const discordSkill: CatalogSkill = {
+  id: 'discord.send',
+  name: 'Enviar mensagem ao Discord',
+  description: 'Envia mensagem por webhook, sempre após aprovação.',
+  risk: 'comunicacao_externa',
+  resultTrust: 'local',
+  enabled: true,
+  morePermissive: false,
+  fixedBlocked: true,
+  category: 'integration',
+  status: 'installed',
+  configurationRequired: false,
+  family: 'mensagens',
+  icon: 'message',
+  examples: ['Envie uma mensagem aprovada.'],
+  origin: { kind: 'builtin' },
+};
+
 describe('catálogo de habilidades', () => {
+  it('distingue habilidade Discord ativa de ferramenta exposta ao agente', () => {
+    const render = (agentRuntime: {
+      modeEnabled: boolean;
+      available: boolean;
+      reason: string | null;
+    }) =>
+      renderToStaticMarkup(
+        <SkillsCatalogView
+          skills={[discordSkill]}
+          initialFamily="mensagens"
+          agentRuntime={agentRuntime}
+          onFamilyToggle={noOperation}
+          onSkillToggle={noOperation}
+          onOverrideToggle={noOperation}
+        />,
+      );
+
+    expect(render({ modeEnabled: false, available: true, reason: null })).toContain(
+      'habilidade ativa, mas não exposta: o modo agente está desligado nesta conversa.',
+    );
+    expect(
+      render({
+        modeEnabled: false,
+        available: false,
+        reason: 'Este modelo não tem suporte verificado a ferramentas.',
+      }),
+    ).toContain('Este modelo não tem suporte verificado a ferramentas.');
+    expect(render({ modeEnabled: true, available: true, reason: null })).toContain(
+      'ferramenta disponível para esta conversa; cada envio ainda exige aprovação.',
+    );
+    expect(
+      renderToStaticMarkup(
+        <SkillsCatalogView
+          skills={[
+            {
+              ...discordSkill,
+              enabled: false,
+              status: 'configuration_required',
+              configurationRequired: true,
+            },
+          ]}
+          initialFamily="mensagens"
+          agentRuntime={{ modeEnabled: true, available: true, reason: null }}
+          onFamilyToggle={noOperation}
+          onSkillToggle={noOperation}
+          onOverrideToggle={noOperation}
+        />,
+      ),
+    ).toContain('configure e teste um webhook válido');
+    expect(
+      renderToStaticMarkup(
+        <SkillsCatalogView
+          skills={[{ ...discordSkill, enabled: false, status: 'available' }]}
+          initialFamily="mensagens"
+          agentRuntime={{ modeEnabled: true, available: true, reason: null }}
+          onFamilyToggle={noOperation}
+          onSkillToggle={noOperation}
+          onOverrideToggle={noOperation}
+        />,
+      ),
+    ).toContain('habilidade desativada; ela não é enviada ao modelo.');
+  });
+
   it('não mantém estilos dos cartões individuais substituídos pelo catálogo por família', () => {
     const styles = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
     const legacySelectors = [

@@ -232,11 +232,21 @@ function MainApp() {
           }),
         );
     void checkAvailability();
+    let disposed = false;
+    let stopSkillsUpdated: (() => void) | undefined;
+    void listen('skills-updated', () => void checkAvailability()).then((stop) => {
+      if (disposed) stop();
+      else stopSkillsUpdated = stop;
+    });
     const onFocus = () => {
       void checkAvailability();
     };
     window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
+    return () => {
+      disposed = true;
+      stopSkillsUpdated?.();
+      window.removeEventListener('focus', onFocus);
+    };
   }, [
     activeProvider.providerId,
     activeProvider.model,
@@ -1162,7 +1172,14 @@ function MainApp() {
               {section === 'computer' && <ComputerScreen />}
               {section === 'calendar' && <CalendarScreen />}
               {section === 'skills' && (
-                <SkillsScreen onOpenPrivacy={() => navigate('permissions')} />
+                <SkillsScreen
+                  onOpenPrivacy={() => navigate('permissions')}
+                  agentRuntime={{
+                    modeEnabled: agentEnabled,
+                    available: agentAvailability.available,
+                    reason: agentAvailability.reason,
+                  }}
+                />
               )}
               {section === 'companion' && (
                 <AssistantScreen

@@ -32,6 +32,11 @@ type SkillsCatalogViewProps = {
   onOverrideToggle: (skill: CatalogSkill, enabled: boolean) => void;
   googleConnection?: ReactNode;
   prerequisites?: SkillPrerequisites;
+  agentRuntime?: {
+    modeEnabled: boolean;
+    available: boolean;
+    reason: string | null;
+  };
 };
 
 type GoogleOAuthStatus = {
@@ -71,6 +76,7 @@ export function SkillsCatalogView({
   onOpenPrivacy,
   googleConnection,
   prerequisites = { folderAvailable: true, appCount: 0, googleConnected: null },
+  agentRuntime,
 }: SkillsCatalogViewProps) {
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<SkillsCatalogTab>(initialTab);
@@ -237,6 +243,7 @@ export function SkillsCatalogView({
                     family={selected}
                     busy={busy}
                     prerequisites={prerequisites}
+                    agentRuntime={agentRuntime}
                     headingRef={detailsHeadingRef}
                     onBack={closeFamily}
                     onToggle={(enabled) => onFamilyToggle(selected.family, enabled)}
@@ -379,6 +386,7 @@ function SkillFamilyDetails({
   family,
   busy,
   prerequisites,
+  agentRuntime,
   headingRef,
   onBack,
   onToggle,
@@ -390,6 +398,7 @@ function SkillFamilyDetails({
   family: CatalogFamily;
   busy: boolean;
   prerequisites: SkillPrerequisites;
+  agentRuntime?: SkillsCatalogViewProps['agentRuntime'];
   headingRef: React.RefObject<HTMLHeadingElement | null>;
   onBack: () => void;
   onToggle: (enabled: boolean) => void;
@@ -551,6 +560,22 @@ function SkillFamilyDetails({
                 )}
               </div>
               <p>{skill.description}</p>
+              {skill.id === 'discord.send' && (
+                <p className="skills-tool-exposure" role="status">
+                  <strong>Disponibilidade no agente:</strong>{' '}
+                  {skill.configurationRequired
+                    ? 'configure e teste um webhook válido para habilitar esta ferramenta.'
+                    : !skill.enabled
+                      ? 'habilidade desativada; ela não é enviada ao modelo.'
+                      : !agentRuntime
+                        ? 'o modo agente e o provedor desta conversa ainda não foram verificados.'
+                        : !agentRuntime.available
+                          ? `agente indisponível: ${agentRuntime.reason ?? 'verifique os requisitos do agente.'}`
+                          : !agentRuntime.modeEnabled
+                            ? 'habilidade ativa, mas não exposta: o modo agente está desligado nesta conversa.'
+                            : 'ferramenta disponível para esta conversa; cada envio ainda exige aprovação.'}
+                </p>
+              )}
               {skill.examples.length > 0 && (
                 <ul aria-label={`Exemplos de pedidos para ${skill.name}`}>
                   {skill.examples.map((example) => (
@@ -610,7 +635,13 @@ function SkillFamilyDetails({
   );
 }
 
-export function SkillsScreen({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
+export function SkillsScreen({
+  onOpenPrivacy,
+  agentRuntime,
+}: {
+  onOpenPrivacy: () => void;
+  agentRuntime: NonNullable<SkillsCatalogViewProps['agentRuntime']>;
+}) {
   const [skills, setSkills] = useState<CatalogSkill[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -693,6 +724,7 @@ export function SkillsScreen({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
         ) : undefined
       }
       prerequisites={prerequisites}
+      agentRuntime={agentRuntime}
       onFamilyToggle={(family, enabled) =>
         void runCommand(() => setSkillGroupEnabledCommand(family, enabled, invoke))
       }
