@@ -4909,3 +4909,32 @@ html.island-window-html {
   color: var(--danger, #b42318);
   font-size: 13px;
 }
+
+.audio-transcription-dialog {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.audio-transcription-dialog h3,
+.audio-transcription-dialog p {
+  margin: 0;
+}
+
+.audio-transcription-dialog label {
+  display: grid;
+  gap: 6px;
+}
+
+.audio-transcription-dialog input {
+  max-width: 180px;
+}
+
+.audio-transcription-dialog > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import type { ChatMessage } from '../../core/provider-messages';
 import { filterConversations, presentMessages, type ConversationSummary } from '../../core/chat';
 import { safeMarkdownUrl } from '../../core/markdown';
@@ -12,6 +13,7 @@ import { ResizeHandle } from '../ResizeHandle';
 import { providerById } from '../../core/providers';
 import { AgentActionCard, AgentControls, type AgentActionCardData } from '../AgentControls';
 import { ScreenCapture } from '../ScreenCapture';
+import { supportsTranscription, transcribeConfirmedRecording } from '../../core/transcription';
 
 export function ConversationsScreen({
   messages,
@@ -105,6 +107,7 @@ export function ConversationsScreen({
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const startedAtRef = useRef(0);
+  const recordedMillisecondsRef = useRef(0);
   const [recordingState, setRecordingState] = useState<'idle' | 'recording' | 'paused' | 'ready'>(
     'idle',
   );
@@ -112,6 +115,9 @@ export function ConversationsScreen({
   const [recordingLevel, setRecordingLevel] = useState(0);
   const [recordingError, setRecordingError] = useState('');
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [transcriptionDialogOpen, setTranscriptionDialogOpen] = useState(false);
+  const [transcriptionPrice, setTranscriptionPrice] = useState('');
+  const [transcriptionBusy, setTranscriptionBusy] = useState(false);
   const recordingBlobRef = useRef<Blob | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const recordingUrlRef = useRef<string | null>(null);
@@ -155,9 +161,9 @@ export function ConversationsScreen({
   useEffect(() => {
     if (recordingState !== 'recording') return;
     const timer = window.setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startedAtRef.current) / 1000);
-      setRecordingSeconds(elapsed);
-      if (elapsed >= 60) finishRecording();
+      const elapsed = recordedMillisecondsRef.current + Date.now() - startedAtRef.current;
+      setRecordingSeconds(Math.floor(elapsed / 1000));
+      if (elapsed >= 60_000) finishRecording();
     }, 100);
     return () => window.clearInterval(timer);
   }, [recordingState]);
@@ -216,6 +222,7 @@ export function ConversationsScreen({
           () => {
             if (recorderRef.current === recorder) {
               setRecordingError('O microfone foi desconectado. A gravação foi interrompida.');
+              recordActiveSegment();
               recordingBlobRef.current = null;
               recorder.stop();
             }
@@ -238,6 +245,7 @@ export function ConversationsScreen({
         requestAnimationFrame(meter);
       };
       recorder.start(200);
+      recordedMillisecondsRef.current = 0;
       startedAtRef.current = Date.now();
       recordingBlobRef.current = new Blob();
       setRecordingSeconds(0);
@@ -264,8 +272,32 @@ export function ConversationsScreen({
   function finishRecording() {
     const recorder = recorderRef.current;
     if (!recorder || recorder.state === 'inactive') return;
+    recordActiveSegment();
+    setRecordingSeconds(Math.min(60, Math.ceil(recordedMillisecondsRef.current / 1000)));
     recordingBlobRef.current = new Blob();
     recorder.stop();
+  }
+
+  function recordActiveSegment() {
+    if (startedAtRef.current) {
+      recordedMillisecondsRef.current += Date.now() - startedAtRef.current;
+      startedAtRef.current = 0;
+    }
+  }
+
+  function pauseRecording() {
+    if (recorderRef.current?.state !== 'recording') return;
+    recordActiveSegment();
+    setRecordingSeconds(Math.floor(recordedMillisecondsRef.current / 1000));
+    recorderRef.current.pause();
+    setRecordingState('paused');
+  }
+
+  function resumeRecording() {
+    if (recorderRef.current?.state !== 'paused') return;
+    startedAtRef.current = Date.now();
+    recorderRef.current.resume();
+    setRecordingState('recording');
   }
 
   function cancelRecording() {
@@ -282,12 +314,49 @@ export function ConversationsScreen({
     recordingUrlRef.current = null;
     setRecordingUrl(null);
     setRecordingSeconds(0);
+    recordedMillisecondsRef.current = 0;
+    startedAtRef.current = 0;
   }
 
   function discardRecording() {
     cancelRecording();
     recordingBlobRef.current = null;
     setRecordingState('idle');
+  }
+
+  async function confirmTranscription() {
+    const audio = recordingBlobRef.current;
+    if (!audio || !supportsTranscription(providerId)) return;
+    setTranscriptionBusy(true);
+    setRecordingError('');
+    try {
+      const transcript = await transcribeConfirmedRecording(
+        true,
+        providerId,
+        audio,
+        (selectedProvider, mediaType, audioBase64) =>
+          invoke<string>('transcribe_audio', {
+            providerId: selectedProvider,
+            mediaType,
+            audioBase64,
+          }),
+      );
+      if (transcript) setDraft(transcript);
+      setTranscriptionDialogOpen(false);
+    } catch (error) {
+      setRecordingError(
+        error instanceof Error ? error.message : 'A transcrição falhou. Tente novamente.',
+      );
+      setTranscriptionDialogOpen(false);
+    } finally {
+      recordingBlobRef.current = null;
+      chunksRef.current = [];
+      if (recordingUrlRef.current) URL.revokeObjectURL(recordingUrlRef.current);
+      recordingUrlRef.current = null;
+      setRecordingUrl(null);
+      setRecordingState('idle');
+      setTranscriptionBusy(false);
+    }
   }
 
   return (
@@ -614,23 +683,11 @@ export function ConversationsScreen({
                 )}
                 <span>Nenhum áudio será enviado. A gravação para ao sair desta tela.</span>
                 {recordingState === 'recording' ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      recorderRef.current?.pause();
-                      setRecordingState('paused');
-                    }}
-                  >
+                  <button type="button" onClick={pauseRecording}>
                     Pausar
                   </button>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      recorderRef.current?.resume();
-                      setRecordingState('recording');
-                    }}
-                  >
+                  <button type="button" onClick={resumeRecording}>
                     Retomar
                   </button>
                 )}
@@ -645,6 +702,11 @@ export function ConversationsScreen({
             {recordingUrl && recordingState === 'ready' && (
               <div className="audio-recording" role="group" aria-label="Gravação local concluída">
                 <audio controls src={recordingUrl} />
+                {providerConfigured && supportsTranscription(providerId) && (
+                  <button type="button" onClick={() => setTranscriptionDialogOpen(true)}>
+                    Transcrever com {providerById(providerId)?.name ?? providerId}
+                  </button>
+                )}
                 <button type="button" onClick={discardRecording}>
                   Descartar
                 </button>
@@ -673,6 +735,56 @@ export function ConversationsScreen({
             <p className="audio-recording-error" role="alert">
               {recordingError}
             </p>
+          )}
+          {transcriptionDialogOpen && recordingBlobRef.current && (
+            <div
+              className="audio-transcription-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="audio-transcription-title"
+            >
+              <h3 id="audio-transcription-title">Confirmar envio do áudio</h3>
+              <p>
+                Duração: {Math.floor(recordingSeconds / 60)}:
+                {String(recordingSeconds % 60).padStart(2, '0')}
+              </p>
+              <p>Provedor: {providerById(providerId)?.name ?? providerId}</p>
+              <p>O áudio será enviado a este provedor para transcrição.</p>
+              <label>
+                Preço informado por minuto (USD), opcional
+                <input
+                  type="number"
+                  min="0"
+                  step="0.0001"
+                  value={transcriptionPrice}
+                  onChange={(event) => setTranscriptionPrice(event.target.value)}
+                />
+              </label>
+              {transcriptionPrice !== '' &&
+                Number.isFinite(Number(transcriptionPrice)) &&
+                Number(transcriptionPrice) >= 0 && (
+                  <p>
+                    Custo estimado: $
+                    {((recordingSeconds / 60) * Number(transcriptionPrice)).toFixed(4)} USD
+                  </p>
+                )}
+              <div>
+                <button
+                  type="button"
+                  disabled={transcriptionBusy}
+                  onClick={() => setTranscriptionDialogOpen(false)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={transcriptionBusy}
+                  onClick={() => void confirmTranscription()}
+                >
+                  {transcriptionBusy ? 'Transcrevendo…' : 'Confirmar e transcrever'}
+                </button>
+              </div>
+            </div>
           )}
         </form>
         <p className="chat-disclaimer">

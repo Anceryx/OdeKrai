@@ -16,6 +16,7 @@ use tauri::{ipc::Channel, Manager, State};
 use tokio_util::sync::CancellationToken;
 
 mod anthropic;
+pub(crate) mod audio_transcription;
 mod cancellation;
 mod catalog;
 mod chat_completions;

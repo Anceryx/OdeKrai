@@ -933,6 +933,7 @@ pub fn run() -> Result<(), tauri::Error> {
             providers::test_provider_connection,
             providers::ping_provider,
             providers::get_provider_capabilities,
+            providers::audio_transcription::transcribe_audio,
             mcp_registry::mcp_list_servers,
             mcp_registry::mcp_add_server,
             mcp_registry::mcp_set_secret,
