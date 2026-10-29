@@ -48,6 +48,12 @@ type McpServer = {
   error: string | null;
 };
 type McpState = { label: string; tools?: unknown; error?: string };
+type GoogleOAuthStatus = {
+  connected: boolean;
+  clientId: string | null;
+  scopes: string[];
+  reauthorize: boolean;
+};
 
 const riskLabels: Record<Risk, string> = {
   leitura: 'Leitura',
@@ -73,6 +79,10 @@ export function SkillsScreen() {
   const [mcpEnvNames, setMcpEnvNames] = useState('');
   const [mcpSecrets, setMcpSecrets] = useState<Record<string, string>>({});
   const [mcpConfirmed, setMcpConfirmed] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState('');
+  const [googleClientSecret, setGoogleClientSecret] = useState('');
+  const [googleScopes, setGoogleScopes] = useState('');
+  const [googleStatus, setGoogleStatus] = useState<GoogleOAuthStatus | null>(null);
 
   const refresh = useCallback(async () => {
     if (!isTauri()) return;
@@ -87,6 +97,9 @@ export function SkillsScreen() {
       setFolders(nextFolders);
       setApps(nextApps);
       setMcpServers(nextMcpServers);
+      const nextGoogleStatus = await invoke<GoogleOAuthStatus>('google_oauth_status');
+      setGoogleStatus(nextGoogleStatus);
+      if (nextGoogleStatus.clientId) setGoogleClientId(nextGoogleStatus.clientId);
       setError('');
     } catch (cause) {
       setError(String(cause));
@@ -470,6 +483,107 @@ export function SkillsScreen() {
           Nenhuma capacidade corresponde à pesquisa.
         </p>
       ) : null}
+      {!query.trim() && (
+        <section className="settings-section" aria-labelledby="google-oauth-heading">
+          <div className="section-heading-row">
+            <div>
+              <h2 id="google-oauth-heading">Integração OAuth do Google</h2>
+              <p>Conexão reutilizável para integrações que fornecem seus próprios escopos.</p>
+            </div>
+            <span
+              className={`skill-status ${googleStatus?.connected ? 'skill-status--installed' : 'skill-status--configuration_required'}`}
+              role="status"
+            >
+              {googleStatus?.connected ? 'CONECTADO' : 'DESCONECTADO'}
+            </span>
+          </div>
+          {googleStatus?.connected && (
+            <p>
+              Client ID: <code>{googleStatus.clientId}</code>
+              <br />
+              Escopos autorizados: {googleStatus.scopes.join(', ')}
+            </p>
+          )}
+          {!googleStatus?.connected && (
+            <>
+              <label htmlFor="google-client-id">Client ID do cliente OAuth para computador</label>
+              <input
+                id="google-client-id"
+                value={googleClientId}
+                onChange={(event) => setGoogleClientId(event.target.value)}
+                autoComplete="off"
+              />
+              <label htmlFor="google-client-secret">Client secret (opcional)</label>
+              <input
+                id="google-client-secret"
+                type="password"
+                value={googleClientSecret}
+                onChange={(event) => setGoogleClientSecret(event.target.value)}
+                autoComplete="new-password"
+              />
+              <label htmlFor="google-oauth-scopes">
+                Escopos informados pela integração consumidora
+              </label>
+              <input
+                id="google-oauth-scopes"
+                value={googleScopes}
+                onChange={(event) => setGoogleScopes(event.target.value)}
+                placeholder="URI dos escopos, separados por espaço"
+              />
+              <p>
+                O módulo não define escopos. Cole aqui os escopos documentados pela integração que
+                usará a conexão. Clientes desktop são públicos; o secret não é confidencial.
+              </p>
+              <Button
+                disabled={busy || !isTauri() || !googleClientId.trim() || !googleScopes.trim()}
+                onClick={() => {
+                  setBusy(true);
+                  void invoke<GoogleOAuthStatus>('google_oauth_connect', {
+                    clientId: googleClientId,
+                    clientSecret: googleClientSecret || null,
+                    scopes: googleScopes.trim().split(/\s+/),
+                  })
+                    .then((status) => {
+                      setGoogleStatus(status);
+                      setGoogleClientSecret('');
+                    })
+                    .catch((cause) => setError(String(cause)))
+                    .finally(() => setBusy(false));
+                }}
+              >
+                Conectar conta Google
+              </Button>
+            </>
+          )}
+          {googleStatus?.connected && (
+            <Button
+              variant="secondary"
+              disabled={busy || !isTauri()}
+              onClick={() => {
+                setBusy(true);
+                void invoke('google_oauth_disconnect')
+                  .then(() => {
+                    setGoogleStatus({
+                      connected: false,
+                      clientId: null,
+                      scopes: [],
+                      reauthorize: false,
+                    });
+                    setGoogleClientSecret('');
+                  })
+                  .catch(async (cause) => {
+                    setError(String(cause));
+                    const status = await invoke<GoogleOAuthStatus>('google_oauth_status');
+                    setGoogleStatus(status);
+                  })
+                  .finally(() => setBusy(false));
+              }}
+            >
+              Desconectar
+            </Button>
+          )}
+        </section>
+      )}
       {renderGroup('local', localSkills)}
       {!query.trim() && (
         <p className="skills-empty">

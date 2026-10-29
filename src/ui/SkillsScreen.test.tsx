@@ -35,4 +35,16 @@ describe('tela de habilidades', () => {
       /@media \(max-width: 850px\)[\s\S]*?\.skill-card\s*\{\s*grid-template-columns: 1fr;/,
     );
   });
+
+  it('apresenta a conexão OAuth Google sem fixar escopos de APIs', () => {
+    const markup = renderToStaticMarkup(<SkillsScreen />);
+    const source = readFileSync(new URL('./SkillsScreen.tsx', import.meta.url), 'utf8');
+    expect(markup).toContain('Integração OAuth do Google');
+    expect(markup).toContain('Client ID do cliente OAuth para computador');
+    expect(markup).toContain('Client secret (opcional)');
+    expect(markup).toContain('Escopos informados pela integração consumidora');
+    expect(source).toContain("invoke<GoogleOAuthStatus>('google_oauth_connect'");
+    expect(source).toContain("invoke('google_oauth_disconnect')");
+    expect(source).toContain("setGoogleClientSecret('')");
+  });
 });

@@ -112,6 +112,7 @@ mod code_delegate;
 mod diagnostics;
 mod discord;
 mod external_links;
+pub mod google_oauth;
 mod hardware;
 mod history;
 mod local_models;
@@ -874,6 +875,7 @@ pub fn run() -> Result<(), tauri::Error> {
         .manage(tray::ShutdownState::default())
         .manage(reminders::ReminderScheduler::default())
         .manage(mcp_registry::McpRuntime::default())
+        .manage(google_oauth::GoogleOAuthState::default())
         .setup(|app| {
             reminders::start_scheduler(app.handle());
             load_pet_position(app.handle());
@@ -940,6 +942,9 @@ pub fn run() -> Result<(), tauri::Error> {
             mcp_registry::mcp_set_enabled,
             mcp_registry::mcp_test_connection,
             mcp_registry::mcp_remove_server,
+            google_oauth::google_oauth_connect,
+            google_oauth::google_oauth_status,
+            google_oauth::google_oauth_disconnect,
             providers::set_provider_tools_opt_in,
             profile::get_profile,
             profile::save_profile,
