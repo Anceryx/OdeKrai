@@ -11,7 +11,12 @@ pub(crate) trait SystemAdapter {
     fn wallpaper(&mut self) -> Result<Option<String>, String>;
     fn set_wallpaper(&mut self, path: Option<&str>) -> Result<(), String>;
     fn lock_workstation(&mut self) -> Result<(), String>;
+    fn brightness(&mut self) -> Result<Option<u8>, String>;
+    fn set_brightness(&mut self, value: u8) -> Result<(), String>;
+    fn sleep(&mut self) -> Result<(), String>;
 }
+
+const UNSUPPORTED_BRIGHTNESS: &str = "este monitor não permite controlar o brilho por software";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum MediaKey {
@@ -69,6 +74,27 @@ pub(crate) fn execute_with<A: SystemAdapter>(
             adapter.lock_workstation()?;
             Ok("Solicitação de bloqueio enviada ao Windows.".into())
         }
+        "display.get_brightness" => match adapter.brightness()? {
+            Some(value) => Ok(format!("Brilho da tela: {value}%")),
+            None => Err(UNSUPPORTED_BRIGHTNESS.into()),
+        },
+        "display.set_brightness" => {
+            let value = params["brightness"]
+                .as_u64()
+                .ok_or("Informe um brilho inteiro entre 0 e 100.")?;
+            if value > 100 {
+                return Err("O brilho precisa estar entre 0 e 100.".into());
+            }
+            adapter.set_brightness(value as u8)?;
+            Ok(format!(
+                "Brilho definido para {value}%. Use display.restore_brightness para desfazer."
+            ))
+        }
+        "display.restore_brightness" => Err("A habilidade requer persistência SQLite.".into()),
+        "power.sleep" => {
+            adapter.sleep()?;
+            Ok("O computador vai suspender agora.".into())
+        }
         _ => Err("Habilidade de controle local desconhecida.".into()),
     }
 }
@@ -81,6 +107,8 @@ pub(crate) struct SimulatedAdapter {
     pub media_commands: Vec<MediaKey>,
     pub current_wallpaper: Option<String>,
     pub locked: bool,
+    pub brightness: Option<u8>,
+    pub sleep_requested: bool,
 }
 
 #[cfg(test)]
@@ -109,6 +137,21 @@ impl SystemAdapter for SimulatedAdapter {
     }
     fn lock_workstation(&mut self) -> Result<(), String> {
         self.locked = true;
+        Ok(())
+    }
+    fn brightness(&mut self) -> Result<Option<u8>, String> {
+        Ok(self.brightness)
+    }
+    fn set_brightness(&mut self, value: u8) -> Result<(), String> {
+        if let Some(brightness) = &mut self.brightness {
+            *brightness = value;
+            Ok(())
+        } else {
+            Err(UNSUPPORTED_BRIGHTNESS.into())
+        }
+    }
+    fn sleep(&mut self) -> Result<(), String> {
+        self.sleep_requested = true;
         Ok(())
     }
 }
@@ -144,6 +187,8 @@ pub(crate) fn execute_managed_with<A: SystemAdapter>(
 ) -> Result<String, String> {
     db.execute_batch("CREATE TABLE IF NOT EXISTS wallpaper_history (id INTEGER PRIMARY KEY, previous_path TEXT, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER)")
         .map_err(|_| "Não foi possível preparar o histórico do papel de parede.".to_string())?;
+    db.execute_batch("CREATE TABLE IF NOT EXISTS brightness_history (id INTEGER PRIMARY KEY, previous_value INTEGER NOT NULL, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER)")
+        .map_err(|_| "Não foi possível preparar o histórico do brilho.".to_string())?;
     match skill_id {
         "wallpaper.set" => {
             let raw = args["path"]
@@ -176,6 +221,31 @@ pub(crate) fn execute_managed_with<A: SystemAdapter>(
             )
             .map_err(|_| "Não foi possível registrar a restauração do papel de parede.".to_string())?;
             Ok("Papel de parede anterior restaurado.".into())
+        }
+        "display.get_brightness" => execute_with(adapter, skill_id, args),
+        "display.set_brightness" => {
+            let value = args["brightness"]
+                .as_u64()
+                .ok_or("Informe um brilho inteiro entre 0 e 100.")?;
+            if value > 100 {
+                return Err("O brilho precisa estar entre 0 e 100.".into());
+            }
+            let previous = adapter.brightness()?.ok_or(UNSUPPORTED_BRIGHTNESS)?;
+            db.execute("INSERT INTO brightness_history(previous_value,created_at,origin) VALUES (?1,?2,?3)", params![previous, unix_seconds(), origin])
+                .map_err(|_| "Não foi possível guardar o brilho anterior.".to_string())?;
+            adapter.set_brightness(value as u8)?;
+            Ok(format!(
+                "Brilho definido para {value}%. Use display.restore_brightness para desfazer."
+            ))
+        }
+        "display.restore_brightness" => {
+            let previous: Option<i64> = db.query_row("SELECT previous_value FROM brightness_history WHERE restored_at IS NULL ORDER BY id DESC LIMIT 1", [], |row| row.get(0)).optional()
+                .map_err(|_| "Não foi possível consultar o brilho anterior.".to_string())?;
+            let previous = previous.ok_or("Não há brilho anterior para restaurar.")?;
+            adapter.set_brightness(previous as u8)?;
+            db.execute("UPDATE brightness_history SET restored_at=?1 WHERE id=(SELECT id FROM brightness_history WHERE restored_at IS NULL ORDER BY id DESC LIMIT 1)", [unix_seconds()])
+                .map_err(|_| "Não foi possível registrar a restauração do brilho.".to_string())?;
+            Ok("Brilho anterior restaurado.".into())
         }
         _ => execute_with(adapter, skill_id, args),
     }
@@ -354,6 +424,175 @@ impl SystemAdapter for NativeAdapter {
             Ok(())
         }
     }
+
+    fn brightness(&mut self) -> Result<Option<u8>, String> {
+        run_wmi_brightness(None)
+    }
+    fn set_brightness(&mut self, value: u8) -> Result<(), String> {
+        run_wmi_brightness(Some(value)).map(|_| ())
+    }
+    fn sleep(&mut self) -> Result<(), String> {
+        suspend_windows()
+    }
+}
+
+#[cfg(windows)]
+fn run_wmi_brightness(set: Option<u8>) -> Result<Option<u8>, String> {
+    use serde::Deserialize;
+    #[derive(Deserialize)]
+    #[serde(rename = "WmiMonitorBrightness", rename_all = "PascalCase")]
+    struct MonitorBrightness {
+        active: bool,
+        current_brightness: u8,
+    }
+    #[derive(Deserialize)]
+    #[serde(rename = "WmiMonitorBrightnessMethods", rename_all = "PascalCase")]
+    struct BrightnessMethod {
+        active: bool,
+        #[serde(rename = "__PATH")]
+        path: String,
+    }
+    #[derive(serde::Serialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct SetParams {
+        timeout: u32,
+        brightness: u8,
+    }
+    #[derive(Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct SetResult {
+        return_value: u32,
+    }
+
+    std::thread::spawn(move || {
+        use wmi::WMIConnection;
+        let wmi = WMIConnection::with_namespace_path("ROOT\\WMI")
+            .map_err(|_| UNSUPPORTED_BRIGHTNESS.to_string())?;
+        if let Some(value) = set {
+            let methods: Vec<BrightnessMethod> = wmi
+                .query()
+                .map_err(|_| UNSUPPORTED_BRIGHTNESS.to_string())?;
+            let method = methods
+                .iter()
+                .find(|method| method.active)
+                .ok_or_else(|| UNSUPPORTED_BRIGHTNESS.to_string())?;
+            let result: SetResult = wmi
+                .exec_instance_method::<BrightnessMethod, _>(
+                    &method.path,
+                    "WmiSetBrightness",
+                    SetParams {
+                        timeout: 0,
+                        brightness: value,
+                    },
+                )
+                .map_err(|_| UNSUPPORTED_BRIGHTNESS.to_string())?;
+            if result.return_value != 0 {
+                return Err(UNSUPPORTED_BRIGHTNESS.to_string());
+            }
+            Ok(Some(value))
+        } else {
+            let monitors: Vec<MonitorBrightness> = wmi
+                .query()
+                .map_err(|_| UNSUPPORTED_BRIGHTNESS.to_string())?;
+            monitors
+                .iter()
+                .find(|monitor| monitor.active)
+                .map(|monitor| Some(monitor.current_brightness))
+                .ok_or_else(|| UNSUPPORTED_BRIGHTNESS.to_string())
+        }
+    })
+    .join()
+    .map_err(|_| UNSUPPORTED_BRIGHTNESS.to_string())?
+}
+
+#[cfg(windows)]
+fn suspend_windows() -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::System::Power::SetSuspendState;
+    use windows_sys::Win32::{
+        Foundation::{CloseHandle, GetLastError},
+        Security::{
+            AdjustTokenPrivileges, LookupPrivilegeValueW, LUID_AND_ATTRIBUTES,
+            SE_PRIVILEGE_ENABLED, TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY,
+        },
+        System::Threading::{GetCurrentProcess, OpenProcessToken},
+    };
+    let name: Vec<u16> = std::ffi::OsStr::new("SeShutdownPrivilege")
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+    unsafe {
+        let mut token = std::ptr::null_mut();
+        if OpenProcessToken(
+            GetCurrentProcess(),
+            TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
+            &mut token,
+        ) == 0
+        {
+            return Err(
+                "Não foi possível habilitar SE_SHUTDOWN_NAME para suspender o computador.".into(),
+            );
+        }
+        let close = |()| {
+            CloseHandle(token);
+        };
+        let mut luid = std::mem::zeroed();
+        if LookupPrivilegeValueW(std::ptr::null(), name.as_ptr(), &mut luid) == 0 {
+            close(());
+            return Err("Não foi possível localizar SE_SHUTDOWN_NAME.".into());
+        }
+        let state = TOKEN_PRIVILEGES {
+            PrivilegeCount: 1,
+            Privileges: [LUID_AND_ATTRIBUTES {
+                Luid: luid,
+                Attributes: SE_PRIVILEGE_ENABLED,
+            }],
+        };
+        let mut previous: TOKEN_PRIVILEGES = std::mem::zeroed();
+        if AdjustTokenPrivileges(
+            token,
+            0,
+            &state,
+            std::mem::size_of::<TOKEN_PRIVILEGES>() as u32,
+            &mut previous,
+            std::ptr::null_mut(),
+        ) == 0
+        {
+            close(());
+            return Err(
+                "O processo não possui SE_SHUTDOWN_NAME para suspender o computador.".into(),
+            );
+        }
+        if GetLastError() != 0 {
+            let _ = AdjustTokenPrivileges(
+                token,
+                0,
+                &previous,
+                0,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            );
+            close(());
+            return Err(
+                "O processo não possui SE_SHUTDOWN_NAME para suspender o computador.".into(),
+            );
+        }
+        let result = SetSuspendState(0, 0, 0) != 0;
+        let _ = AdjustTokenPrivileges(
+            token,
+            0,
+            &previous,
+            0,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        );
+        close(());
+        if result {
+            Ok(())
+        } else {
+            Err("Não foi possível suspender o computador. Verifique se o Windows permite a suspensão.".into())
+        }
+    }
 }
 
 #[cfg(windows)]
@@ -432,6 +671,24 @@ impl SystemAdapter for NativeAdapter {
     fn lock_workstation(&mut self) -> Result<(), String> {
         Err("O bloqueio só está disponível no Windows.".into())
     }
+    fn brightness(&mut self) -> Result<Option<u8>, String> {
+        Err(UNSUPPORTED_BRIGHTNESS.into())
+    }
+    fn set_brightness(&mut self, _: u8) -> Result<(), String> {
+        Err(UNSUPPORTED_BRIGHTNESS.into())
+    }
+    fn sleep(&mut self) -> Result<(), String> {
+        Err("A suspensão só está disponível no Windows.".into())
+    }
+}
+
+#[cfg(not(windows))]
+fn run_wmi_brightness(_: Option<u8>) -> Result<Option<u8>, String> {
+    Err(UNSUPPORTED_BRIGHTNESS.into())
+}
+#[cfg(not(windows))]
+fn suspend_windows() -> Result<(), String> {
+    Err("A suspensão só está disponível no Windows.".into())
 }
 
 #[cfg(test)]
@@ -572,6 +829,109 @@ mod tests {
     }
 
     #[test]
+    fn brightness_is_bounded_supported_and_restorable_using_only_the_simulator() {
+        let db = Connection::open_in_memory().unwrap();
+        let mut sim = SimulatedAdapter {
+            brightness: Some(37),
+            ..Default::default()
+        };
+        assert!(execute_managed_with(
+            &mut sim,
+            "display.set_brightness",
+            &json!({"brightness":101}),
+            &db,
+            &[],
+            "user"
+        )
+        .is_err());
+        for value in [0, 100] {
+            execute_managed_with(
+                &mut sim,
+                "display.set_brightness",
+                &json!({"brightness":value}),
+                &db,
+                &[],
+                "user",
+            )
+            .unwrap();
+            assert_eq!(sim.brightness, Some(value));
+            execute_managed_with(
+                &mut sim,
+                "display.restore_brightness",
+                &json!({}),
+                &db,
+                &[],
+                "user",
+            )
+            .unwrap();
+            assert_eq!(sim.brightness, Some(37));
+        }
+        let (previous, origin): (i64, String) = db
+            .query_row(
+                "SELECT previous_value,origin FROM brightness_history ORDER BY id LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!((previous, origin.as_str()), (37, "user"));
+        let mut unsupported = SimulatedAdapter::default();
+        assert_eq!(
+            execute_with(&mut unsupported, "display.get_brightness", &json!({})).unwrap_err(),
+            UNSUPPORTED_BRIGHTNESS
+        );
+        assert_eq!(
+            execute_with(
+                &mut unsupported,
+                "display.set_brightness",
+                &json!({"brightness":50})
+            )
+            .unwrap_err(),
+            UNSUPPORTED_BRIGHTNESS
+        );
+    }
+
+    #[test]
+    fn sleep_adapter_only_records_simulated_request_and_skill_requires_approval() {
+        let mut sim = SimulatedAdapter::default();
+        assert_eq!(
+            execute_with(&mut sim, "power.sleep", &json!({})).unwrap(),
+            "O computador vai suspender agora."
+        );
+        assert!(sim.sleep_requested);
+        let skill = crate::security::skills::registry()
+            .into_iter()
+            .find(|skill| skill.id == "power.sleep")
+            .unwrap();
+        assert_eq!(
+            skill.risk(&json!({})).unwrap(),
+            crate::policy::Risk::EscritaReversivel
+        );
+    }
+
+    #[test]
+    fn brightness_skill_risks_distinguish_read_and_reversible_write() {
+        let skills = crate::security::skills::registry();
+        let get = skills
+            .iter()
+            .find(|skill| skill.id == "display.get_brightness")
+            .unwrap();
+        let set = skills
+            .iter()
+            .find(|skill| skill.id == "display.set_brightness")
+            .unwrap();
+        assert_eq!(get.risk(&json!({})).unwrap(), crate::policy::Risk::Leitura);
+        assert_eq!(
+            set.risk(&json!({"brightness": 100})).unwrap(),
+            crate::policy::Risk::EscritaReversivel
+        );
+        assert!(crate::system_actions::validate(
+            "display.set_brightness",
+            &json!({"brightness":101})
+        )
+        .is_err());
+    }
+
+    #[test]
     fn registered_system_skills_use_closed_schemas_and_rust_risk() {
         for id in [
             "audio.get_volume",
@@ -583,6 +943,10 @@ mod tests {
             "wallpaper.set",
             "wallpaper.restore",
             "power.lock",
+            "display.get_brightness",
+            "display.set_brightness",
+            "display.restore_brightness",
+            "power.sleep",
         ] {
             let skill = crate::security::skills::registry()
                 .into_iter()
@@ -593,6 +957,7 @@ mod tests {
                     "audio.set_volume" => json!({"volume": 40}),
                     "audio.mute" => json!({"muted": true}),
                     "wallpaper.set" => json!({"path":"C:\\wallpaper.png"}),
+                    "display.set_brightness" => json!({"brightness": 50}),
                     _ => json!({}),
                 })
                 .is_ok());

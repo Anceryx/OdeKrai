@@ -593,6 +593,11 @@ impl Tool for Productivity {
                 Risk::Leitura
             }
             SimulatedAction::Productivity { skill_id, .. }
+                if skill_id == "display.get_brightness" =>
+            {
+                Risk::Leitura
+            }
+            SimulatedAction::Productivity { skill_id, .. }
                 if matches!(
                     skill_id.as_str(),
                     "system.open_url"
@@ -663,7 +668,13 @@ impl Tool for Productivity {
         }
         if matches!(
             skill_id.as_str(),
-            "wallpaper.set" | "wallpaper.restore" | "power.lock"
+            "wallpaper.set"
+                | "wallpaper.restore"
+                | "power.lock"
+                | "display.get_brightness"
+                | "display.set_brightness"
+                | "display.restore_brightness"
+                | "power.sleep"
         ) {
             let skill_id = skill_id.clone();
             let params = params.clone();

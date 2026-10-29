@@ -22,11 +22,19 @@ const SETTINGS_PAGES: &[(&str, &str)] = &[
 pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
     let object = params.as_object().ok_or("Parâmetros inválidos.")?;
     let expected: &[&str] = match skill_id {
-        "audio.get_volume" | "media.play_pause" | "media.next" | "media.previous"
-        | "wallpaper.restore" | "power.lock" => &[],
+        "audio.get_volume"
+        | "media.play_pause"
+        | "media.next"
+        | "media.previous"
+        | "wallpaper.restore"
+        | "power.lock"
+        | "display.get_brightness"
+        | "display.restore_brightness"
+        | "power.sleep" => &[],
         "audio.set_volume" => &["volume"],
         "audio.mute" => &["muted"],
         "wallpaper.set" => &["path"],
+        "display.set_brightness" => &["brightness"],
         "system.open_url" => &["url"],
         "system.open_path" | "system.reveal_in_folder" => &["path"],
         "settings.open" => &["page"],
@@ -42,8 +50,15 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
         return Err("Os parâmetros não correspondem à habilidade permitida.".into());
     }
     match skill_id {
-        "audio.get_volume" | "media.play_pause" | "media.next" | "media.previous"
-        | "wallpaper.restore" | "power.lock" => {}
+        "audio.get_volume"
+        | "media.play_pause"
+        | "media.next"
+        | "media.previous"
+        | "wallpaper.restore"
+        | "power.lock"
+        | "display.get_brightness"
+        | "display.restore_brightness"
+        | "power.sleep" => {}
         "wallpaper.set" => {
             let path = bounded_string(object, "path", 32767)?;
             if Path::new(path)
@@ -56,6 +71,15 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
                 })
             {
                 return Err("Formato inválido. Use uma imagem PNG, JPG ou BMP.".into());
+            }
+        }
+        "display.set_brightness" => {
+            if object
+                .get("brightness")
+                .and_then(Value::as_u64)
+                .is_none_or(|value| value > 100)
+            {
+                return Err("O brilho precisa ser um número inteiro entre 0 e 100.".into());
             }
         }
         "audio.set_volume" => {
@@ -139,6 +163,10 @@ pub(crate) fn preview(skill_id: &str, params: &Value, root: &Path) -> Result<Str
         "wallpaper.set" => format!("Alterar o papel de parede para {}.", params["path"].as_str().unwrap_or("")),
         "wallpaper.restore" => "Restaurar o papel de parede anterior.".into(),
         "power.lock" => "Solicitar o bloqueio da sessão do Windows.".into(),
+        "display.get_brightness" => "Consultar o brilho atual da tela; pode não haver suporte por software.".into(),
+        "display.set_brightness" => format!("Alterar o brilho da tela para {}%.", params["brightness"]),
+        "display.restore_brightness" => "Restaurar o brilho anterior da tela.".into(),
+        "power.sleep" => "O computador vai suspender agora. A aprovação é obrigatória.".into(),
         "system.open_url" => format!(
             "Abrir no navegador padrão: {}",
             params["url"].as_str().unwrap()
@@ -199,7 +227,13 @@ pub(crate) fn execute(
     match skill_id {
         "audio.get_volume" | "audio.set_volume" | "audio.mute" | "media.play_pause"
         | "media.next" | "media.previous" => crate::system_controls::execute(skill_id, params),
-        "wallpaper.set" | "wallpaper.restore" | "power.lock" => {
+        "wallpaper.set"
+        | "wallpaper.restore"
+        | "power.lock"
+        | "display.get_brightness"
+        | "display.set_brightness"
+        | "display.restore_brightness"
+        | "power.sleep" => {
             Err("Esta habilidade precisa ser despachada com contexto de segurança.".into())
         }
         "system.open_url" => {
@@ -294,7 +328,7 @@ pub(crate) fn execute_managed_control(
 ) -> Result<String, String> {
     validate(skill_id, params)?;
     let db = crate::security::database(app)?;
-    db.execute_batch("CREATE TABLE IF NOT EXISTS wallpaper_history (id INTEGER PRIMARY KEY, previous_path TEXT, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER)")
+    db.execute_batch("CREATE TABLE IF NOT EXISTS wallpaper_history (id INTEGER PRIMARY KEY, previous_path TEXT, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER); CREATE TABLE IF NOT EXISTS brightness_history (id INTEGER PRIMARY KEY, previous_value INTEGER NOT NULL, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER)")
         .map_err(|_| "Não foi possível preparar o histórico do papel de parede.".to_string())?;
     let mut roots = vec![crate::agent_home::workspace_path(app)?];
     let mut statement = db
@@ -355,6 +389,25 @@ pub(crate) fn preview_managed_control(
         "power.lock" => {
             Ok("Solicitar o bloqueio da sessão do Windows; a aprovação é obrigatória.".into())
         }
+        "display.get_brightness" => Ok("Consultar o brilho atual da tela.".into()),
+        "display.set_brightness" => Ok(format!(
+            "Alterar o brilho da tela para {}%.",
+            params["brightness"]
+        )),
+        "display.restore_brightness" => {
+            let available: bool = db
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM brightness_history WHERE restored_at IS NULL)",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(|_| "Não foi possível consultar o histórico do brilho.".to_string())?;
+            if !available {
+                return Err("Não há brilho anterior para restaurar.".into());
+            }
+            Ok("Restaurar o brilho anterior.".into())
+        }
+        "power.sleep" => Ok("O computador vai suspender agora. A aprovação é obrigatória.".into()),
         _ => Err("Habilidade de controle local desconhecida.".into()),
     }
 }

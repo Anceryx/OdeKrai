@@ -102,9 +102,19 @@ pub(super) fn action_metadata(
             | "clipboard.write"
             | "clipboard.read"
             | "system.info" => skill_id,
-            "audio.get_volume" | "audio.set_volume" | "audio.mute" | "media.play_pause"
-            | "media.next" | "media.previous" | "wallpaper.set" | "wallpaper.restore"
-            | "power.lock" => skill_id,
+            "audio.get_volume"
+            | "audio.set_volume"
+            | "audio.mute"
+            | "media.play_pause"
+            | "media.next"
+            | "media.previous"
+            | "wallpaper.set"
+            | "wallpaper.restore"
+            | "power.lock"
+            | "display.get_brightness"
+            | "display.set_brightness"
+            | "display.restore_brightness"
+            | "power.sleep" => skill_id,
             _ => "productivity",
         },
         _ => tool.name(),
@@ -130,10 +140,17 @@ fn is_workspace_skill(skill_id: &str) -> bool {
 }
 
 fn require_batch_approval(action: &SimulatedAction, decision: Decision) -> Decision {
-    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "power.lock")
+    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "power.lock" | "power.sleep"))
         && matches!(decision, Decision::Allow(_))
     {
-        Decision::AskUser("power_lock_requires_approval")
+        Decision::AskUser(
+            if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "power.sleep")
+            {
+                "power_sleep_requires_approval"
+            } else {
+                "power_lock_requires_approval"
+            },
+        )
     } else if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "memory.propose_note")
         && matches!(decision, Decision::Allow(_))
     {
@@ -153,10 +170,17 @@ fn enforce_power_lock_origin(
     tainted: bool,
     fixed: Option<&'static str>,
 ) -> Option<&'static str> {
-    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "power.lock")
+    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "power.lock" | "power.sleep"))
         && (tainted || origin.is_tainted())
     {
-        Some("power_lock_external_origin")
+        Some(
+            if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "power.sleep")
+            {
+                "power_sleep_external_origin"
+            } else {
+                "power_lock_external_origin"
+            },
+        )
     } else {
         fixed
     }
@@ -219,6 +243,25 @@ mod explicit_approval_tests {
             external,
             Decision::Deny("power_lock_external_origin")
         ));
+    }
+
+    #[test]
+    fn power_sleep_always_asks_for_approval_and_external_origin_is_denied() {
+        let action = SimulatedAction::Productivity {
+            skill_id: "power.sleep".into(),
+            params: json!({}),
+        };
+        assert!(matches!(
+            require_batch_approval(&action, Decision::Allow("mode_total")),
+            Decision::AskUser("power_sleep_requires_approval")
+        ));
+        let fixed = enforce_power_lock_origin(
+            &action,
+            &Origin::ExternalContent("arquivo".into()),
+            false,
+            None,
+        );
+        assert_eq!(fixed, Some("power_sleep_external_origin"));
     }
 
     #[test]
@@ -366,7 +409,13 @@ pub(super) fn preview_for(
         }
         if matches!(
             skill_id.as_str(),
-            "wallpaper.set" | "wallpaper.restore" | "power.lock"
+            "wallpaper.set"
+                | "wallpaper.restore"
+                | "power.lock"
+                | "display.get_brightness"
+                | "display.set_brightness"
+                | "display.restore_brightness"
+                | "power.sleep"
         ) {
             return crate::system_actions::preview_managed_control(app, skill_id, params);
         }
