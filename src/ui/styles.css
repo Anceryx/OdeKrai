@@ -629,7 +629,6 @@ select:focus-visible {
 .settings-description {
   font-size: 13px;
 }
-.nav-heading,
 .eyebrow {
   font-family: var(--font-sans);
   letter-spacing: 0.35px;

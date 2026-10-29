@@ -13,6 +13,11 @@ import {
 } from './SidebarNavigation';
 
 describe('SidebarNavigation', () => {
+  it('não mantém o seletor do cabeçalho de grupo removido', () => {
+    const styles = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
+    expect(styles).not.toMatch(/\.nav-heading(?:[\s:{>+~])/);
+  });
+
   it('mostra os cinco destinos principais na ordem acordada, sem cabeçalhos antigos', () => {
     expect(navigationItems.map(({ label }) => label)).toEqual([
       'Visão geral',
