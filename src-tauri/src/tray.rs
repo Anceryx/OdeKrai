@@ -258,7 +258,7 @@ mod tests {
         window.minimize().expect("window should minimize");
 
         let handle = app.handle();
-        show_main(&handle);
+        show_main(handle);
 
         let restored = app
             .get_webview_window("main")

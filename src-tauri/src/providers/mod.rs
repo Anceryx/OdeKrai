@@ -1155,22 +1155,23 @@ async fn request_provider(
         } else {
             String::new()
         };
-        if status_code == 400 && !request_data.tools.is_empty() {
-            if cache_unsupported_tools_response(status.as_u16(), true, &response_body, || {
+        if status_code == 400
+            && !request_data.tools.is_empty()
+            && cache_unsupported_tools_response(status.as_u16(), true, &response_body, || {
                 crate::history::cache_tools_unsupported(app, provider_id, &request_data.model)
-            })? {
-                let message =
-                    "Este modelo recusou o uso de ferramentas. O OdeKrai guardou essa informação para este modelo."
-                        .to_string();
-                if let Some(channel) = on_chunk.as_ref() {
-                    channel.send(ProviderEvent::Error {
-                        kind: "unsupported_tools".into(),
-                        status: Some(400),
-                        message: message.clone(),
-                    });
-                }
-                return Err(message);
+            })?
+        {
+            let message =
+                "Este modelo recusou o uso de ferramentas. O OdeKrai guardou essa informação para este modelo."
+                    .to_string();
+            if let Some(channel) = on_chunk.as_ref() {
+                channel.send(ProviderEvent::Error {
+                    kind: "unsupported_tools".into(),
+                    status: Some(400),
+                    message: message.clone(),
+                });
             }
+            return Err(message);
         }
         if let Some(channel) = on_chunk.as_ref() {
             let message = provider_http_error_with_body(status_code, &response_body);

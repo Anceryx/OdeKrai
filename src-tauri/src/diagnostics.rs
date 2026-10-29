@@ -334,6 +334,8 @@ pub async fn complete_startup(
     Ok(())
 }
 
+// Os parâmetros compõem o contrato IPC consumido pelo frontend.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn record_diagnostic_event(
     app: AppHandle,
