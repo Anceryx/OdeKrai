@@ -71,12 +71,18 @@ export function useAppState() {
     if (appliedCloseBehavior.current === settings.closeBehavior) return;
     appliedCloseBehavior.current = settings.closeBehavior;
     const started = performance.now();
+    const correlationId = crypto.randomUUID();
     void invoke('record_diagnostic_event', {
       event: 'startup_command_start',
       command: 'set_close_behavior',
       outcome: 'ok',
       durationMs: 0,
-    }).catch((error: unknown) => console.warn('[OdeKrai diagnóstico] Falha no log local.', error));
+      section: 'window',
+      category: 'preference',
+      correlationId,
+    }).catch(() =>
+      console.warn('[OdeKrai diagnóstico] Não foi possível persistir um evento local.'),
+    );
     void invoke('set_close_behavior', {
       minimizeToTray: settings.closeBehavior === 'minimize_to_tray',
     })
@@ -86,8 +92,11 @@ export function useAppState() {
           command: 'set_close_behavior',
           outcome: 'ok',
           durationMs: Math.max(0, Math.round(performance.now() - started)),
-        }).catch((error: unknown) =>
-          console.warn('[OdeKrai diagnóstico] Falha no log local.', error),
+          section: 'window',
+          category: 'preference',
+          correlationId,
+        }).catch(() =>
+          console.warn('[OdeKrai diagnóstico] Não foi possível persistir um evento local.'),
         );
       })
       .catch(() => {
@@ -100,8 +109,11 @@ export function useAppState() {
           command: 'set_close_behavior',
           outcome: 'error',
           durationMs: Math.max(0, Math.round(performance.now() - started)),
-        }).catch((error: unknown) =>
-          console.warn('[OdeKrai diagnóstico] Falha no log local.', error),
+          section: 'window',
+          category: 'preference',
+          correlationId,
+        }).catch(() =>
+          console.warn('[OdeKrai diagnóstico] Não foi possível persistir um evento local.'),
         );
       });
   }, [settings.closeBehavior, reportDiagnostic]);

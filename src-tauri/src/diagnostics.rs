@@ -2,6 +2,7 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
     path::PathBuf,
+    sync::{Mutex, OnceLock},
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -60,7 +61,7 @@ pub fn log_event(app: &AppHandle, event: &str, command: &str, outcome: &str, dur
         return;
     };
     let fields = format!(
-        "event={} command={} outcome={} duration_ms={duration_ms}",
+        "event={} command={} result={} duration_ms={duration_ms}",
         safe_token(event),
         safe_token(command),
         safe_token(outcome),
@@ -85,6 +86,11 @@ pub fn log_setup_complete(app: &AppHandle) {
 }
 
 fn write_log(path: &PathBuf, event: &str, details: &str) -> io::Result<()> {
+    static LOG_WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    let _guard = LOG_WRITE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -163,6 +169,8 @@ fn sanitize_log_details(input: &str, user_profile: Option<&str>) -> String {
         "api_key=",
         "api-key=",
         "token=",
+        "client_secret=",
+        "password=",
         "authorization:",
     ] {
         details = redact_marker_values(&details, marker);
@@ -283,6 +291,7 @@ fn is_safe_diagnostic(event: &str, command: &str, outcome: &str) -> bool {
             | "has_provider_credential"
             | "load_conversation"
             | "agent_home_read_core"
+            | "save_profile"
             | "set_pet_position"
             | "set_pet_topmost"
             | "set_pet_visible"
@@ -292,7 +301,7 @@ fn is_safe_diagnostic(event: &str, command: &str, outcome: &str) -> bool {
             | "window.onerror"
             | "unhandledrejection"
     );
-    event_allowed && command_allowed && matches!(outcome, "ok" | "error")
+    event_allowed && command_allowed && matches!(outcome, "ok" | "warning" | "error")
 }
 
 fn previous_run_incomplete(marker_exists: bool, contents: &[u8]) -> bool {
@@ -333,20 +342,69 @@ pub async fn record_diagnostic_event(
     command: String,
     outcome: String,
     duration_ms: u64,
+    section: Option<String>,
+    category: Option<String>,
+    correlation_id: Option<String>,
 ) -> Result<(), String> {
     crate::require_main(&caller)?;
-    if !is_safe_diagnostic(&event, &command, &outcome) {
+    if !is_safe_diagnostic(&event, &command, &outcome)
+        || !section.as_deref().is_none_or(is_safe_section)
+        || !category.as_deref().is_none_or(is_safe_category)
+        || !correlation_id.as_deref().is_none_or(is_safe_correlation_id)
+    {
         return Err("Evento de diagnóstico inválido.".into());
     }
     let event = safe_token(&event);
     let command = safe_token(&command);
     let outcome = safe_token(&outcome);
+    let section = section.as_deref().map(safe_token).unwrap_or_default();
+    let category = category.as_deref().map(safe_token).unwrap_or_default();
+    let correlation_id = correlation_id
+        .as_deref()
+        .map(safe_token)
+        .unwrap_or_default();
     tauri::async_runtime::spawn_blocking(move || {
-        log_event(&app, &event, &command, &outcome, duration_ms)
+        let Ok(logs) = app.path().app_data_dir().map(|path| path.join("logs")) else {
+            return;
+        };
+        let line_kind = match outcome.as_str() {
+            "error" => "diagnostic_error",
+            "warning" => "diagnostic_warning",
+            _ => "frontend_event",
+        };
+        let fields = format!(
+            "event={event} command={command} section={section} category={category} correlation_id={correlation_id} result={outcome} duration_ms={duration_ms}"
+        );
+        let _ = write_log(&logs.join("diagnostic.log"), line_kind, &fields);
     })
     .await
     .map_err(|error| error.to_string())?;
     Ok(())
+}
+
+fn is_safe_section(value: &str) -> bool {
+    matches!(
+        value,
+        "startup" | "profile" | "permissions" | "chat" | "pet" | "window"
+    )
+}
+
+fn is_safe_category(value: &str) -> bool {
+    matches!(
+        value,
+        "initialization" | "event_listener" | "window_error" | "promise_rejection" | "preference"
+    )
+}
+
+fn is_safe_correlation_id(value: &str) -> bool {
+    value.len() == 36
+        && value.chars().enumerate().all(|(index, character)| {
+            if [8, 13, 18, 23].contains(&index) {
+                character == '-'
+            } else {
+                character.is_ascii_hexdigit()
+            }
+        })
 }
 
 #[cfg(test)]
@@ -369,6 +427,11 @@ mod tests {
         assert!(is_safe_diagnostic(
             "startup_command_finish",
             "get_profile",
+            "error"
+        ));
+        assert!(is_safe_diagnostic(
+            "startup_command_finish",
+            "save_profile",
             "error"
         ));
 
@@ -395,7 +458,7 @@ mod tests {
     #[test]
     fn diagnostic_log_redacts_credentials_emails_and_profile_paths() {
         let details = sanitize_log_details(
-            "Bearer bearer-secret sk-api-secret pplx-api-secret api_key=key-secret token=token-secret ana@example.com C:\\Users\\Daniel\\AppData\\Local\\OdeKrai",
+            "Bearer bearer-secret sk-api-secret pplx-api-secret api_key=key-secret token=token-secret client_secret=oauth-secret password=private-password ana@example.com C:\\Users\\Daniel\\AppData\\Local\\OdeKrai",
             Some(r"C:\Users\Daniel"),
         );
 
@@ -405,6 +468,8 @@ mod tests {
             "pplx-api-secret",
             "key-secret",
             "token-secret",
+            "oauth-secret",
+            "private-password",
             "ana@example.com",
             "C:\\Users\\Daniel",
         ] {
@@ -427,5 +492,45 @@ mod tests {
     #[test]
     fn log_timestamp_is_readable_utc() {
         assert_eq!(timestamp_utc(UNIX_EPOCH), "1970-01-01T00:00:00.000Z");
+    }
+
+    #[test]
+    fn safe_context_rejects_free_text_and_accepts_uuid_correlation_ids() {
+        assert!(is_safe_section("chat"));
+        assert!(!is_safe_section("mensagem privada"));
+        assert!(is_safe_category("promise_rejection"));
+        assert!(is_safe_correlation_id(
+            "123e4567-e89b-12d3-a456-426614174000"
+        ));
+        assert!(!is_safe_correlation_id("api_key=segredo"));
+    }
+
+    #[test]
+    fn concurrent_log_writes_remain_one_complete_event_per_line() {
+        let path = std::env::temp_dir().join(format!(
+            "odekrai-diagnostics-{}-{}.log",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let writers: Vec<_> = (0..32)
+            .map(|index| {
+                let path = path.clone();
+                std::thread::spawn(move || {
+                    write_log(&path, "test_event", &format!("writer={index} result=ok")).unwrap();
+                })
+            })
+            .collect();
+        for writer in writers {
+            writer.join().unwrap();
+        }
+        let contents = fs::read_to_string(&path).unwrap();
+        assert_eq!(contents.lines().count(), 32);
+        assert!(contents
+            .lines()
+            .all(|line| line.contains("test_event writer=") && line.ends_with(" result=ok")));
+        fs::remove_file(path).unwrap();
     }
 }

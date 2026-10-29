@@ -106,7 +106,17 @@ export function AssistantScreen({
       })
       .catch(() => {
         setPetError('Não foi possível carregar o modo salvo do pet.');
-        setRetryPetAction(() => () => void invoke('get_pet_mode'));
+        setRetryPetAction(
+          () => () =>
+            void invoke<'island' | 'free'>('get_pet_mode')
+              .then((mode) =>
+                update({
+                  ...settings,
+                  companion: { ...settings.companion, freeMode: mode === 'free' },
+                }),
+              )
+              .catch(() => onError('Não foi possível carregar o modo salvo do pet.')),
+        );
         onError('Não foi possível carregar o modo salvo do pet.');
       });
   }, []);
@@ -297,7 +307,10 @@ export function AssistantScreen({
             onClick={() => {
               const enabled = !settings.companion.alwaysOnTop;
               update({ ...settings, companion: { ...settings.companion, alwaysOnTop: enabled } });
-              if (isTauri()) void invoke('set_pet_topmost', { enabled });
+              if (isTauri())
+                void invoke('set_pet_topmost', { enabled }).catch(() =>
+                  onError('Não foi possível atualizar a prioridade da janela do pet.'),
+                );
             }}
             disabled={!isTauri()}
           />

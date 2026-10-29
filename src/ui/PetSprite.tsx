@@ -59,11 +59,11 @@ export function PetSprite({
   useEffect(() => {
     if (!isTauri() || getCurrentWindow().label !== 'pet') return;
     let unlisten: (() => void) | undefined;
-    void listen<boolean>('pet-window-visibility', ({ payload }) =>
-      setDocumentVisible(payload),
-    ).then((off) => {
-      unlisten = off;
-    });
+    void listen<boolean>('pet-window-visibility', ({ payload }) => setDocumentVisible(payload))
+      .then((off) => {
+        unlisten = off;
+      })
+      .catch(() => console.warn('[OdeKrai diagnóstico] Falha ao registrar pet-window-visibility.'));
     return () => unlisten?.();
   }, []);
   useEffect(() => {
@@ -74,11 +74,11 @@ export function PetSprite({
       .catch(() =>
         console.warn('[OdeKrai diagnóstico] Não foi possível carregar o personagem salvo.'),
       );
-    void listen<string>('selected-pet-updated', ({ payload }) => setStoredPetId(payload)).then(
-      (off) => {
+    void listen<string>('selected-pet-updated', ({ payload }) => setStoredPetId(payload))
+      .then((off) => {
         unlisten = off;
-      },
-    );
+      })
+      .catch(() => console.warn('[OdeKrai diagnóstico] Falha ao registrar selected-pet-updated.'));
     return () => unlisten?.();
   }, [petId]);
 

@@ -19,6 +19,25 @@ HTTP simuladas (400, 401, 403, 429 e 500) sem ecoar corpo privado e rejeição d
 inválidas. São testes locais; não usam credenciais nem APIs reais. Compatibilidade de um modelo de
 terceiro pode depender de sua configuração e permanece sujeita à resposta real do endpoint.
 
+## Lote 6 — E10: diagnósticos e avisos do WebView
+
+`password-forms.test.ts` verifica campos de credenciais em formulários HTML; `favicon.test.ts`
+confere a declaração e o cabeçalho ICO do recurso público copiado pelo Vite; `diagnostics.test.ts`
+verifica sanitização de stack trace. `diagnostics.rs` testa redação de dados pessoais e gravações
+concorrentes em linhas completas. Falhas de registro de listeners e chamadas assíncronas conhecidas
+são tratadas nos componentes, e o listener global continua relatando erros sem cancelar o evento.
+
+A busca no código não encontrou emissão própria de `OPTIONS` ou evento chamado `preflight`. O
+workflow mantém DevTools fora das features padrão; o recurso `diagnostics` apenas habilita o DevTools
+do Tauri. “Simulação” aparece no centro de Segurança e nas tools locais para descrever uma operação
+que não foi executada. Portanto, esses termos não justificam alterar transporte ou remover os avisos
+do inspetor. A requisição específica vista anteriormente não pôde ser capturada neste ambiente.
+
+O favicon nativo listado em `tauri.conf.json` é ícone do pacote; o WebView usa o `favicon.ico` em
+`public/`, copiado para `dist/` pelo Vite. O código de diagnóstico não registra payloads de erro;
+referências locais apresentam seção, comando, categoria, resultado e ID de correlação, enquanto
+detalhes sanitizados de stack ficam limitados ao painel local da interface.
+
 ## Verificações automatizadas
 
 - `npm test`: chat, estados da ilha, persistência, carregador de sons, catálogo de sprites, mapeamento de estados e movimento reduzido.
