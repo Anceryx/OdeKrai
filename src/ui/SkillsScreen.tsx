@@ -7,6 +7,7 @@ import {
   nextSkillsTab,
   setSkillEnabledCommand,
   setSkillGroupEnabledCommand,
+  setSkillOverrideCommand,
   skillStatusLabel,
   type CatalogFamily,
   type CatalogSkill,
@@ -30,6 +31,7 @@ type SkillsCatalogViewProps = {
   onSkillToggle: (skill: CatalogSkill, enabled: boolean) => void;
   onOverrideToggle: (skill: CatalogSkill, enabled: boolean) => void;
   googleConnection?: ReactNode;
+  prerequisites?: SkillPrerequisites;
 };
 
 type GoogleOAuthStatus = {
@@ -37,6 +39,12 @@ type GoogleOAuthStatus = {
   clientId: string | null;
   scopes: string[];
   reauthorize: boolean;
+};
+
+type SkillPrerequisites = {
+  folderAvailable: boolean | null;
+  appCount: number | null;
+  googleConnected: boolean | null;
 };
 
 const skillStatusLabels = {
@@ -62,6 +70,7 @@ export function SkillsCatalogView({
   onOverrideToggle,
   onOpenPrivacy,
   googleConnection,
+  prerequisites = { folderAvailable: true, appCount: 0, googleConnected: null },
 }: SkillsCatalogViewProps) {
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<SkillsCatalogTab>(initialTab);
@@ -70,12 +79,28 @@ export function SkillsCatalogView({
     pessoal: null,
     publico: null,
   });
+  const familyButtonRef = useRef<HTMLElement | null>(null);
+  const detailsHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const filteredSkills = filterSkills(skills, query);
   const families = groupSkillFamilies(filteredSkills);
   const installedFamilies = groupSkillFamilies(skills).filter((family) => family.activeCount > 0);
   const showFamily = (family: SkillFamily) => {
+    familyButtonRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setTab('pessoal');
-    setSelectedFamily((selected) => (selected === family ? null : family));
+    setSelectedFamily(family);
+  };
+
+  useEffect(() => {
+    if (selectedFamily) detailsHeadingRef.current?.focus();
+  }, [selectedFamily]);
+
+  const closeFamily = () => {
+    setSelectedFamily(null);
+    requestAnimationFrame(() => {
+      if (familyButtonRef.current?.isConnected) familyButtonRef.current.focus();
+      else document.getElementById('skills-search')?.focus();
+    });
   };
 
   return (
@@ -202,7 +227,32 @@ export function SkillsCatalogView({
               </p>
             </div>
 
-            {families.length === 0 ? (
+            {selectedFamily ? (
+              (() => {
+                const selected = groupSkillFamilies(skills).find(
+                  (family) => family.family === selectedFamily,
+                );
+                return selected ? (
+                  <SkillFamilyDetails
+                    family={selected}
+                    busy={busy}
+                    prerequisites={prerequisites}
+                    headingRef={detailsHeadingRef}
+                    onBack={closeFamily}
+                    onToggle={(enabled) => onFamilyToggle(selected.family, enabled)}
+                    onSkillToggle={onSkillToggle}
+                    onOverrideToggle={onOverrideToggle}
+                    onOpenPrivacy={onOpenPrivacy}
+                    googleConnection={
+                      selected.family === 'agenda_lembretes' &&
+                      skills.some((skill) => skill.id.startsWith('google.calendar.'))
+                        ? googleConnection
+                        : undefined
+                    }
+                  />
+                ) : null;
+              })()
+            ) : families.length === 0 ? (
               <p className="skills-empty" role="status">
                 {skills.length === 0
                   ? 'Nenhuma habilidade está registrada nesta versão.'
@@ -215,21 +265,9 @@ export function SkillsCatalogView({
                     key={family.family}
                     family={family}
                     busy={busy}
-                    expanded={selectedFamily === family.family}
-                    onExpand={() =>
-                      setSelectedFamily((selected) =>
-                        selected === family.family ? null : family.family,
-                      )
-                    }
+                    prerequisites={prerequisites}
+                    onExpand={() => showFamily(family.family)}
                     onToggle={(enabled) => onFamilyToggle(family.family, enabled)}
-                    onSkillToggle={onSkillToggle}
-                    onOverrideToggle={onOverrideToggle}
-                    googleConnection={
-                      family.family === 'agenda_lembretes' &&
-                      skills.some((skill) => skill.id.startsWith('google.calendar.'))
-                        ? googleConnection
-                        : undefined
-                    }
                   />
                 ))}
               </div>
@@ -273,31 +311,24 @@ export function SkillsCatalogView({
 function SkillFamilyCard({
   family,
   busy,
-  expanded,
+  prerequisites,
   onExpand,
   onToggle,
-  onSkillToggle,
-  onOverrideToggle,
-  googleConnection,
 }: {
   family: CatalogFamily;
   busy: boolean;
-  expanded: boolean;
+  prerequisites: SkillPrerequisites;
   onExpand: () => void;
   onToggle: (enabled: boolean) => void;
-  onSkillToggle: SkillsCatalogViewProps['onSkillToggle'];
-  onOverrideToggle: SkillsCatalogViewProps['onOverrideToggle'];
-  googleConnection?: ReactNode;
 }) {
   const eligible = family.skills.filter(
     (skill) => skill.status === 'available' || skill.status === 'installed',
   );
   const allEnabled = eligible.length > 0 && eligible.every((skill) => skill.enabled);
   const target = familyEnableTarget(family.skills);
-  const detailsId = `skills-family-${family.family}-details`;
 
   return (
-    <article className={`skills-family-card${expanded ? ' expanded' : ''}`}>
+    <article className="skills-family-card">
       <div className="skills-family-card-heading">
         <span className="skills-family-icon" aria-hidden="true">
           <Icon name={family.icon} size={20} />
@@ -317,80 +348,265 @@ function SkillFamilyCard({
         </span>
       </div>
       <div className="skills-family-actions">
-        <Button
-          variant="secondary"
-          aria-expanded={expanded}
-          aria-controls={expanded ? detailsId : undefined}
-          onClick={onExpand}
-        >
-          {expanded ? 'Fechar detalhes' : 'Gerenciar'}
+        <Button variant="secondary" aria-label={`Gerenciar ${family.name}`} onClick={onExpand}>
+          Gerenciar
         </Button>
         <Toggle
           checked={allEnabled}
           label={`${allEnabled ? 'Desativar' : 'Ativar'} todas as habilidades de ${family.name}`}
-          disabled={busy || target === undefined}
-          aria-describedby={`${detailsId}-description`}
+          disabled={
+            busy ||
+            target === undefined ||
+            (target &&
+              family.skills.some((skill) => skill.id.startsWith('google.calendar.')) &&
+              prerequisites.googleConnected !== true)
+          }
+          aria-describedby={`skills-family-${family.family}-description`}
           onClick={() => target !== undefined && onToggle(target)}
         />
       </div>
-      <span className="skills-family-switch-description" id={`${detailsId}-description`}>
-        {allEnabled ? 'Desativar família' : 'Ativar família'}
+      <span
+        className="skills-family-switch-description"
+        id={`skills-family-${family.family}-description`}
+      >
+        {allEnabled ? 'Desativar família' : 'Ativar família'}.
       </span>
-      {expanded && (
-        <div className="skills-family-details" id={detailsId}>
-          <h3>Habilidades desta família</h3>
-          {googleConnection}
-          {family.skills.map((skill) => (
-            <article className="skills-detail-item" key={skill.id}>
-              <div className="skills-detail-copy">
-                <div className="skills-detail-title">
-                  <h4>{skill.name}</h4>
-                  <span className={`skills-detail-status skills-detail-status--${skill.status}`}>
-                    {skillStatusLabels[skill.status]}
-                  </span>
-                  {skill.description.toLocaleLowerCase('pt-BR').includes('experimental') && (
-                    <span className="skills-experimental-badge">Experimental</span>
-                  )}
-                </div>
-                <p>{skill.description}</p>
-                {skill.examples.length > 0 && (
-                  <ul aria-label={`Exemplos para ${skill.name}`}>
-                    {skill.examples.map((example) => (
-                      <li key={example}>{example}</li>
-                    ))}
-                  </ul>
-                )}
-                <span className="skills-detail-origin">
-                  {skill.origin.kind === 'builtin'
-                    ? 'Incluída no OdeKrai'
-                    : `Servidor: ${skill.origin.server}`}
-                </span>
-              </div>
-              <div className="skills-detail-controls">
-                <Toggle
-                  checked={skill.enabled}
-                  label={`${skill.enabled ? 'Desativar' : 'Ativar'} ${skill.name}`}
-                  disabled={
-                    busy ||
-                    skill.status === 'unavailable' ||
-                    skill.status === 'configuration_required'
-                  }
-                  onClick={() => onSkillToggle(skill, !skill.enabled)}
-                />
-                {!skill.fixedBlocked && skill.status !== 'unavailable' && (
-                  <Toggle
-                    checked={skill.morePermissive}
-                    label={`${skill.morePermissive ? 'Remover' : 'Permitir'} modo mais permissivo para ${skill.name}`}
-                    disabled={busy}
-                    onClick={() => onOverrideToggle(skill, !skill.morePermissive)}
-                  />
-                )}
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
     </article>
+  );
+}
+
+function SkillFamilyDetails({
+  family,
+  busy,
+  prerequisites,
+  headingRef,
+  onBack,
+  onToggle,
+  onSkillToggle,
+  onOverrideToggle,
+  onOpenPrivacy,
+  googleConnection,
+}: {
+  family: CatalogFamily;
+  busy: boolean;
+  prerequisites: SkillPrerequisites;
+  headingRef: React.RefObject<HTMLHeadingElement | null>;
+  onBack: () => void;
+  onToggle: (enabled: boolean) => void;
+  onSkillToggle: SkillsCatalogViewProps['onSkillToggle'];
+  onOverrideToggle: SkillsCatalogViewProps['onOverrideToggle'];
+  onOpenPrivacy?: () => void;
+  googleConnection?: ReactNode;
+}) {
+  const eligible = family.skills.filter(
+    (skill) => skill.status === 'available' || skill.status === 'installed',
+  );
+  const allEnabled = eligible.length > 0 && eligible.every((skill) => skill.enabled);
+  const hasConfigurationRequirement = family.skills.some((skill) => skill.configurationRequired);
+  const requiresGoogle = family.skills.some((skill) => skill.id.startsWith('google.calendar.'));
+  const needsGoogleConnection = requiresGoogle && prerequisites.googleConnected === false;
+  const requiresApps = family.skills.some((skill) => skill.id === 'app.launch');
+  const requiresFolder = family.skills.some((skill) =>
+    /^(files\.|workspace\.|doc\.|wallpaper\.)/.test(skill.id),
+  );
+  const origins = [
+    ...new Set(
+      family.skills.map((skill) =>
+        skill.origin.kind === 'builtin' ? 'OdeKrai' : `Servidor MCP: ${skill.origin.server}`,
+      ),
+    ),
+  ];
+  const categories = [
+    ...new Set(family.skills.map((skill) => (skill.category === 'local' ? 'Local' : 'Integração'))),
+  ];
+  const hasUnconfiguredApps = requiresApps && prerequisites.appCount === 0;
+  const needsConfiguration =
+    hasConfigurationRequirement || hasUnconfiguredApps || needsGoogleConnection;
+
+  return (
+    <section className="skills-family-details-page" aria-labelledby="skills-family-detail-title">
+      <Button variant="ghost" onClick={onBack} className="skills-details-back">
+        Voltar às habilidades
+      </Button>
+      <header className="skills-details-heading">
+        <span className="skills-family-icon" aria-hidden="true">
+          <Icon name={family.icon} size={24} />
+        </span>
+        <div>
+          <p className="skills-catalog-eyebrow">DETALHES DA FAMÍLIA</p>
+          <h2 id="skills-family-detail-title" ref={headingRef} tabIndex={-1}>
+            {family.name}
+          </h2>
+          <p>{family.description}</p>
+        </div>
+        <RiskBadge risk={family.highestRisk} />
+      </header>
+      <dl className="skills-details-metadata">
+        <div>
+          <dt>Categoria</dt>
+          <dd>{categories.join(' e ')}</dd>
+        </div>
+        <div>
+          <dt>Origem</dt>
+          <dd>{origins.join(' · ')}</dd>
+        </div>
+        <div>
+          <dt>Estado</dt>
+          <dd>
+            <span className={`skills-family-status ${statusClass(family.status)}`}>
+              {skillStatusLabel(family.status)}
+            </span>
+          </dd>
+        </div>
+      </dl>
+      <div className="skills-details-primary-action">
+        {needsConfiguration || hasUnconfiguredApps ? (
+          <Button
+            variant="primary"
+            disabled={!needsGoogleConnection && !onOpenPrivacy}
+            onClick={() => {
+              if (needsGoogleConnection) document.getElementById('google-client-id')?.focus();
+              else onOpenPrivacy?.();
+            }}
+          >
+            {needsGoogleConnection || hasConfigurationRequirement
+              ? 'Conectar'
+              : 'Cadastrar aplicativo'}
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            disabled={busy || eligible.length === 0}
+            onClick={() => onToggle(!allEnabled)}
+          >
+            {allEnabled ? 'Desativar família' : 'Ativar família'}
+          </Button>
+        )}
+      </div>
+      <section className="skills-prerequisites" aria-labelledby="skills-prerequisites-title">
+        <h3 id="skills-prerequisites-title">Requisitos e estado</h3>
+        {requiresFolder && (
+          <p>
+            <strong>Pasta permitida:</strong>{' '}
+            {prerequisites.folderAvailable === null
+              ? 'não foi possível consultar o estado.'
+              : prerequisites.folderAvailable
+                ? 'pasta de trabalho disponível; pastas adicionais podem ser permitidas.'
+                : 'nenhuma pasta disponível.'}
+          </p>
+        )}
+        {requiresApps && (
+          <p>
+            <strong>Aplicativo cadastrado:</strong>{' '}
+            {prerequisites.appCount === null
+              ? 'não foi possível consultar o estado.'
+              : prerequisites.appCount > 0
+                ? `${prerequisites.appCount} aplicativo(s) disponível(is).`
+                : 'nenhum aplicativo cadastrado.'}
+          </p>
+        )}
+        {hasConfigurationRequirement && (
+          <p>
+            <strong>Conexão necessária:</strong>{' '}
+            {family.skills
+              .filter((skill) => skill.configurationRequired)
+              .map((skill) => skill.name)
+              .join(', ')}{' '}
+            ainda precisa de configuração.
+          </p>
+        )}
+        {requiresGoogle && (
+          <p>
+            <strong>Conta Google:</strong>{' '}
+            {prerequisites.googleConnected === null
+              ? 'estado não verificado.'
+              : prerequisites.googleConnected
+                ? 'conectada.'
+                : 'desconectada.'}
+          </p>
+        )}
+        {!requiresFolder && !requiresApps && !hasConfigurationRequirement && !requiresGoogle && (
+          <p>Não há configuração adicional registrada para esta família.</p>
+        )}
+        {onOpenPrivacy &&
+          (requiresFolder || requiresApps || hasConfigurationRequirement || requiresGoogle) && (
+            <Button variant="secondary" onClick={onOpenPrivacy}>
+              Abrir Privacidade e permissões
+            </Button>
+          )}
+      </section>
+      {googleConnection}
+      <section className="skills-detail-list" aria-labelledby="skills-detail-list-title">
+        <h3 id="skills-detail-list-title">Habilidades desta família</h3>
+        {family.skills.map((skill) => (
+          <article className="skills-detail-item" key={skill.id}>
+            <div className="skills-detail-copy">
+              <div className="skills-detail-title">
+                <h4>{skill.name}</h4>
+                <span className={`skills-detail-status skills-detail-status--${skill.status}`}>
+                  {skillStatusLabels[skill.status]}
+                </span>
+                {skill.description.toLocaleLowerCase('pt-BR').includes('experimental') && (
+                  <span className="skills-experimental-badge">Experimental</span>
+                )}
+              </div>
+              <p>{skill.description}</p>
+              {skill.examples.length > 0 && (
+                <ul aria-label={`Exemplos de pedidos para ${skill.name}`}>
+                  {skill.examples.map((example) => (
+                    <li key={example}>{example}</li>
+                  ))}
+                </ul>
+              )}
+              <span className="skills-detail-origin">
+                {skill.origin.kind === 'builtin'
+                  ? 'Origem: OdeKrai'
+                  : `Servidor MCP: ${skill.origin.server}`}
+              </span>
+              <RiskBadge risk={skill.risk} />
+            </div>
+            <div className="skills-detail-controls">
+              <Toggle
+                checked={skill.enabled}
+                label={`${skill.enabled ? 'Desativar' : 'Ativar'} ${skill.name}`}
+                disabled={
+                  busy ||
+                  skill.status === 'unavailable' ||
+                  skill.status === 'configuration_required' ||
+                  (skill.id.startsWith('google.calendar.') &&
+                    prerequisites.googleConnected !== true)
+                }
+                onClick={() => onSkillToggle(skill, !skill.enabled)}
+              />
+            </div>
+            {skill.fixedBlocked && (
+              <p className="skills-fixed-blocked" role="note">
+                Bloqueio fixo: esta habilidade não pode ser liberada por um modo de permissão.
+              </p>
+            )}
+            {!skill.fixedBlocked && skill.status !== 'unavailable' && (
+              <details className="skill-advanced skills-override-settings">
+                <summary>Gerenciar</summary>
+                <p>
+                  Esta exceção permite usar menos confirmações que o modo global. O OdeKrai
+                  solicitará confirmação nativa antes de salvar.
+                </p>
+                <Toggle
+                  checked={skill.morePermissive}
+                  label={`${skill.morePermissive ? 'Remover' : 'Permitir'} modo mais permissivo para ${skill.name}`}
+                  disabled={busy}
+                  onClick={() => onOverrideToggle(skill, !skill.morePermissive)}
+                />
+              </details>
+            )}
+          </article>
+        ))}
+      </section>
+      <p className="skills-critical-approval-note" role="note">
+        Controle total não remove aprovações críticas. Pagamentos, comunicação externa e ações
+        bloqueadas continuam sob as proteções do OdeKrai.
+      </p>
+    </section>
   );
 }
 
@@ -400,6 +616,11 @@ export function SkillsScreen({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [googleStatus, setGoogleStatus] = useState<GoogleOAuthStatus | null>(null);
+  const [prerequisites, setPrerequisites] = useState<SkillPrerequisites>({
+    folderAvailable: true,
+    appCount: 0,
+    googleConnected: null,
+  });
 
   const refresh = useCallback(async (silent = false) => {
     if (!isTauri()) {
@@ -411,10 +632,22 @@ export function SkillsScreen({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
     try {
       const nextSkills = await invoke<CatalogSkill[]>('get_skills');
       setSkills(nextSkills);
+      const [folders, apps] = await Promise.all([
+        invoke<Array<{ workspace: boolean }>>('get_allowed_folders').catch(() => null),
+        invoke<Array<{ id: string }>>('get_allowed_apps').catch(() => null),
+      ]);
+      setPrerequisites({
+        folderAvailable: folders === null ? null : folders.some((folder) => folder.workspace),
+        appCount: apps === null ? null : apps.length,
+        googleConnected: null,
+      });
       if (nextSkills.some((skill) => skill.id.startsWith('google.calendar.'))) {
-        setGoogleStatus(await invoke<GoogleOAuthStatus>('google_oauth_status'));
+        const status = await invoke<GoogleOAuthStatus>('google_oauth_status').catch(() => null);
+        setGoogleStatus(status);
+        setPrerequisites((current) => ({ ...current, googleConnected: status?.connected ?? null }));
       } else {
         setGoogleStatus(null);
+        setPrerequisites((current) => ({ ...current, googleConnected: null }));
       }
       setError('');
     } catch (cause) {
@@ -451,11 +684,15 @@ export function SkillsScreen({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
         googleStatus ? (
           <GoogleCalendarConnection
             status={googleStatus}
-            onStatusChange={setGoogleStatus}
+            onStatusChange={(status) => {
+              setGoogleStatus(status);
+              setPrerequisites((current) => ({ ...current, googleConnected: status.connected }));
+            }}
             onError={setError}
           />
         ) : undefined
       }
+      prerequisites={prerequisites}
       onFamilyToggle={(family, enabled) =>
         void runCommand(() => setSkillGroupEnabledCommand(family, enabled, invoke))
       }
@@ -463,9 +700,7 @@ export function SkillsScreen({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
         void runCommand(() => setSkillEnabledCommand(skill.id, enabled, invoke))
       }
       onOverrideToggle={(skill, enabled) =>
-        void runCommand(async () => {
-          await invoke('set_tool_override', { tool: skill.id, morePermissive: enabled });
-        })
+        void runCommand(() => setSkillOverrideCommand(skill.id, enabled, invoke))
       }
     />
   );

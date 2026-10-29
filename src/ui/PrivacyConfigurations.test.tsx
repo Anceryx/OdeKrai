@@ -28,10 +28,8 @@ describe('configurações de privacidade', () => {
       'utf8',
     );
     const commands = [
-      'get_allowed_folders',
       'add_allowed_folder',
       'remove_allowed_folder',
-      'get_allowed_apps',
       'register_allowed_app',
       'remove_allowed_app',
       'mcp_list_servers',
@@ -48,6 +46,13 @@ describe('configurações de privacidade', () => {
       expect(ui, `interface: ${command}`).toContain(command);
       expect(skillsUi, `sem duplicação em Habilidades: ${command}`).not.toContain(command);
       expect(rustCommands, `registro Rust: ${command}`).toContain(command);
+    }
+    for (const readCommand of ['get_allowed_folders', 'get_allowed_apps']) {
+      expect(ui, `consulta compartilhada: ${readCommand}`).toContain(readCommand);
+      expect(skillsUi, `estado de requisito sem renderizar listas: ${readCommand}`).toContain(
+        readCommand,
+      );
+      expect(rustCommands, `registro Rust: ${readCommand}`).toContain(readCommand);
     }
     const discordUi = readFileSync(
       new URL('./DiscordWebhooksSettings.tsx', import.meta.url),

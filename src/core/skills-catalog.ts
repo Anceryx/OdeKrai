@@ -121,6 +121,14 @@ export async function setSkillGroupEnabledCommand(
   await command('set_skill_group_enabled', { category: family, enabled });
 }
 
+export async function setSkillOverrideCommand(
+  skillId: string,
+  morePermissive: boolean,
+  command: SkillCommand,
+): Promise<void> {
+  await command('set_tool_override', { tool: skillId, morePermissive });
+}
+
 export function filterSkills<T extends CatalogSkill>(skills: T[], query: string): T[] {
   const normalized = query.trim().toLocaleLowerCase('pt-BR');
   if (!normalized) return skills;

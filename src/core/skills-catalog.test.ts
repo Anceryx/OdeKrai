@@ -6,6 +6,7 @@ import {
   nextSkillsTab,
   setSkillEnabledCommand,
   setSkillGroupEnabledCommand,
+  setSkillOverrideCommand,
   type CatalogSkill,
 } from './skills-catalog';
 
@@ -137,12 +138,16 @@ describe('catálogo de habilidades', () => {
   it('envia ativações individuais e por família aos comandos Rust com parâmetros fechados', async () => {
     const command = vi.fn(async (_name: string, _args?: Record<string, unknown>) => undefined);
     await setSkillEnabledCommand('files.read', true, command);
+    await setSkillEnabledCommand('files.read', false, command);
     await setSkillGroupEnabledCommand('arquivos', false, command);
     await setSkillGroupEnabledCommand('local', true, command);
+    await setSkillOverrideCommand('files.write', true, command);
     expect(command.mock.calls).toEqual([
       ['set_skill_enabled', { skillId: 'files.read', enabled: true }],
+      ['set_skill_enabled', { skillId: 'files.read', enabled: false }],
       ['set_skill_group_enabled', { category: 'arquivos', enabled: false }],
       ['set_skill_group_enabled', { category: 'local', enabled: true }],
+      ['set_tool_override', { tool: 'files.write', morePermissive: true }],
     ]);
   });
 });

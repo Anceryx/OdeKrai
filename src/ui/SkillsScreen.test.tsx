@@ -65,7 +65,6 @@ describe('catálogo de habilidades', () => {
     const markup = renderToStaticMarkup(
       <SkillsCatalogView
         skills={registryFixture}
-        initialFamily="computador"
         onOpenPrivacy={noOperation}
         onFamilyToggle={noOperation}
         onSkillToggle={noOperation}
@@ -75,13 +74,12 @@ describe('catálogo de habilidades', () => {
     expect(markup).toContain('Habilidades');
     expect(markup).toContain('Procurar habilidades');
     expect(markup).toContain('Computador');
-    expect(markup).toContain('Alterar tema do Windows');
+    expect(markup).toContain('Computador');
     expect(markup).not.toContain('Integrações MCP');
     expect(markup).not.toContain('Conexão com o Google');
     expect(markup).not.toContain('Captura de tela: indisponível');
     expect(markup).toContain('Abrir Privacidade e permissões');
-    expect(markup.match(/class="skills-family-card(?: expanded)?"/g)).toHaveLength(2);
-    expect(markup).toContain('Experimental');
+    expect(markup.match(/class="skills-family-card"/g)).toHaveLength(2);
   });
 
   it('mostra busca por teclado, status, risco e um interruptor por família', () => {
@@ -160,7 +158,7 @@ describe('catálogo de habilidades', () => {
     expect(markup).not.toContain('Instalar');
   });
 
-  it('mantém o atalho instalado abrindo detalhes e controles individuais dentro do gerenciamento', () => {
+  it('abre os detalhes, preserva exemplos e deixa overrides avançados recolhidos', () => {
     const markup = renderToStaticMarkup(
       <SkillsCatalogView
         skills={registryFixture}
@@ -168,12 +166,101 @@ describe('catálogo de habilidades', () => {
         onFamilyToggle={noOperation}
         onSkillToggle={noOperation}
         onOverrideToggle={noOperation}
+        onOpenPrivacy={noOperation}
       />,
     );
     expect(markup).toContain('aria-label="Abrir detalhes de Arquivos"');
+    expect(markup).toContain('Voltar às habilidades');
     expect(markup).toContain('Habilidades desta família');
+    expect(markup).toContain('Categoria');
+    expect(markup).toContain('Origem: OdeKrai');
     expect(markup).toContain('Leia o relatório da pasta permitida.');
     expect(markup).toContain('Desativar Ler arquivo');
+    expect(markup).toContain('Risco: Leitura');
+    expect(markup).toContain('Requisitos e estado');
+    expect(markup).toContain('pasta de trabalho disponível');
+    expect(markup).toContain('Abrir Privacidade e permissões');
+    expect(markup).toMatch(/<details class="skill-advanced skills-override-settings">/);
+    expect(markup).toContain('O OdeKrai solicitará confirmação nativa');
+    expect(markup).toContain('Controle total não remove aprovações críticas');
+
+    const experimentalMarkup = renderToStaticMarkup(
+      <SkillsCatalogView
+        skills={registryFixture}
+        initialFamily="computador"
+        onFamilyToggle={noOperation}
+        onSkillToggle={noOperation}
+        onOverrideToggle={noOperation}
+      />,
+    );
+    expect(experimentalMarkup).toContain('Experimental');
+  });
+
+  it('explica bloqueios fixos e exibe o requisito ausente de aplicativo sem duplicar a lista', () => {
+    const payment: CatalogSkill = {
+      ...registryFixture[0],
+      id: 'simulated.payment',
+      name: 'Pagamento bloqueado',
+      risk: 'destrutivo_financeiro',
+      status: 'unavailable',
+      fixedBlocked: true,
+      enabled: false,
+      examples: ['Não solicite pagamentos.'],
+    };
+    const blockedMarkup = renderToStaticMarkup(
+      <SkillsCatalogView
+        skills={[payment]}
+        initialFamily="arquivos"
+        onFamilyToggle={noOperation}
+        onSkillToggle={noOperation}
+        onOverrideToggle={noOperation}
+      />,
+    );
+    expect(blockedMarkup).toContain('Bloqueio fixo: esta habilidade não pode ser liberada');
+    expect(blockedMarkup).not.toContain('skills-override-settings');
+
+    const appSkill: CatalogSkill = {
+      ...registryFixture[0],
+      id: 'app.launch',
+      name: 'Iniciar aplicativo permitido',
+      family: 'abrir_aplicativos',
+      icon: 'app_window',
+      examples: ['Inicie o aplicativo cadastrado.'],
+    };
+    const missingAppMarkup = renderToStaticMarkup(
+      <SkillsCatalogView
+        skills={[appSkill]}
+        initialFamily="abrir_aplicativos"
+        prerequisites={{ folderAvailable: true, appCount: 0, googleConnected: null }}
+        onOpenPrivacy={noOperation}
+        onFamilyToggle={noOperation}
+        onSkillToggle={noOperation}
+        onOverrideToggle={noOperation}
+      />,
+    );
+    expect(missingAppMarkup).toContain('nenhum aplicativo cadastrado');
+    expect(missingAppMarkup).toContain('Cadastrar aplicativo');
+    expect(missingAppMarkup).toContain('Inicie o aplicativo cadastrado.');
+    expect(missingAppMarkup).not.toContain('allowed-folder-list');
+  });
+
+  it('mantém busca e aba no mesmo estado da tela enquanto o painel é usado e volta ao catálogo', () => {
+    const source = readFileSync(new URL('./SkillsScreen.tsx', import.meta.url), 'utf8');
+    const rustSecurity = readFileSync(
+      new URL('../../src-tauri/src/security/mod.rs', import.meta.url),
+      'utf8',
+    );
+    expect(source).toContain('const [query, setQuery] = useState');
+    expect(source).toContain('const [tab, setTab] = useState');
+    expect(source).toContain('setSelectedFamily(null)');
+    expect(source).toContain("document.getElementById('skills-search')?.focus()");
+    expect(source).not.toContain("setQuery('')");
+    expect(source).toContain('setSkillOverrideCommand(skill.id, enabled, invoke)');
+    expect(source).not.toContain('window.confirm(');
+    expect(rustSecurity).toContain('!confirm_native(format!(');
+    expect(rustSecurity).toContain(
+      'Esta exceção nunca ignora bloqueios fixos nem conteúdo externo.',
+    );
   });
 
   it('mantém a configuração Google apenas nos detalhes quando as habilidades Google vêm do registro', () => {
@@ -204,6 +291,8 @@ describe('catálogo de habilidades', () => {
     expect(source).toContain("invoke<CatalogSkill[]>('get_skills')");
     expect(source).toContain('setSkillGroupEnabledCommand(family, enabled, invoke)');
     expect(source).toContain('setSkillEnabledCommand(skill.id, enabled, invoke)');
+    expect(source).toContain("invoke<Array<{ workspace: boolean }>>('get_allowed_folders')");
+    expect(source).toContain("invoke<Array<{ id: string }>>('get_allowed_apps')");
     expect(source).toContain("invoke<GoogleOAuthStatus>('google_oauth_status')");
     expect(source).toContain("skill.id.startsWith('google.calendar.')");
     expect(source).toContain('PrivacyConfigurationSummary onOpen={onOpenPrivacy}');
