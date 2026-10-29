@@ -10,11 +10,10 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { ChatMessage } from '../../core/provider-messages';
 import { DEFAULT_PET_ID } from '../../core/pets';
 import type { ProfileData } from '../Profile';
-import type { Conversation, Section } from '../screens/types';
+import type { Conversation } from '../screens/types';
 
 export function useAppState() {
   const [initialSettingsLoad] = useState(loadSettingsWithWarnings);
-  const [section, setSection] = useState<Section>('overview');
   const [settings, setSettings] = useState<AppSettings>(initialSettingsLoad.settings);
   const [petVisible, setPetVisible] = useState(!isTauri());
   const [identityConfigured, setIdentityConfigured] = useState<boolean | null>(null);
@@ -115,8 +114,6 @@ export function useAppState() {
 
   return {
     initialSettingsLoad,
-    section,
-    setSection,
     settings,
     setSettings,
     petVisible,

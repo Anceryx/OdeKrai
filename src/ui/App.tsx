@@ -85,6 +85,8 @@ import { useAppEffects } from './hooks/useAppEffects';
 import { externalLinkDomain, safeMarkdownUrl } from '../core/markdown';
 
 import { useAppState } from './hooks/useAppState';
+import { useNavigation } from './hooks/useNavigation';
+import { resolveAgentReason, resolveConfigurationReason } from '../core/navigation';
 import { ScreenErrorBoundary } from './ScreenErrorBoundary';
 import { ResizeHandle } from './ResizeHandle';
 const screenLoading = (
@@ -111,6 +113,7 @@ export function App() {
 
 function MainApp() {
   const appState = useAppState();
+  const { section, navigate } = useNavigation();
   const [usedProviderId, setUsedProviderId] = useState<string | null>(null);
   const [agentAvailability, setAgentAvailability] = useState<{
     available: boolean;
@@ -127,8 +130,6 @@ function MainApp() {
   const lastThinkingSoundKey = useRef<string | null>(null);
   const diagnosticsSoundPlayed = useRef(false);
   const {
-    section,
-    setSection,
     settings,
     setSettings,
     petVisible,
@@ -257,7 +258,7 @@ function MainApp() {
           setToast(`Não foi possível abrir a janela principal: ${String(error)}`),
         );
       } else if (payload === 'new-chat') {
-        setSection('chat');
+        navigate('chat');
         setConversationId(null);
         setMessages([]);
         setDraft('');
@@ -282,7 +283,7 @@ function MainApp() {
       disposed = true;
       unlisten?.();
     };
-  }, [setDraft, setMessages, setSection, setSettings, setConversationId, setToast]);
+  }, [setDraft, setMessages, navigate, setSettings, setConversationId, setToast]);
 
   async function choosePet(petId: string) {
     if (!PETS.some((pet) => pet.id === petId)) return;
@@ -381,7 +382,7 @@ function MainApp() {
 
   async function beginChat() {
     if (!isTauri() || !(await hasConfiguredChatProvider())) {
-      setSection('providers');
+      navigate('providers');
       setChatMode(false);
       return;
     }
@@ -829,7 +830,7 @@ function MainApp() {
         <button
           className="profile-card"
           onClick={() => {
-            setSection('agent');
+            navigate('agent');
             setChatMode(false);
           }}
         >
@@ -848,7 +849,7 @@ function MainApp() {
         </button>
         <SidebarNavigation
           section={section}
-          onSelectSection={setSection}
+          onSelectSection={navigate}
           onSetChatMode={setChatMode}
           keySavedForSession={keySavedForSession}
           compact={settings.layout.sidebarCollapsed}
@@ -902,7 +903,7 @@ function MainApp() {
               type="button"
               className="provider-chip"
               onClick={() => {
-                setSection('providers');
+                navigate('providers');
                 setChatMode(false);
               }}
               aria-label="Abrir conectores de IA"
@@ -915,7 +916,7 @@ function MainApp() {
               <button
                 className="security-state halted"
                 onClick={() => {
-                  setSection('permissions');
+                  navigate('permissions');
                   setChatMode(false);
                 }}
               >
@@ -926,7 +927,7 @@ function MainApp() {
               <button
                 className="security-state total"
                 onClick={() => {
-                  setSection('permissions');
+                  navigate('permissions');
                   setChatMode(false);
                 }}
               >
@@ -966,7 +967,7 @@ function MainApp() {
                     type="button"
                     className="secondary-button small-button"
                     onClick={() => {
-                      setSection('agent');
+                      navigate('agent');
                       setChatMode(false);
                     }}
                   >
@@ -1055,17 +1056,7 @@ function MainApp() {
               providerConfigured={keySavedForSession}
               assistantUsesMascot={settings.useMascotAsAssistantAvatar}
               onFixConfiguration={() => {
-                const normalizedError = error.toLocaleLowerCase('pt-BR');
-                setSection(
-                  normalizedError.includes('identidade') ||
-                    normalizedError.includes('pasta do odekrai')
-                    ? 'agent'
-                    : normalizedError.includes('habilidade')
-                      ? 'skills'
-                      : normalizedError.includes('limite diário')
-                        ? 'settings'
-                        : 'providers',
-                );
+                navigate(resolveConfigurationReason(error));
                 setChatMode(false);
               }}
               onRetry={() => void sendMessage(lastFailedPrompt, true)}
@@ -1089,10 +1080,7 @@ function MainApp() {
               onConfigureAgent={() => {
                 const reason = agentAvailability.reason ?? '';
                 setChatMode(false);
-                if (reason.includes('pasta') || reason.includes('identidade')) setSection('agent');
-                else if (reason.includes('habilidade')) setSection('skills');
-                else if (reason.includes('parada de emergência')) setSection('permissions');
-                else setSection('providers');
+                navigate(resolveAgentReason(reason));
               }}
             />
           ) : (
@@ -1100,13 +1088,13 @@ function MainApp() {
               {section === 'overview' && (
                 <Overview
                   onChat={beginChat}
-                  onOpen={(target) => setSection(target)}
+                  onOpen={(target) => navigate(target)}
                   provider={activeProvider}
                   keyReady={keySavedForSession}
                   profile={profile}
                   selectedPet={selectedPet}
                   needsIdentity={identityConfigured === false && !identityCardDismissed}
-                  onConfigureIdentity={() => setSection('agent')}
+                  onConfigureIdentity={() => navigate('agent')}
                   onDismissIdentity={() => setIdentityCardDismissed(true)}
                 />
               )}
@@ -1150,7 +1138,7 @@ function MainApp() {
                   settings={settings}
                   update={setSettings}
                   onDeleteAllHistory={deleteAllConversations}
-                  onOpenPermissions={() => setSection('permissions')}
+                  onOpenPermissions={() => navigate('permissions')}
                 />
               )}
               {section === 'permissions' && <PermissionsScreen />}

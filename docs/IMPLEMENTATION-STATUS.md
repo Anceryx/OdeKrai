@@ -1,5 +1,9 @@
 # Estado da implementação
 
+## Navegação do Hub
+
+- `useNavigation` mantém a seção legada exibida e o modelo de rota `{ page, settingsSection? }`, com histórico simples de retorno e persistência da última página. Os IDs antigos de perfil/memória, assistente, configurações, permissões, atividade e computador são associados às seções futuras sem alterar as telas atuais. Roteamentos por motivo de disponibilidade do agente e de configuração permanecem cobertos por testes unitários.
+
 ## Captura de tela e análise visual
 
 - Implementação em [`SCREEN-CAPTURE-AND-VISION.md`](SCREEN-CAPTURE-AND-VISION.md): captura local com prévia obrigatória, salvamento separado, análise explicitamente confirmada e allowlist de modelos com visão documentada. A captura física e a interface no executável Windows ainda precisam de validação manual.
