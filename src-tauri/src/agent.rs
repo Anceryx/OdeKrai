@@ -415,20 +415,67 @@ fn fail_with_details(
 
 pub(crate) fn classify_provider_error(error: &str) -> ProviderFailure {
     let normalized = error.to_ascii_lowercase();
+    if normalized.contains("http 401") {
+        return ProviderFailure {
+            kind: "invalid_credential",
+            message: "O provedor recusou a credencial. Confira a chave em Conectores de IA.",
+            technical_details: "Etapa: autenticação do provedor; status HTTP: 401.",
+        };
+    }
+    if normalized.contains("http 403") || normalized.contains("negou permissão") {
+        return ProviderFailure {
+            kind: "permission_denied",
+            message:
+                "O provedor negou acesso a este modelo ou operação. Confira as permissões da chave.",
+            technical_details: "Etapa: autorização do provedor; status HTTP: 403.",
+        };
+    }
     if normalized.contains("http 404")
         || normalized.contains("model not found")
         || normalized.contains("modelo n\u{00e3}o foi encontrado")
     {
         return ProviderFailure { kind: "model_not_found", message: "O modelo ou endpoint não foi encontrado. Confira o identificador em Conectores de IA.", technical_details: "Etapa: resposta do provedor; status HTTP: 404." };
     }
-    if normalized.contains("http 400")
-        || normalized.contains("resposta inv\u{00e1}lida")
+    if normalized.contains("nome de uma ferramenta") {
+        return ProviderFailure {
+            kind: "invalid_tool_name",
+            message:
+                "O provedor rejeitou o nome de uma ferramenta. Confira a compatibilidade do modelo.",
+            technical_details:
+                "Etapa: validação de ferramentas; status HTTP: 400; categoria: nome.",
+        };
+    }
+    if normalized.contains("schema de ferramenta") {
+        return ProviderFailure {
+            kind: "invalid_tool_schema",
+            message: "O provedor rejeitou o schema de uma ferramenta. Confira a compatibilidade do modelo.",
+            technical_details: "Etapa: validação de ferramentas; status HTTP: 400; categoria: schema.",
+        };
+    }
+    if normalized.contains("reasoning_effort") || normalized.contains("configuração de raciocínio")
+    {
+        return ProviderFailure {
+            kind: "model_configuration",
+            message:
+                "O modelo recusou uma configuração da solicitação. Confira o modelo selecionado.",
+            technical_details:
+                "Etapa: validação do modelo; status HTTP: 400; categoria: configuração.",
+        };
+    }
+    if normalized.contains("http 400") {
+        return ProviderFailure {
+            kind: "invalid_request",
+            message: "O provedor rejeitou a solicitação (HTTP 400). Confira o modelo e os parâmetros enviados.",
+            technical_details: "Etapa: validação da solicitação; status HTTP: 400; corpo omitido.",
+        };
+    }
+    if normalized.contains("resposta inv\u{00e1}lida")
         || (normalized.contains("resposta") && normalized.contains("inv"))
         || (normalized.contains("payload") && normalized.contains("inv"))
         || normalized.contains("formato inesperado")
         || normalized.contains("argumentos de ferramenta inv\u{00e1}lidos")
     {
-        return ProviderFailure { kind: "invalid_response", message: "O provedor rejeitou a solicitação ou retornou uma resposta inválida. Confira o modelo e escolha um compatível com ferramentas.", technical_details: "Etapa: validação da solicitação ou resposta; status HTTP: 400 ou payload inválido." };
+        return ProviderFailure { kind: "invalid_response", message: "O provedor retornou uma resposta em formato inválido. Tente novamente ou confira o modelo selecionado.", technical_details: "Etapa: leitura do payload; resposta vazia ou estrutura inválida; corpo omitido." };
     }
     if normalized.contains("http 408") {
         return ProviderFailure { kind: "timeout", message: "O provedor demorou para responder. Tente novamente ou escolha outro provedor conectado.", technical_details: "Etapa: resposta do provedor; status HTTP: 408." };
@@ -470,10 +517,7 @@ fn classify_provider_error_legacy(error: &str) -> (&'static str, &'static str, &
             "A consulta ao Gerenciador do Windows falhou.",
         );
     }
-    if normalized.contains("http 401")
-        || normalized.contains("http 403")
-        || normalized.contains("credencial")
-    {
+    if normalized.contains("http 401") || normalized.contains("credencial") {
         return (
             "invalid_credential",
             "O provedor recusou a credencial. Confira a chave em Conectores de IA.",
@@ -636,19 +680,41 @@ mod tests {
             ),
             (
                 "O provedor rejeitou os par\u{00e2}metros (HTTP 400).",
-                "invalid_response",
+                "invalid_request",
                 "400",
             ),
             (
                 "O provedor retornou uma resposta inv\u{00e1}lida.",
                 "invalid_response",
-                "payload inv\u{00e1}lido",
+                "estrutura inv\u{00e1}lida",
             ),
         ] {
             let failure = classify_provider_error(technical);
             assert_eq!(failure.kind, expected_kind);
             assert!(failure.technical_details.contains(status));
             assert!(!failure.technical_details.contains("pedido privado"));
+        }
+        for (technical, expected_kind) in [
+            (
+                "O provedor negou permissão para esta operação (HTTP 403).",
+                "permission_denied",
+            ),
+            (
+                "O provedor recusou o nome de uma ferramenta (HTTP 400).",
+                "invalid_tool_name",
+            ),
+            (
+                "O provedor recusou o schema de ferramenta (HTTP 400).",
+                "invalid_tool_schema",
+            ),
+            (
+                "O provedor recusou a configuração de raciocínio enviada (HTTP 400).",
+                "model_configuration",
+            ),
+        ] {
+            let failure = classify_provider_error(technical);
+            assert_eq!(failure.kind, expected_kind);
+            assert!(!failure.technical_details.contains("private-user-content"));
         }
     }
 

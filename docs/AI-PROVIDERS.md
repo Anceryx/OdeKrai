@@ -21,8 +21,12 @@ HTTP é aceito apenas para `127.0.0.1`, `::1` ou `localhost` cuja resolução co
 Documentação oficial dos caminhos usados: [compatibilidade OpenAI do Ollama](https://github.com/ollama/ollama/blob/main/docs/api/openai-compatibility.mdx) e [servidor OpenAI compatível do llama.cpp](https://github.com/ggml-org/llama.cpp/tree/master/tools/server).
 Os tipos neutros incluem blocos de texto, chamadas e resultados; os adaptadores serializam esses
 blocos, interpretam respostas completas e em streaming, validam argumentos JSON e expõem uso de
-tokens quando a API retorna esses dados. O chat ainda envia uma lista vazia de tools: não há
-execução de ferramentas nem loop de agente.
+tokens quando a API retorna esses dados. O chat normal envia uma lista vazia de tools e não executa
+ferramentas. O modo agente anuncia apenas ferramentas habilitadas e disponíveis no registro Rust;
+nomes internos são mapeados para nomes aceitos pelo provedor e restaurados antes da validação e
+execução local. No adaptador OpenAI, nomes de funções seguem o limite documentado de 64 caracteres;
+o modelo GPT-6 Luna recebe `reasoning_effort: none` quando usa ferramentas. Respostas HTTP 400 são
+classificadas apenas por categorias seguras extraídas do corpo e o corpo bruto não é registrado.
 
 O catálogo marca tools como verificadas para Anthropic, OpenAI, Groq, Cerebras, Mistral e OpenRouter.
 No OpenRouter, o suporte depende do modelo. Gemini pelo endpoint compatível com OpenAI permanece sem
@@ -31,10 +35,13 @@ HTTP 400 indicar que o modelo não aceita tools, o par provedor/modelo é salvo 
 capacidade efetiva daquele modelo passa a ser “sem suporte”. Visão, geração de imagens e roteamento
 não são capacidades implementadas nesta integração.
 
-Referências oficiais conferidas em 25/10/2026: [Anthropic tool use](https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools),
+Referências oficiais conferidas em 29/10/2026: [Anthropic tool use](https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools),
 [Anthropic streaming](https://platform.claude.com/docs/en/build-with-claude/streaming),
 [OpenAI Chat Completions](https://developers.openai.com/api/reference/resources/chat) e
-[OpenAI streaming de Chat Completions](https://developers.openai.com/api/docs/guides/streaming).
+[OpenAI streaming de Chat Completions](https://developers.openai.com/api/docs/guides/streaming),
+[function calling](https://developers.openai.com/api/docs/guides/function-calling),
+[GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) e
+[definição de function tool](https://github.com/openai/openai-python/blob/main/src/openai/types/shared_params/function_definition.py).
 
 ## Adaptadores no código
 

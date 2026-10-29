@@ -1,18 +1,23 @@
 # Testes e validação
 
-## Fase 4 — lacuna de cobertura
+## Fase 4 — cobertura parcial do agente
 
-Os testes atuais não implementam nem validam um loop de agente. O mock de provedores existente
-verifica o chat de texto; ele não verifica tool calls parciais/completas, multi-turno com resultado,
-usage, capabilities, failover, orçamento diário, nem que um failover jamais repete uma tool. Os
-testes de política cobrem a decisão isolada da Fase 3, mas não a propagação tainted de ToolResult.
-Não há teste de limite de voltas/tempo/tokens, cancelamento de execução, concorrência por conversa,
-schema deny-unknown-fields para ferramentas do modelo, persistência de mensagens de tool ou UI do
-modo agente. A matriz detalhada está em [`TRACEABILITY.md`](TRACEABILITY.md).
+O loop de agente e o motor de políticas têm cobertura unitária, mas continuam pendentes cenários
+integrados de multi-turno, failover sem repetição de ferramentas, propagação tainted de ToolResult,
+cancelamento, concorrência por conversa e UI completa. A matriz detalhada está em
+[`TRACEABILITY.md`](TRACEABILITY.md).
 
 Após implementação, todos esses testes devem usar servidor/mock local e zero chamadas a APIs reais.
 Validação visual no Windows deverá cobrir estados do chat, aprovação, parada e integração com
 island/mascote.
+
+## Regressões do adaptador OpenAI (Lote 6 — E3)
+
+Os testes Rust cobrem mapeamento reversível de nomes internos de habilidades, nomes em histórico de
+tool calls, contrato de nomes OpenAI, preservação do schema, chat sem ferramentas, classificações
+HTTP simuladas (400, 401, 403, 429 e 500) sem ecoar corpo privado e rejeição de respostas vazias ou
+inválidas. São testes locais; não usam credenciais nem APIs reais. Compatibilidade de um modelo de
+terceiro pode depender de sua configuração e permanece sujeita à resposta real do endpoint.
 
 ## Verificações automatizadas
 
