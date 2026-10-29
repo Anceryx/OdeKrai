@@ -1,5 +1,9 @@
 # Estado da implementação
 
+## Diálogo modal reutilizável
+
+- `src/ui/Modal.tsx` fornece um modal acessível seguindo o padrão [Dialog (Modal) da WAI-ARIA Authoring Practices](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/): nome por `aria-labelledby`, fundo inerte, foco inicial, ciclo de foco por Tab, Escape, retorno de foco e rolagem isolada. O conteúdo de fundo continua montado. A aparência respeita movimento reduzido e `data-performance="on"`; o componente ainda não substitui diálogos existentes.
+
 ## Navegação do Hub
 
 - `useNavigation` mantém a seção legada exibida e o modelo de rota `{ page, settingsSection? }`, com histórico simples de retorno e persistência da última página. Os IDs antigos de perfil/memória, assistente, configurações, permissões, atividade e computador são associados às seções futuras sem alterar as telas atuais. Roteamentos por motivo de disponibilidade do agente e de configuração permanecem cobertos por testes unitários.
