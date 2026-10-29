@@ -2136,6 +2136,10 @@ html.island-window-html {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.island-copy small {
+  color: #fb923c;
+  font-size: 9px;
+}
 .island-action {
   z-index: 1;
   display: grid;

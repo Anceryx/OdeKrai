@@ -34,14 +34,23 @@ export type IslandEvent =
       >;
       message?: string;
     }
-  | { type: 'timeout' };
+  | { type: 'timeout' }
+  | { type: 'sync-alert'; alert: PetAlertState };
 
 export type IslandSnapshot = {
   state: IslandState;
   message: string;
   priority: number;
   changedAt: number;
+  alertId?: string;
+  alertCount?: number;
+  pinned?: boolean;
 };
+
+export type PetAlertState = Pick<
+  IslandSnapshot,
+  'state' | 'message' | 'alertId' | 'alertCount' | 'pinned'
+>;
 
 const priorities: Record<IslandState, number> = {
   hidden: 0,
@@ -64,6 +73,17 @@ export function transitionIsland(
   event: IslandEvent,
   now = Date.now(),
 ): IslandSnapshot {
+  if (event.type === 'sync-alert') {
+    return {
+      state: event.alert.state,
+      message: event.alert.message,
+      priority: priorities[event.alert.state],
+      changedAt: now,
+      alertId: event.alert.alertId,
+      alertCount: event.alert.alertCount,
+      pinned: event.alert.pinned,
+    };
+  }
   let state = current.state;
   let message = '';
   if (event.type === 'open') state = 'expanded';

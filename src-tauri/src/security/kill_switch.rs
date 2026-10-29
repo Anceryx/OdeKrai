@@ -33,6 +33,7 @@ fn set_halted(
             let _ = window.close();
         }
         let _ = app.emit("companion-state",serde_json::json!({"type":"activity","state":"paused","message":"Parado pelo kill switch"}));
+        let _ = crate::pet_alerts::enqueue_agent_activity(app, "paused");
         let _ = app.emit("security-halted", ());
         let request_id = id();
         let origin = Origin::User;

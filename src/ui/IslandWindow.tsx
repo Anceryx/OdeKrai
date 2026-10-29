@@ -33,8 +33,33 @@ export function IslandWindow() {
     window.addEventListener('storage', refreshSettings);
     let unlisten: (() => void)[] = [];
     void Promise.all([
-      listen<IslandEvent>('companion-state', ({ payload }) =>
-        setSnapshot((current) => transitionIsland(current, payload)),
+      listen<IslandEvent>('companion-state', ({ payload }) => {
+        if (payload.type !== 'activity') {
+          setSnapshot((current) => transitionIsland(current, payload));
+          return;
+        }
+        if (payload.state === 'awaiting_approval') return;
+        void invoke('enqueue_pet_activity', { state: payload.state }).catch(() => {});
+      }),
+      listen<{
+        alertId?: string;
+        state: IslandSnapshot['state'];
+        message: string;
+        count: number;
+        pinned: boolean;
+      }>('pet-alert-state', ({ payload }) =>
+        setSnapshot((current) =>
+          transitionIsland(current, {
+            type: 'sync-alert',
+            alert: {
+              alertId: payload.alertId,
+              state: payload.state,
+              message: payload.message,
+              alertCount: payload.count,
+              pinned: payload.pinned,
+            },
+          }),
+        ),
       ),
       listen<[number, number]>('pet-moved', ({ payload: [x, y] }) => {
         window.clearTimeout(moveTimer.current);
@@ -53,6 +78,28 @@ export function IslandWindow() {
       .then((petId) => {
         if (PETS.some((pet) => pet.id === petId)) setSelectedPetId(petId);
       })
+      .catch(() => {});
+    void invoke<{
+      alertId?: string;
+      state: IslandSnapshot['state'];
+      message: string;
+      count: number;
+      pinned: boolean;
+    }>('get_pet_alert_state')
+      .then((payload) =>
+        setSnapshot((current) =>
+          transitionIsland(current, {
+            type: 'sync-alert',
+            alert: {
+              alertId: payload.alertId,
+              state: payload.state,
+              message: payload.message,
+              alertCount: payload.count,
+              pinned: payload.pinned,
+            },
+          }),
+        ),
+      )
       .catch(() => {});
     return () => {
       document.body.classList.remove('island-window-body');
@@ -92,6 +139,22 @@ export function IslandWindow() {
       return () => window.clearTimeout(timer);
     }
   }, [snapshot.state, settings.companion.collapseSeconds]);
+  useEffect(() => {
+    if (
+      snapshot.pinned ||
+      !snapshot.alertId ||
+      !['completed', 'error', 'paused', 'notification'].includes(snapshot.state)
+    )
+      return;
+    const id = snapshot.alertId;
+    const timer = window.setTimeout(
+      () => {
+        void invoke('dismiss_pet_alert', { alertId: id }).catch(() => {});
+      },
+      snapshot.state === 'notification' ? 5000 : 2400,
+    );
+    return () => window.clearTimeout(timer);
+  }, [snapshot.alertId, snapshot.pinned, snapshot.state]);
   const send = async (event: IslandEvent, sound?: Parameters<typeof playSound>[0]) => {
     setSnapshot((current) => transitionIsland(current, event));
     if (sound) await playSound(sound, normalizeSoundPreferences(settings.companion.sounds));
@@ -137,6 +200,7 @@ export function IslandWindow() {
           <span className="island-copy">
             <strong>{petGreeting(selectedPetId)}</strong>
             <span>{snapshot.message || islandLabels[state]}</span>
+            {(snapshot.alertCount ?? 0) > 1 && <small>{snapshot.alertCount} alertas na fila</small>}
           </span>
         )}
         {!settings.companion.freeMode && (

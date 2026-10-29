@@ -320,12 +320,21 @@ pub(crate) fn start_scheduler(app: &tauri::AppHandle) {
                             } else {
                                 reminder.note.as_str()
                             };
-                            app.notification()
+                            let result = app
+                                .notification()
                                 .builder()
                                 .title(&reminder.title)
                                 .body(body)
-                                .show()
-                                .map_err(|_| "O Windows não exibiu a notificação.".to_string())
+                                .show();
+                            if result.is_ok() {
+                                let _ = crate::pet_alerts::enqueue_reminder(
+                                    &app,
+                                    &reminder.id,
+                                    &reminder.title,
+                                    body,
+                                );
+                            }
+                            result.map_err(|_| "O Windows não exibiu a notificação.".to_string())
                         });
                     }
                 }

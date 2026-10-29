@@ -943,8 +943,10 @@ pub(super) async fn submit_agent_action(
     )?;
     let _ = app.emit("approval-updated", ());
     let _ = app.emit("companion-state", serde_json::json!({"type":"activity","state":"awaiting_approval","message":"Aguardando aprovação"}));
+    let _ = crate::pet_alerts::enqueue_approval(app, &ticket_id);
     on_approval(ticket_id.clone());
     let result = state.approval_broker.wait(ticket, cancel).await;
+    let _ = crate::pet_alerts::resolve_approval(app, &ticket_id);
     if let Ok(mut pending) = lock_pending(state) {
         pending.retain(|item| item.id != ticket_id);
     }

@@ -22,6 +22,31 @@ describe('máquina de estados do Companion', () => {
     );
   });
 
+  it('aplica o snapshot autoritativo da fila de alertas sem perder metadados', () => {
+    const synced = transitionIsland(
+      initialIslandSnapshot,
+      {
+        type: 'sync-alert',
+        alert: {
+          state: 'awaiting_approval',
+          message: 'Aguardando aprovação',
+          alertId: 'approval-123',
+          alertCount: 3,
+          pinned: true,
+        },
+      },
+      42,
+    );
+    expect(synced).toMatchObject({
+      state: 'awaiting_approval',
+      message: 'Aguardando aprovação',
+      alertId: 'approval-123',
+      alertCount: 3,
+      pinned: true,
+      changedAt: 42,
+    });
+  });
+
   it('normaliza volume, mute e preferências incompletas', () => {
     expect(normalizeSoundPreferences({ volume: 4 })).toMatchObject({
       enabled: true,

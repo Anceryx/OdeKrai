@@ -123,6 +123,7 @@ mod local_models;
 pub mod mcp;
 mod mcp_registry;
 mod memory_skills;
+mod pet_alerts;
 mod pet_position;
 mod policy;
 mod productivity;
@@ -958,6 +959,7 @@ pub fn run() -> Result<(), tauri::Error> {
         .manage(tray::CloseBehaviorState::default())
         .manage(tray::ShutdownState::default())
         .manage(reminders::ReminderScheduler::default())
+        .manage(pet_alerts::PetAlertQueue::default())
         .manage(mcp_registry::McpRuntime::default())
         .manage(google_oauth::GoogleOAuthState::default())
         .setup(|app| {
@@ -1006,6 +1008,9 @@ pub fn run() -> Result<(), tauri::Error> {
             set_pet_position,
             set_pet_topmost,
             set_pet_size,
+            pet_alerts::get_pet_alert_state,
+            pet_alerts::enqueue_pet_activity,
+            pet_alerts::dismiss_pet_alert,
             tray::set_close_behavior,
             providers::save_provider_credential,
             providers::has_provider_credential,

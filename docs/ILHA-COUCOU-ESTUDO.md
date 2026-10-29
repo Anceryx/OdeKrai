@@ -27,7 +27,7 @@ Este documento é um estudo estático do clone local informado, sem execução d
 
 O primeiro passo foi implementado: a janela própria do OdeKrai desliza para fora e retorna pela borda mais próxima, usando a área útil e escala do monitor. O movimento usa 12 passos temporizados apenas na transição, sem polling em idle. Testes puros cobrem os quatro lados, coordenadas negativas e interpolação. A validação visual/nativa em Windows, DPI misto e múltiplos monitores continua pendente.
 
-O foco sem roubo do teclado foi implementado definindo a janela do pet como não focável; o Hub mantém seu próprio foco explícito. O teste nativo visual com digitação em outra janela está pendente. Fila de alertas e animações de idle ainda não foram iniciadas. Os itens abaixo permanecem como referência de sequência e arquivos.
+O foco sem roubo do teclado foi implementado definindo a janela do pet como não focável; o Hub mantém seu próprio foco explícito. O teste nativo visual com digitação em outra janela está pendente. A fila de alertas foi implementada no Rust e conectada à ilha. Animações esparsas de idle usando apenas transformações sobre os sprites existentes são a etapa seguinte.
 
 ## Plano futuro por arquivo (ordem de execução)
 
@@ -70,3 +70,13 @@ Os caminhos Coucou abaixo servem somente como referência para estudar a técnic
 ## Estado deste estudo
 
 Primeiro passo implementado: transição direcional da janela, sem polling em idle. Nenhum asset, nome, personagem, ícone, som ou mídia do Coucou foi incorporado.
+
+## Implementação autorizada nesta etapa
+
+Em 2026-10-29, o plano passou à execução em passos pequenos. A janela usa transição nativa temporizada na borda mais próxima; o pet é não focável; e uma fila limitada a 32 alertas, mantida no Rust, prioriza aprovações fixadas, lembretes e atividade do agente. A UI recebe snapshots e não arbitra prioridade. Progresso repetido é consolidado; alertas temporários podem ser dispensados pela UI; aprovações só saem após resolução do broker. Os lembretes permanecem locais e o idle não faz chamadas de rede.
+
+Arquivos da fila: `src-tauri/src/pet_alerts.rs` (implementação própria), `src-tauri/src/security/dispatch.rs` (vínculo com aprovações), `src-tauri/src/security/kill_switch.rs` (estado pausado), `src-tauri/src/reminders.rs` (notificação local), `src-tauri/src/lib.rs` (estado e comandos), `src/core/island.ts` e `src/ui/IslandWindow.tsx` (apresentação), além de `src/ui/styles.css`. Nenhum código Coucou foi copiado nesta fila.
+
+Próxima etapa: adicionar animações esparsas de olhar e piscar sobre a apresentação dos sprites existentes. Timers deverão existir somente com janela/documento visível, estado idle e movimento permitido; serão cancelados ao sair dessas condições. Não serão adicionados assets, loops contínuos, polling ou rede.
+
+Validação automatizada cobre fila limitada/prioridade/deduplicação, sincronização do snapshot e geometria. Foco real, vários monitores, DPI misto, fechar/reabrir e medição de CPU/memória em Windows continuam pendentes de validação visual/nativa.
