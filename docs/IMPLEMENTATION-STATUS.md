@@ -10,7 +10,7 @@
 
 ## Configurações em modal
 
-- Os IDs de navegação legados abrem Configurações sobre a página ativa; o chat continua montado por baixo. O modal mostra as nove categorias com componentes existentes em modo embutido, mantém uma única fonte em `AppSettings` e perfil, lembra a última categoria e pesquisa pelo índice único `src/core/settings-navigation.ts`. Habilidades e Conectores exibem apenas preferências globais e um atalho para suas páginas completas. A validação visual em larguras estreitas e no Windows continua pendente.
+- Os IDs de navegação legados abrem Configurações sobre a página ativa; o chat continua montado por baixo. O modal mostra as nove categorias com componentes existentes em modo embutido, mantém uma única fonte em `AppSettings` e perfil, lembra a última categoria e pesquisa pelo índice único `src/core/settings-navigation.ts`. Habilidades apresenta o estado do catálogo Rust e um atalho para sua central; Conectores resume o provedor principal e as reservas salvos e oferece acesso à central, sem repetir preferências de Geral ou Assistente. As ações abrem a página principal e fecham o modal. A validação visual em larguras estreitas e no Windows continua pendente.
 - Geral e Sobre usam componentes separados. A exclusão do histórico fica em Privacidade e permissões. Em Atividade, “Abrir tela completa” mantém acessível a rota legada sem abrir novamente o modal.
 - Privacidade e permissões concentra pastas e aplicativos permitidos, links externos lembrados, destinos do Discord, servidores locais e exclusão do histórico. Habilidades mostra um resumo somente para leitura e um atalho para essa seção; os comandos de persistência continuam no Rust.
 

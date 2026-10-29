@@ -135,16 +135,16 @@ export const SETTINGS_INDEX: readonly SettingsIndexEntry[] = [
     anchor: 'computer-resources',
   },
   {
-    title: 'Preferências globais de habilidades',
-    keywords: ['agente', 'movimento reduzido'],
+    title: 'Estado das habilidades',
+    keywords: ['agente', 'ferramentas ativas', 'catálogo'],
     section: 'habilidades',
-    anchor: 'skills-global-preferences',
+    anchor: 'skills-summary',
   },
   {
-    title: 'Preferências globais de conectores',
-    keywords: ['voz', 'microfone'],
+    title: 'Provedor principal e reservas',
+    keywords: ['conectores', 'modelo', 'provedor reserva', 'credencial'],
     section: 'conectores',
-    anchor: 'connectors-global-preferences',
+    anchor: 'connectors-summary',
   },
   {
     title: 'Modo de permissões',
