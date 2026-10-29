@@ -27,7 +27,7 @@ Este documento é um estudo estático do clone local informado, sem execução d
 
 O primeiro passo foi implementado: a janela própria do OdeKrai desliza para fora e retorna pela borda mais próxima, usando a área útil e escala do monitor. O movimento usa 12 passos temporizados apenas na transição, sem polling em idle. Testes puros cobrem os quatro lados, coordenadas negativas e interpolação. A validação visual/nativa em Windows, DPI misto e múltiplos monitores continua pendente.
 
-Os passos de foco sem roubo do teclado, fila de alertas e animações de idle ainda não foram iniciados. Os itens abaixo permanecem como referência de sequência e arquivos.
+O foco sem roubo do teclado foi implementado definindo a janela do pet como não focável; o Hub mantém seu próprio foco explícito. O teste nativo visual com digitação em outra janela está pendente. Fila de alertas e animações de idle ainda não foram iniciadas. Os itens abaixo permanecem como referência de sequência e arquivos.
 
 ## Plano futuro por arquivo (ordem de execução)
 

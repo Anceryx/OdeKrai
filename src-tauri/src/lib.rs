@@ -228,6 +228,16 @@ mod feature_window_lifecycle_tests {
 }
 
 #[cfg(test)]
+mod pet_window_focus_tests {
+    use super::PET_WINDOW_FOCUSABLE;
+
+    #[test]
+    fn pet_window_does_not_take_keyboard_focus() {
+        assert!(!PET_WINDOW_FOCUSABLE);
+    }
+}
+
+#[cfg(test)]
 mod pet_position_tests {
     use super::pet_position::{clamp_position, WindowPosition, WindowSize, WorkArea};
 
@@ -301,6 +311,7 @@ struct PetPositionStore {
 
 const PET_POSITION_FILE: &str = "pet-position.json";
 const PET_POSITION_WRITE_INTERVAL: Duration = Duration::from_secs(1);
+const PET_WINDOW_FOCUSABLE: bool = false;
 
 fn pet_position_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     app.path()
@@ -665,7 +676,7 @@ async fn ensure_pet_window(app: &tauri::AppHandle) -> Result<WebviewWindow, Stri
         .transparent(true)
         .shadow(false)
         .always_on_top(true)
-        .focusable(true)
+        .focusable(PET_WINDOW_FOCUSABLE)
         .resizable(false)
         .skip_taskbar(true)
         .visible(false)
