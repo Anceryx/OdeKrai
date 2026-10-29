@@ -151,11 +151,7 @@ pub(crate) fn validate_skill(id: &str, params: &Value) -> Result<(), String> {
             event_payload(params)?;
         }
         "google.calendar.update_event" | "google.calendar.delete_event" => {
-            let event = if id.ends_with("delete_event") {
-                &params["event"]
-            } else {
-                &params["event"]
-            };
+            let event = &params["event"];
             let event_id = event["id"]
                 .as_str()
                 .filter(|value| {
@@ -180,8 +176,8 @@ pub(crate) fn validate_skill(id: &str, params: &Value) -> Result<(), String> {
 fn stable_id(payload: &Value) -> String {
     // Hexadecimal minúsculo é subconjunto válido do alfabeto base32hex aceito pelo Google.
     format!(
-        "odekrai{}",
-        format!("{:x}", Sha256::digest(payload.to_string().as_bytes()))
+        "odekrai{:x}",
+        Sha256::digest(payload.to_string().as_bytes())
     )
 }
 
@@ -238,7 +234,7 @@ async fn execute_with_token(
             if response.status() == StatusCode::CONFLICT {
                 let existing = http
                     .get(format!("{base}{path}/{idempotency_id}"))
-                    .bearer_auth(&token)
+                    .bearer_auth(token)
                     .send()
                     .await
                     .map_err(|_| {

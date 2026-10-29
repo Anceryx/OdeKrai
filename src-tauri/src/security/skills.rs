@@ -41,6 +41,10 @@ pub enum SkillFamily {
     Web,
     Computador,
     Codigo,
+    #[expect(
+        dead_code,
+        reason = "família reservada para habilidades MCP recebidas dinamicamente"
+    )]
     IntegracoesMcp,
 }
 
@@ -48,6 +52,10 @@ pub enum SkillFamily {
 #[serde(rename_all = "camelCase", tag = "kind", content = "server")]
 pub enum SkillOrigin {
     Builtin,
+    #[expect(
+        dead_code,
+        reason = "origem reservada para ferramentas fornecidas por servidores MCP"
+    )]
     Mcp(String),
 }
 

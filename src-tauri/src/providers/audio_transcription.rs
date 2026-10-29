@@ -220,7 +220,7 @@ mod tests {
         assert!(normalize_media_type("openai", "audio/ogg").is_err());
         assert!(normalize_media_type("groq", "audio/ogg").is_ok());
         assert!(normalize_media_type("openai", "application/octet-stream").is_err());
-        assert!(MAX_AUDIO_BYTES > 0);
+        const { assert!(MAX_AUDIO_BYTES > 0) };
     }
 
     fn mock_server(status: &str, body: &'static str) -> (Url, std::thread::JoinHandle<Vec<u8>>) {

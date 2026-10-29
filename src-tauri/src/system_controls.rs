@@ -20,6 +20,7 @@ pub(crate) trait SystemAdapter {
 }
 
 const UNSUPPORTED_BRIGHTNESS: &str = "este monitor não permite controlar o brilho por software";
+type ThemeHistoryRow = Option<(Option<i64>, Option<Vec<u8>>, Option<i64>, Option<Vec<u8>>)>;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ThemeSnapshot {
@@ -318,7 +319,7 @@ pub(crate) fn execute_managed_with<A: SystemAdapter>(
             Ok("Tema alterado; o Windows foi avisado para atualizar os aplicativos. Use theme.restore para desfazer.".into())
         }
         "theme.restore" => {
-            let row: Option<(Option<i64>, Option<Vec<u8>>, Option<i64>, Option<Vec<u8>>)> = db.query_row("SELECT apps_type,apps_data,system_type,system_data FROM theme_history WHERE restored_at IS NULL ORDER BY id DESC LIMIT 1", [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))).optional()
+            let row: ThemeHistoryRow = db.query_row("SELECT apps_type,apps_data,system_type,system_data FROM theme_history WHERE restored_at IS NULL ORDER BY id DESC LIMIT 1", [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))).optional()
                 .map_err(|_| "Não foi possível consultar o tema anterior.".to_string())?;
             let (apps_type, apps_data, system_type, system_data) =
                 row.ok_or("Não há tema anterior para restaurar.")?;

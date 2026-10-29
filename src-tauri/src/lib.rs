@@ -234,7 +234,7 @@ mod pet_window_focus_tests {
 
     #[test]
     fn pet_window_does_not_take_keyboard_focus() {
-        assert!(!PET_WINDOW_FOCUSABLE);
+        const { assert!(!PET_WINDOW_FOCUSABLE) };
     }
 }
 
