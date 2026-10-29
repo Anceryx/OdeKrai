@@ -7,6 +7,7 @@ import { PageHeader, Toggle } from '../DesignSystem';
 import { HistoryDeletionSettings } from '../HistoryDeletionSettings';
 import { normalizeTrustedLinkDomain } from '../../core/markdown';
 import { CodeDelegationSettings } from '../CodeDelegationSettings';
+import { localBrazilianPortugueseVoices, type LocalSpeechVoice } from '../../core/speech';
 
 type BuildInfo = {
   version: string;
@@ -55,6 +56,7 @@ export function SettingsScreen({
   });
   const [agentLimitsError, setAgentLimitsError] = useState('');
   const [aboutError, setAboutError] = useState('');
+  const [speechVoices, setSpeechVoices] = useState<LocalSpeechVoice[]>([]);
   const totalTokensToday = usage.reduce(
     (total, item) => total + item.todayInput + item.todayOutput,
     0,
@@ -77,6 +79,15 @@ export function SettingsScreen({
     `Windows: ${buildInfo?.windows_version ?? '—'}`,
     'Licença: MIT',
   ].join('\n');
+
+  useEffect(() => {
+    if (!('speechSynthesis' in window)) return;
+    const refreshVoices = () =>
+      setSpeechVoices(localBrazilianPortugueseVoices(window.speechSynthesis.getVoices()));
+    refreshVoices();
+    window.speechSynthesis.addEventListener('voiceschanged', refreshVoices);
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', refreshVoices);
+  }, []);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -211,6 +222,90 @@ export function SettingsScreen({
             label="Usar microfone"
             onClick={() => update({ ...settings, microphoneEnabled: !settings.microphoneEnabled })}
           />
+        </div>
+        <div className="preference-row">
+          <div>
+            <strong>Ler respostas automaticamente</strong>
+            <span>Usa somente uma voz local instalada em português do Brasil.</span>
+          </div>
+          <Toggle
+            checked={settings.readRepliesAutomatically}
+            label="Ler respostas automaticamente"
+            onClick={() =>
+              update({ ...settings, readRepliesAutomatically: !settings.readRepliesAutomatically })
+            }
+          />
+        </div>
+        <div className="preference-row speech-setting-row">
+          <label htmlFor="speech-voice">
+            <strong>Voz em português (Brasil)</strong>
+          </label>
+          <select
+            id="speech-voice"
+            aria-label="Voz em português (Brasil)"
+            value={
+              speechVoices.some((voice) => voice.voiceURI === settings.speechVoiceURI)
+                ? settings.speechVoiceURI
+                : (speechVoices[0]?.voiceURI ?? '')
+            }
+            disabled={speechVoices.length === 0}
+            onChange={(event) => update({ ...settings, speechVoiceURI: event.target.value })}
+          >
+            {speechVoices.length === 0 ? (
+              <option value="">Nenhuma voz local disponível</option>
+            ) : (
+              speechVoices.map((voice) => (
+                <option value={voice.voiceURI} key={voice.voiceURI}>
+                  {voice.name} ({voice.lang})
+                </option>
+              ))
+            )}
+          </select>
+        </div>
+        {speechVoices.length === 0 && (
+          <p className="settings-description" role="status">
+            Não há voz local em português do Brasil disponível. No Windows, abra Configurações →
+            Hora e idioma → Idioma e região → opções do Português (Brasil) e instale o recurso
+            “Conversão de texto em fala”. Depois, feche e abra o OdeKrai.{' '}
+            <a
+              href="https://support.microsoft.com/pt-br/windows/hardware/input-devices/manage-the-language-and-keyboard-input-layout-settings-in-windows"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Instruções da Microsoft
+            </a>
+            .
+          </p>
+        )}
+        <div className="preference-row">
+          <label htmlFor="speech-rate">
+            <strong>Velocidade</strong>
+          </label>
+          <input
+            id="speech-rate"
+            type="range"
+            min="0.5"
+            max="2"
+            step="0.1"
+            value={settings.speechRate}
+            onChange={(event) => update({ ...settings, speechRate: Number(event.target.value) })}
+          />
+          <output htmlFor="speech-rate">{settings.speechRate.toFixed(1)}×</output>
+        </div>
+        <div className="preference-row">
+          <label htmlFor="speech-volume">
+            <strong>Volume da leitura</strong>
+          </label>
+          <input
+            id="speech-volume"
+            type="range"
+            min="0"
+            max="1"
+            step="0.1"
+            value={settings.speechVolume}
+            onChange={(event) => update({ ...settings, speechVolume: Number(event.target.value) })}
+          />
+          <output htmlFor="speech-volume">{Math.round(settings.speechVolume * 100)}%</output>
         </div>
       </section>
       <section className="settings-panel settings-section" aria-labelledby="agent-settings-heading">

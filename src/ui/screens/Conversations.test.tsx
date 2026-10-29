@@ -6,7 +6,10 @@ describe('ConversationsScreen', () => {
   it('monta a conversa e identifica mensagens com o nome salvo no perfil', () => {
     const markup = renderToStaticMarkup(
       <ConversationsScreen
-        messages={[{ role: 'user', content: 'Olá', created_at: 1 }]}
+        messages={[
+          { role: 'user', content: 'Olá', created_at: 1 },
+          { role: 'assistant', content: 'Resposta de teste', created_at: 2 },
+        ]}
         conversations={[]}
         conversationId={null}
         onConversation={() => undefined}
@@ -24,6 +27,10 @@ describe('ConversationsScreen', () => {
         providerModel=""
         providerId="openai"
         microphoneEnabled={false}
+        readRepliesAutomatically={false}
+        speechVoiceURI=""
+        speechRate={1}
+        speechVolume={1}
         providerConfigured={false}
         conversationSidebarCollapsed={false}
         conversationSidebarWidth={230}
@@ -54,6 +61,7 @@ describe('ConversationsScreen', () => {
     expect(markup).toContain('Redimensionar lista de conversas');
     expect(markup).not.toContain('chat-model-chip');
     expect(markup).toContain('message-role">Oli</span>');
+    expect(markup).toContain('>Ouvir</button>');
     expect(markup).toContain('Detalhes técnicos');
     expect(markup).toContain('Resolver pasta');
   });
@@ -88,6 +96,10 @@ describe('ConversationsScreen', () => {
         providerModel="gpt-test"
         providerId="openai"
         microphoneEnabled={false}
+        readRepliesAutomatically={false}
+        speechVoiceURI=""
+        speechRate={1}
+        speechVolume={1}
         providerConfigured
         conversationSidebarCollapsed={false}
         conversationSidebarWidth={230}
@@ -137,6 +149,10 @@ describe('ConversationsScreen', () => {
         providerModel=""
         providerId="openai"
         microphoneEnabled={false}
+        readRepliesAutomatically={false}
+        speechVoiceURI=""
+        speechRate={1}
+        speechVolume={1}
         providerConfigured={false}
         conversationSidebarCollapsed
         conversationSidebarWidth={230}

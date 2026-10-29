@@ -270,4 +270,25 @@ describe('preferências persistidas', () => {
     saveSettings(settings);
     expect(loadSettings().providers.groq.enabled).toBe(false);
   });
+
+  it('mantém leitura automática desligada por padrão e limita as preferências de voz', () => {
+    expect(defaultSettings.readRepliesAutomatically).toBe(false);
+    const saved = {
+      ...defaultSettings,
+      readRepliesAutomatically: true,
+      speechVoiceURI: 'voice-local-pt-br',
+      speechRate: 8,
+      speechVolume: -2,
+    };
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => (key === 'odekrai.settings.v2' ? JSON.stringify(saved) : null),
+      setItem: () => undefined,
+    });
+    expect(loadSettings()).toMatchObject({
+      readRepliesAutomatically: true,
+      speechVoiceURI: 'voice-local-pt-br',
+      speechRate: 2,
+      speechVolume: 0,
+    });
+  });
 });

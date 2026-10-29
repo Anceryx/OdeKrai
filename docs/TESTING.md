@@ -131,6 +131,8 @@ Build/testes automatizados não comprovam visualização 3D correta, orientaçã
 
 Não há sons Kenney integrados. As páginas oficiais de [UI Audio](https://kenney.nl/assets/ui-audio) e [Interface Sounds](https://kenney.nl/assets/interface-sounds) indicam CC0, mas os arquivos ZIP e licenças internas ainda precisam ser verificados. Não copiar sons do Coucou.
 
+Leitura em voz alta: `speech.test.ts` verifica a limpeza de Markdown/código/links, o filtro de vozes locais `pt-BR`, substituição da fala anterior e parada explícita, usando sintetizador falso. A leitura não chama rede. **Validação no Windows pendente:** confira a enumeração das vozes instaladas no WebView2, instale uma voz `pt-BR` se necessário, compare velocidade/volume, e confirme “Parar”, nova mensagem, silenciamento do pet, saída da tela e parada de emergência.
+
 ## Capturas verificáveis da revisão atual
 
 As capturas desta revisão ainda não foram produzidas. Em Windows com sessão gráfica disponível:

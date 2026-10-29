@@ -22,6 +22,10 @@ export type AppSettings = {
   reduceMotion: boolean;
   useMascotAsAssistantAvatar: boolean;
   microphoneEnabled: boolean;
+  readRepliesAutomatically: boolean;
+  speechVoiceURI: string;
+  speechRate: number;
+  speechVolume: number;
   closeBehavior: 'minimize_to_tray' | 'exit';
   activeProviderId: string;
   fallbackProviderIds: string[];
@@ -80,6 +84,10 @@ export const defaultSettings: AppSettings = {
   reduceMotion: false,
   useMascotAsAssistantAvatar: false,
   microphoneEnabled: false,
+  readRepliesAutomatically: false,
+  speechVoiceURI: '',
+  speechRate: 1,
+  speechVolume: 1,
   closeBehavior: 'exit',
   activeProviderId: 'openai',
   fallbackProviderIds: [],
@@ -250,6 +258,19 @@ export function loadSettingsWithWarnings(): { settings: AppSettings; warnings: s
             ? value.useMascotAsAssistantAvatar
             : false,
         microphoneEnabled: value.microphoneEnabled === true,
+        readRepliesAutomatically: value.readRepliesAutomatically === true,
+        speechVoiceURI:
+          typeof value.speechVoiceURI === 'string' && value.speechVoiceURI.length <= 512
+            ? value.speechVoiceURI
+            : '',
+        speechRate:
+          typeof value.speechRate === 'number' && Number.isFinite(value.speechRate)
+            ? Math.max(0.5, Math.min(2, value.speechRate))
+            : 1,
+        speechVolume:
+          typeof value.speechVolume === 'number' && Number.isFinite(value.speechVolume)
+            ? Math.max(0, Math.min(1, value.speechVolume))
+            : 1,
         closeBehavior: value.closeBehavior === 'minimize_to_tray' ? 'minimize_to_tray' : 'exit',
         activeProviderId,
         fallbackProviderIds,

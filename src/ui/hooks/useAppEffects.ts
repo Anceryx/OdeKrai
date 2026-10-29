@@ -3,6 +3,7 @@ import { emit, listen } from '@tauri-apps/api/event';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { AI_PROVIDERS } from '../../core/providers';
 import { loadSettings } from '../../core/settings';
+import { stopLocalSpeech } from '../../core/speech';
 import { normalizeSoundPreferences, playSound } from '../../core/sounds';
 import type { ChatMessage } from '../../core/provider-messages';
 import { mergeApprovedProfile } from '../../core/identity';
@@ -259,6 +260,7 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
     let unlisten: (() => void)[] = [];
     void Promise.all([
       listen('security-halted', () => {
+        stopLocalSpeech();
         setToast('O OdeKrai foi parado. Ações e respostas em andamento foram canceladas.');
         void playSound('halted', normalizeSoundPreferences(loadSettings().companion.sounds));
         void startupInvoke<{ mode: string; halted: boolean }>(

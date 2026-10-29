@@ -1522,6 +1522,13 @@ select:focus-visible {
   color: #ddd;
   font-size: 11px;
 }
+.preference-row input[type='range'] {
+  width: min(190px, 35%);
+  accent-color: var(--color-accent);
+}
+.speech-setting-row {
+  gap: 14px;
+}
 .fallback-provider-add,
 .fallback-provider-list li > div {
   display: flex;
@@ -3766,6 +3773,16 @@ html.island-window-html {
   margin-top: 4px;
   color: #85818a;
   font-size: 10px;
+}
+.message-speech-button {
+  align-self: flex-start;
+  margin-top: 5px;
+}
+.speech-error {
+  align-self: flex-start;
+  margin: 4px 0;
+  color: #f0b7b7;
+  font-size: 12px;
 }
 .chat-error {
   flex: none;

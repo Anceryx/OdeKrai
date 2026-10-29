@@ -21,6 +21,7 @@ import {
   type SoundEvent,
 } from '../core/sounds';
 import { AI_PROVIDERS, type AiProvider } from '../core/providers';
+import { stopLocalSpeech } from '../core/speech';
 const Overview = lazy(() =>
   import('./screens/Overview').then((module) => ({ default: withScreenBoundary(module.Overview) })),
 );
@@ -181,6 +182,14 @@ function MainApp() {
   }, [settings.microphoneEnabled]);
 
   useEffect(() => {
+    if (permissionIndicator?.halted) stopLocalSpeech();
+  }, [permissionIndicator?.halted]);
+
+  useEffect(() => {
+    if (!settings.companion.sounds.enabled) stopLocalSpeech();
+  }, [settings.companion.sounds.enabled]);
+
+  useEffect(() => {
     if (!isTauri()) {
       setAgentAvailability({
         available: false,
@@ -255,6 +264,7 @@ function MainApp() {
       } else if (payload === 'stop') {
         void invoke('halt_all').catch(() => setToast('Não foi possível parar as ações.'));
       } else if (payload === 'mute') {
+        stopLocalSpeech();
         setSettings((current) => ({
           ...current,
           companion: {
@@ -1020,6 +1030,10 @@ function MainApp() {
               providerModel={shownProviderModel}
               providerId={shownProviderId}
               microphoneEnabled={settings.microphoneEnabled}
+              readRepliesAutomatically={settings.readRepliesAutomatically}
+              speechVoiceURI={settings.speechVoiceURI}
+              speechRate={settings.speechRate}
+              speechVolume={settings.speechVolume}
               conversationSidebarCollapsed={settings.layout.conversationSidebarCollapsed}
               conversationSidebarWidth={settings.layout.conversationSidebarWidth}
               onToggleConversationSidebar={() =>

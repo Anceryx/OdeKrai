@@ -14,6 +14,7 @@ import { providerById } from '../../core/providers';
 import { AgentActionCard, AgentControls, type AgentActionCardData } from '../AgentControls';
 import { ScreenCapture } from '../ScreenCapture';
 import { supportsTranscription, transcribeConfirmedRecording } from '../../core/transcription';
+import { getLocalSpeechReader, type SpeechState } from '../../core/speech';
 
 export function ConversationsScreen({
   messages,
@@ -56,6 +57,10 @@ export function ConversationsScreen({
   onConfigureAgent,
   onAnalyzeCapture,
   microphoneEnabled,
+  readRepliesAutomatically,
+  speechVoiceURI,
+  speechRate,
+  speechVolume,
 }: {
   messages: ChatMessage[];
   conversations: ConversationSummary[];
@@ -97,6 +102,10 @@ export function ConversationsScreen({
   onConfigureAgent: () => void;
   onAnalyzeCapture: (prompt: string, imageBase64: string) => Promise<boolean>;
   microphoneEnabled: boolean;
+  readRepliesAutomatically: boolean;
+  speechVoiceURI: string;
+  speechRate: number;
+  speechVolume: number;
 }) {
   const [search, setSearch] = useState('');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -121,6 +130,13 @@ export function ConversationsScreen({
   const recordingBlobRef = useRef<Blob | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const recordingUrlRef = useRef<string | null>(null);
+  const lastSpeechMessageRef = useRef<{
+    conversationId: string | null;
+    message: ChatMessage | null;
+  } | null>(null);
+  const ignoreNextLoadedMessageRef = useRef(false);
+  const [speechState, setSpeechState] = useState<SpeechState>({ key: null, speaking: false });
+  const [speechError, setSpeechError] = useState('');
   const activeConversation = conversations.find((item) => item.id === conversationId);
   const conversationModelDiffers = Boolean(
     activeConversation?.model &&
@@ -134,6 +150,61 @@ export function ConversationsScreen({
     () => setTitleDraft(activeConversation?.title ?? ''),
     [conversationId, activeConversation?.title],
   );
+  useEffect(() => {
+    const reader = getLocalSpeechReader();
+    if (!reader) return;
+    const unsubscribe = reader.subscribe(setSpeechState);
+    return () => {
+      reader.stop();
+      unsubscribe();
+    };
+  }, []);
+  useEffect(() => {
+    const reader = getLocalSpeechReader();
+    reader?.stop();
+    ignoreNextLoadedMessageRef.current = true;
+  }, [conversationId]);
+  useEffect(() => {
+    const reader = getLocalSpeechReader();
+    const message = messages.at(-1) ?? null;
+    const previous = lastSpeechMessageRef.current;
+    if (!previous) {
+      lastSpeechMessageRef.current = { conversationId, message };
+      return;
+    }
+    if (previous.conversationId !== conversationId) {
+      lastSpeechMessageRef.current = { conversationId, message };
+      return;
+    }
+    if (previous.message === message) return;
+    lastSpeechMessageRef.current = { conversationId, message };
+    reader?.stop();
+    if (ignoreNextLoadedMessageRef.current) {
+      ignoreNextLoadedMessageRef.current = false;
+      return;
+    }
+    if (message?.role === 'assistant' && readRepliesAutomatically) {
+      try {
+        reader?.speak(message.content, `message-${messages.length - 1}`, {
+          voiceURI: speechVoiceURI,
+          rate: speechRate,
+          volume: speechVolume,
+        });
+        setSpeechError('');
+      } catch (error) {
+        setSpeechError(
+          error instanceof Error ? error.message : 'Não foi possível iniciar a leitura.',
+        );
+      }
+    }
+  }, [
+    conversationId,
+    messages,
+    readRepliesAutomatically,
+    speechRate,
+    speechVolume,
+    speechVoiceURI,
+  ]);
   useEffect(() => {
     const textarea = composerRef.current;
     if (!textarea) return;
@@ -585,6 +656,43 @@ export function ConversationsScreen({
                         (message.created_at ?? Math.floor(Date.now() / 1000)) * 1000,
                       ).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                     </time>
+                    {message.role === 'assistant' && (
+                      <button
+                        type="button"
+                        className="secondary-button small-button message-speech-button"
+                        aria-label={
+                          speechState.key === `message-${index}` ? 'Parar leitura' : 'Ouvir'
+                        }
+                        onClick={() => {
+                          const reader = getLocalSpeechReader();
+                          if (speechState.key === `message-${index}`) {
+                            reader?.stop();
+                            setSpeechError('');
+                            return;
+                          }
+                          try {
+                            if (!reader)
+                              throw new Error(
+                                'A leitura em voz alta não está disponível neste WebView.',
+                              );
+                            reader.speak(message.content, `message-${index}`, {
+                              voiceURI: speechVoiceURI,
+                              rate: speechRate,
+                              volume: speechVolume,
+                            });
+                            setSpeechError('');
+                          } catch (error) {
+                            setSpeechError(
+                              error instanceof Error
+                                ? error.message
+                                : 'Não foi possível iniciar a leitura.',
+                            );
+                          }
+                        }}
+                      >
+                        {speechState.key === `message-${index}` ? 'Parar' : 'Ouvir'}
+                      </button>
+                    )}
                   </div>
                   {message.role === 'user' && (
                     <span className="message-avatar message-avatar-user">
@@ -597,6 +705,11 @@ export function ConversationsScreen({
                   )}
                 </article>
               ))}
+              {speechError && (
+                <p className="speech-error" role="alert">
+                  {speechError}
+                </p>
+              )}
               {agentActionCards.map((action) => (
                 <AgentActionCard action={action} key={action.id} />
               ))}
