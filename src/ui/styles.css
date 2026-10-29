@@ -1076,41 +1076,6 @@ select:focus-visible {
   font-size: 16px;
   font-weight: 600;
 }
-.skill-card {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(150px, auto);
-  align-items: center;
-  gap: 18px;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--line);
-}
-.skill-title-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.skill-status {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 3px 8px;
-  color: var(--color-text-muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-.skill-status--installed {
-  color: #91d9ad;
-}
-.skill-status--available {
-  color: #a9c9ff;
-}
-.skill-status--configuration_required {
-  color: #f2cf86;
-}
-.skill-status--unavailable {
-  color: #e9a2a2;
-}
 .skills-search-section label,
 .skills-search-section input {
   display: block;
@@ -1179,9 +1144,6 @@ select:focus-visible {
   font-size: 11px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-.skills-catalog-group .section-heading-row {
-  margin-bottom: 8px;
 }
 .skills-catalog-page {
   width: 100%;
@@ -1451,14 +1413,6 @@ select:focus-visible {
   color: var(--color-text-muted);
   font-size: var(--font-size-11);
   text-align: right;
-}
-.skills-family-details {
-  margin-top: var(--space-4);
-  border-top: 1px solid var(--color-border-subtle);
-}
-.skills-family-details > h3 {
-  margin: var(--space-4) 0 var(--space-2);
-  font-size: var(--font-size-14);
 }
 .skills-detail-item {
   display: grid;
@@ -1816,17 +1770,6 @@ select:focus-visible {
   color: #91d9ad;
   font-size: 12px;
 }
-.skill-card h3 {
-  margin: 0 0 5px;
-  font-size: 14px;
-}
-.skill-card p {
-  margin: 0 0 6px;
-  color: var(--color-text-muted);
-  font-size: 12px;
-  line-height: 1.45;
-}
-.skill-card small,
 .allowed-folder-list small {
   color: var(--color-text-muted);
   font-size: 11px;
@@ -1890,12 +1833,6 @@ select:focus-visible {
 @media (max-width: 850px) {
   .mcp-settings-grid {
     grid-template-columns: 1fr;
-  }
-  .skill-card {
-    grid-template-columns: 1fr;
-  }
-  .skill-card > div:first-child {
-    grid-column: auto;
   }
   .skill-advanced {
     grid-column: auto;

@@ -61,6 +61,22 @@ const registryFixture: CatalogSkill[] = [
 const noOperation = () => undefined;
 
 describe('catálogo de habilidades', () => {
+  it('não mantém estilos dos cartões individuais substituídos pelo catálogo por família', () => {
+    const styles = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
+    const legacySelectors = [
+      '.skill-card',
+      '.skill-title-row',
+      '.skill-status',
+      '.skills-catalog-group',
+      '.skills-family-details',
+    ];
+
+    for (const selector of legacySelectors) {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      expect(styles).not.toMatch(new RegExp(`${escaped}(?=[\\s:{>+~])`));
+    }
+  });
+
   it('exibe somente as famílias e habilidades recebidas do registro simulado', () => {
     const markup = renderToStaticMarkup(
       <SkillsCatalogView
