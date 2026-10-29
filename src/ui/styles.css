@@ -390,12 +390,13 @@ select:focus-visible {
   margin: 0;
 }
 .sidebar-profile-popover {
-  position: absolute;
+  position: fixed;
   z-index: 60;
-  bottom: calc(100% + 8px);
-  left: 0;
   display: grid;
   width: min(270px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   gap: 3px;
   padding: 6px;
   border: 1px solid var(--color-border-strong);
@@ -418,10 +419,6 @@ select:focus-visible {
 .sidebar-profile-popover button:hover,
 .sidebar-profile-popover button:focus-visible {
   background: var(--color-surface);
-}
-.sidebar-collapsed .sidebar-profile-popover {
-  bottom: 0;
-  left: calc(100% + 8px);
 }
 .pending-approval-indicator,
 .stop-all-button {

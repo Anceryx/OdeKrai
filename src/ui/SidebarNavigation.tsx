@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { initials, type ProfileData } from './Profile';
 import { Icon, type IconName } from './Icon';
 import type { Section } from './screens/types';
@@ -31,6 +32,39 @@ export function nextProfileMenuFocus(
   if (key === 'ArrowDown') return (currentIndex + 1 + itemCount) % itemCount;
   if (key === 'ArrowUp') return (currentIndex - 1 + itemCount) % itemCount;
   return null;
+}
+
+export type ProfileMenuAnchorRect = Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left'>;
+
+export function positionProfileMenu(
+  anchor: ProfileMenuAnchorRect,
+  menu: { width: number; height: number },
+  viewport: { width: number; height: number },
+  compact: boolean,
+) {
+  const margin = 12;
+  const gap = 8;
+  let width = Math.min(menu.width, Math.max(0, viewport.width - margin * 2));
+  const height = Math.min(menu.height, Math.max(0, viewport.height - margin * 2));
+  const rightSpace = viewport.width - margin - (anchor.right + gap);
+  const leftSpace = anchor.left - gap - margin;
+  let left = anchor.left;
+  if (compact && rightSpace > 0) {
+    width = Math.min(width, rightSpace);
+    left = anchor.right + gap;
+  } else if (compact && leftSpace > 0) {
+    width = Math.min(width, leftSpace);
+    left = anchor.left - gap - width;
+  }
+  const topCandidate = compact ? anchor.bottom - height : anchor.top - gap - height;
+  const top = compact || topCandidate >= margin ? topCandidate : anchor.bottom + gap;
+
+  return {
+    left: Math.min(Math.max(margin, left), Math.max(margin, viewport.width - width - margin)),
+    top: Math.min(Math.max(margin, top), Math.max(margin, viewport.height - height - margin)),
+    width,
+    maxHeight: height,
+  };
 }
 
 export function shouldShowStopAll(busy: boolean, agentRunning: boolean): boolean {
@@ -112,6 +146,7 @@ export function SidebarNavigation({
 export function SidebarProfileMenu({
   profile,
   compact,
+  section,
   onMyProfile,
   onSettings,
   onPermissions,
@@ -120,6 +155,7 @@ export function SidebarProfileMenu({
 }: {
   profile: ProfileData;
   compact: boolean;
+  section: Section;
   onMyProfile: () => void;
   onSettings: () => void;
   onPermissions: () => void;
@@ -130,11 +166,69 @@ export function SidebarProfileMenu({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const positionedMenuRef = useRef(false);
+  const [menuPosition, setMenuPosition] = useState<ReturnType<typeof positionProfileMenu> | null>(
+    null,
+  );
   const displayName = profile.displayName.trim() || 'Seu perfil';
 
   useEffect(() => {
-    if (open) itemRefs.current[0]?.focus();
-  }, [open]);
+    if (!open) {
+      positionedMenuRef.current = false;
+      return;
+    }
+    if (menuPosition && !positionedMenuRef.current) {
+      positionedMenuRef.current = true;
+      itemRefs.current[0]?.focus();
+    }
+  }, [open, menuPosition]);
+
+  useEffect(() => {
+    if (!open) {
+      setMenuPosition(null);
+      return;
+    }
+    const trigger = triggerRef.current;
+    const menu = menuRef.current;
+    if (!trigger || !menu) return;
+    let frame = 0;
+    const updatePosition = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const anchor = trigger.getBoundingClientRect();
+        const bounds = menu.getBoundingClientRect();
+        setMenuPosition(
+          positionProfileMenu(
+            anchor,
+            { width: Math.max(bounds.width, 270), height: bounds.height },
+            { width: window.innerWidth, height: window.innerHeight },
+            compact,
+          ),
+        );
+      });
+    };
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updatePosition);
+    resizeObserver?.observe(trigger);
+    resizeObserver?.observe(menu);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    window.visualViewport?.addEventListener('resize', updatePosition);
+    window.visualViewport?.addEventListener('scroll', updatePosition);
+    updatePosition();
+    return () => {
+      cancelAnimationFrame(frame);
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+      window.visualViewport?.removeEventListener('resize', updatePosition);
+      window.visualViewport?.removeEventListener('scroll', updatePosition);
+    };
+  }, [open, compact]);
+
+  useEffect(() => {
+    setOpen(false);
+  }, [section]);
 
   useEffect(() => {
     if (!open) return;
@@ -180,6 +274,7 @@ export function SidebarProfileMenu({
         aria-label={`Abrir menu do perfil: ${displayName}`}
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-controls={open ? 'sidebar-profile-menu' : undefined}
         onClick={() => setOpen((current) => !current)}
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown' && !open) {
@@ -201,34 +296,44 @@ export function SidebarProfileMenu({
           <span>{profile.nickname.trim() || 'Editar perfil'}</span>
         </span>
       </button>
-      {open && (
-        <div
-          ref={menuRef}
-          className="sidebar-profile-popover"
-          role="menu"
-          aria-label="Menu do perfil"
-          onKeyDown={handleMenuKeyDown}
-        >
-          {profileMenuItems.map((item, index) => (
-            <button
-              ref={(element) => {
-                itemRefs.current[index] = element;
-              }}
-              key={item.id}
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                triggerRef.current?.focus();
-                actions[item.id]();
-              }}
-            >
-              <Icon name={item.icon} size={18} />
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            id="sidebar-profile-menu"
+            className="sidebar-profile-popover"
+            role="menu"
+            aria-label="Menu do perfil"
+            onKeyDown={handleMenuKeyDown}
+            style={{
+              left: menuPosition?.left ?? 0,
+              top: menuPosition?.top ?? 0,
+              width: menuPosition?.width,
+              maxHeight: menuPosition?.maxHeight,
+              visibility: menuPosition ? 'visible' : 'hidden',
+            }}
+          >
+            {profileMenuItems.map((item, index) => (
+              <button
+                ref={(element) => {
+                  itemRefs.current[index] = element;
+                }}
+                key={item.id}
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  triggerRef.current?.focus();
+                  actions[item.id]();
+                }}
+              >
+                <Icon name={item.icon} size={18} />
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

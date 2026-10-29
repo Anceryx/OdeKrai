@@ -909,6 +909,7 @@ function MainApp() {
         <SidebarProfileMenu
           profile={profile}
           compact={settings.layout.sidebarCollapsed}
+          section={section}
           onMyProfile={() => navigate('agent')}
           onSettings={() => navigate('settings')}
           onPermissions={() => navigate('permissions')}
