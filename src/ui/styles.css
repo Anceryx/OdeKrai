@@ -1313,7 +1313,7 @@ select:focus-visible {
 }
 .skills-family-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
   align-items: start;
   gap: var(--space-3);
 }
@@ -1327,7 +1327,9 @@ select:focus-visible {
   border-color: var(--color-border-strong);
 }
 .skills-family-card-heading {
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: start;
   gap: var(--space-3);
 }
 .skills-family-icon {
@@ -1342,25 +1344,31 @@ select:focus-visible {
   color: var(--color-accent-soft);
 }
 .skills-family-copy {
-  flex: 1;
   min-width: 0;
 }
 .skills-family-copy h2 {
   margin: 0 0 var(--space-1);
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 .skills-family-copy p {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-12);
   line-height: 1.5;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .skills-family-card-heading .risk-badge {
-  flex: 0 0 auto;
+  grid-column: 2;
+  max-width: 100%;
+  white-space: normal;
 }
 .skills-family-card-footer {
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--space-2);
-  margin-top: var(--space-4);
+  margin-top: var(--space-3);
 }
 .skills-family-status,
 .skills-detail-status,
@@ -1426,8 +1434,12 @@ select:focus-visible {
   gap: var(--space-2);
 }
 .skills-detail-title h4 {
+  flex: 1 1 220px;
+  min-width: 0;
   margin: 0;
   font-size: var(--font-size-13);
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 .skills-detail-copy > p,
 .skills-detail-copy li,
@@ -1435,7 +1447,8 @@ select:focus-visible {
   color: var(--color-text-secondary);
   font-size: var(--font-size-12);
   line-height: 1.5;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .skills-detail-copy > p {
   margin: var(--space-1) 0;
@@ -1445,6 +1458,7 @@ select:focus-visible {
   padding-left: var(--space-5);
 }
 .skills-detail-origin {
+  display: block;
   color: var(--color-text-muted);
 }
 .skills-experimental-badge {
@@ -1702,6 +1716,7 @@ select:focus-visible {
   background: var(--color-warning-surface);
 }
 .skills-detail-copy > .risk-badge {
+  display: flex;
   margin-top: var(--space-2);
 }
 [data-performance='on'] .skills-family-details-page {
