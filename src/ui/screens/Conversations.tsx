@@ -16,6 +16,19 @@ import { ScreenCapture } from '../ScreenCapture';
 import { supportsTranscription, transcribeConfirmedRecording } from '../../core/transcription';
 import { getLocalSpeechReader, type SpeechState } from '../../core/speech';
 
+export function shouldFollowChatScroll(
+  scrollHeight: number,
+  scrollTop: number,
+  clientHeight: number,
+  threshold = 96,
+) {
+  return scrollHeight - scrollTop - clientHeight < threshold;
+}
+
+export function shouldSubmitChatOnEnter(key: string, shiftKey: boolean) {
+  return key === 'Enter' && !shiftKey;
+}
+
 export function ConversationsScreen({
   messages,
   conversations,
@@ -112,6 +125,7 @@ export function ConversationsScreen({
   const [titleDraft, setTitleDraft] = useState('');
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const messagesAreaRef = useRef<HTMLDivElement>(null);
+  const followMessagesRef = useRef(true);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
@@ -212,11 +226,42 @@ export function ConversationsScreen({
     textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
   }, [draft]);
   useEffect(() => {
+    followMessagesRef.current = true;
+  }, [conversationId]);
+  useEffect(() => {
     const area = messagesAreaRef.current;
     if (!area) return;
-    const nearBottom = area.scrollHeight - area.scrollTop - area.clientHeight < 100;
-    if (nearBottom) area.scrollTop = area.scrollHeight;
-  }, [messages, busy]);
+    if (followMessagesRef.current) area.scrollTop = area.scrollHeight;
+  }, [messages, busy, agentActionCards]);
+
+  useEffect(() => {
+    const area = messagesAreaRef.current;
+    if (!area) return;
+    let observedContent: Element | null = null;
+    const keepAtBottom = () => {
+      if (followMessagesRef.current) area.scrollTop = area.scrollHeight;
+    };
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(keepAtBottom);
+    const observeContent = () => {
+      const nextContent = area.firstElementChild;
+      if (nextContent === observedContent) return;
+      if (observedContent) resizeObserver?.unobserve(observedContent);
+      observedContent = nextContent;
+      if (observedContent) resizeObserver?.observe(observedContent);
+      keepAtBottom();
+    };
+    const mutationObserver =
+      typeof MutationObserver === 'undefined' ? null : new MutationObserver(observeContent);
+    observeContent();
+    mutationObserver?.observe(area, { childList: true });
+    window.addEventListener('resize', keepAtBottom);
+    return () => {
+      mutationObserver?.disconnect();
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', keepAtBottom);
+    };
+  }, []);
 
   useEffect(
     () => () => {
@@ -539,36 +584,38 @@ export function ConversationsScreen({
       </button>
       <section className="chat-thread" aria-label="Conversa atual">
         <header className="chat-header">
-          <div className="chat-title-wrap">
-            <span className="eyebrow">CONVERSA</span>
-            {activeConversation ? (
-              <input
-                className="chat-title-input"
-                value={titleDraft}
-                maxLength={120}
-                aria-label="Título da conversa"
-                onChange={(event) => setTitleDraft(event.target.value)}
-                onBlur={() => {
-                  if (titleDraft.trim() && titleDraft.trim() !== activeConversation.title)
-                    onRenameConversation(activeConversation.id, titleDraft);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') event.currentTarget.blur();
-                  if (event.key === 'Escape') setTitleDraft(activeConversation.title);
-                }}
-              />
-            ) : (
-              <h2>Nova conversa</h2>
+          <div className="chat-header-main">
+            <div className="chat-title-wrap">
+              <span className="eyebrow">CONVERSA</span>
+              {activeConversation ? (
+                <input
+                  className="chat-title-input"
+                  value={titleDraft}
+                  maxLength={120}
+                  aria-label="Título da conversa"
+                  onChange={(event) => setTitleDraft(event.target.value)}
+                  onBlur={() => {
+                    if (titleDraft.trim() && titleDraft.trim() !== activeConversation.title)
+                      onRenameConversation(activeConversation.id, titleDraft);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') event.currentTarget.blur();
+                    if (event.key === 'Escape') setTitleDraft(activeConversation.title);
+                  }}
+                />
+              ) : (
+                <h2>Nova conversa</h2>
+              )}
+            </div>
+            {conversationModelDiffers && activeConversation && (
+              <span className="chat-model-chip" title="Modelo usado nesta conversa">
+                {activeConversation.provider_id !== providerId
+                  ? `${providerById(activeConversation.provider_id ?? '')?.name ?? activeConversation.provider_id} · `
+                  : ''}
+                {activeConversation.model}
+              </span>
             )}
           </div>
-          {conversationModelDiffers && activeConversation && (
-            <span className="chat-model-chip" title="Modelo usado nesta conversa">
-              {activeConversation.provider_id !== providerId
-                ? `${providerById(activeConversation.provider_id ?? '')?.name ?? activeConversation.provider_id} · `
-                : ''}
-              {activeConversation.model}
-            </span>
-          )}
           <AgentControls
             enabled={agentEnabled}
             disabledReason={agentUnavailableReason}
@@ -588,7 +635,19 @@ export function ConversationsScreen({
             </Button>
           </div>
         )}
-        <div className="messages-area" aria-live="polite" ref={messagesAreaRef}>
+        <div
+          className="messages-area"
+          aria-live="polite"
+          ref={messagesAreaRef}
+          onScroll={(event) => {
+            const area = event.currentTarget;
+            followMessagesRef.current = shouldFollowChatScroll(
+              area.scrollHeight,
+              area.scrollTop,
+              area.clientHeight,
+            );
+          }}
+        >
           {messages.length === 0 && agentActionCards.length === 0 ? (
             <div className="empty-chat">
               <img className="empty-chat-icon" src={appIcon} alt="" />
@@ -728,11 +787,11 @@ export function ConversationsScreen({
         </div>
         {error && (
           <div className="chat-error" role="alert">
-            <p>{error}</p>
+            <p className="chat-error-message">{error}</p>
             {errorDetails && (
-              <details>
+              <details className="chat-error-details">
                 <summary>Detalhes técnicos</summary>
-                <p>{errorDetails}</p>
+                <pre>{errorDetails}</pre>
               </details>
             )}
             <div>
@@ -761,7 +820,7 @@ export function ConversationsScreen({
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
+              if (shouldSubmitChatOnEnter(event.key, event.shiftKey)) {
                 event.preventDefault();
                 event.currentTarget.form?.requestSubmit();
               }
@@ -776,6 +835,13 @@ export function ConversationsScreen({
                 type="button"
                 className="secondary-button small-button"
                 aria-label="Gravar áudio"
+                title={
+                  !microphoneEnabled
+                    ? 'Ative Usar microfone nas Configurações para gravar.'
+                    : busy
+                      ? 'Aguarde a resposta atual terminar.'
+                      : undefined
+                }
                 disabled={!microphoneEnabled || busy}
                 onClick={() => void startRecording()}
               >
@@ -825,24 +891,36 @@ export function ConversationsScreen({
                 </button>
               </div>
             )}
-            <span>Enter envia · Shift + Enter quebra linha</span>
-            <ScreenCapture
-              providerId={providerId}
-              providerModel={providerModel}
-              agentEnabled={agentEnabled}
-              agentAvailable={!agentUnavailableReason}
-              disabled={busy}
-              onAnalyze={onAnalyzeCapture}
-            />
-            <button
-              className={`send-button ${busy ? 'stop-button' : ''}`}
-              type={busy ? 'button' : 'submit'}
-              onClick={busy ? cancel : undefined}
-              disabled={!busy && !draft.trim()}
-              aria-label={busy ? 'Parar resposta' : 'Enviar mensagem'}
-            >
-              {busy ? 'Parar' : 'Enviar'}
-            </button>
+            <span className="chat-composer-helper">
+              Enter envia · Shift + Enter quebra linha
+              {!microphoneEnabled && !recordingUrl && recordingState === 'idle' && (
+                <small>Gravação de áudio desativada em Configurações.</small>
+              )}
+            </span>
+            <div className="chat-composer-actions">
+              <ScreenCapture
+                providerId={providerId}
+                providerModel={providerModel}
+                agentEnabled={agentEnabled}
+                agentAvailable={!agentUnavailableReason}
+                disabled={busy}
+                onAnalyze={onAnalyzeCapture}
+              />
+              <button
+                className={`send-button ${busy ? 'stop-button' : ''}`}
+                type={busy ? 'button' : 'submit'}
+                onClick={busy ? cancel : undefined}
+                disabled={!busy && !draft.trim()}
+                title={
+                  !busy && !draft.trim()
+                    ? 'Escreva uma mensagem para habilitar o envio.'
+                    : undefined
+                }
+                aria-label={busy ? 'Parar resposta' : 'Enviar mensagem'}
+              >
+                {busy ? 'Parar' : 'Enviar'}
+              </button>
+            </div>
           </div>
           {recordingError && (
             <p className="audio-recording-error" role="alert">

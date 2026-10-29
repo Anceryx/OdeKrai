@@ -4208,19 +4208,34 @@ html.island-window-html {
 .chat-thread {
   display: flex;
   flex-direction: column;
+  gap: 0;
   min-width: 0;
   min-height: 0;
-  padding: 0 22px 10px;
+  padding: 4px 24px 10px;
   overflow: hidden;
 }
 .chat-header {
-  min-height: 64px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: none;
+  gap: 7px;
+  min-width: 0;
+  padding: 7px 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+.chat-header-main {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex: none;
-  gap: 12px;
-  padding: 8px 0;
+  gap: 10px;
+  min-width: 0;
+}
+.chat-title-wrap {
+  flex: 1;
+}
+.chat-header .agent-controls {
+  justify-content: flex-start;
+  gap: 6px 10px;
 }
 .agent-controls {
   display: flex;
@@ -4466,8 +4481,10 @@ html.island-window-html {
   display: block;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 .empty-chat {
   min-height: 100%;
@@ -4489,8 +4506,10 @@ html.island-window-html {
   justify-content: center;
 }
 .message-list {
+  width: 100%;
+  min-height: 100%;
   gap: 14px;
-  padding: 15px 2px;
+  padding: 18px 4px;
 }
 .message {
   align-items: flex-start;
@@ -4508,7 +4527,7 @@ html.island-window-html {
 .message-content {
   display: flex;
   min-width: 0;
-  max-width: min(82%, 680px);
+  max-width: min(88%, 720px);
   flex-direction: column;
   align-items: flex-start;
 }
@@ -4555,6 +4574,11 @@ html.island-window-html {
   color: #dedbe1;
   font-size: 13px;
   line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.message-markdown ul,
+.message-markdown ol {
+  max-width: 100%;
   overflow-wrap: anywhere;
 }
 .message-markdown > p {
@@ -4659,9 +4683,14 @@ html.island-window-html {
 }
 .chat-error {
   flex: none;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 5px 12px;
+  max-height: min(30vh, 220px);
+  overflow: auto;
+  margin-top: 8px;
+  padding: 9px 11px;
   border: 1px solid #ef444444;
   border-radius: 8px;
   background: #ef44440c;
@@ -4669,11 +4698,34 @@ html.island-window-html {
   font-size: 12px;
 }
 .chat-error p {
+  min-width: 0;
   margin: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+.chat-error-message,
+.chat-error-details {
+  grid-column: 1;
+}
+.chat-error-details summary {
+  cursor: pointer;
+}
+.chat-error-details pre {
+  max-height: 150px;
+  margin: 6px 0 0;
+  overflow: auto;
+  color: #c9c5cc;
+  font: 11px/1.45 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .chat-error > div {
   display: flex;
+  grid-column: 2;
+  grid-row: 1 / span 2;
   flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
 }
 .chat-error .ui-button {
@@ -4683,7 +4735,9 @@ html.island-window-html {
 }
 .composer {
   flex: none;
-  margin-top: 8px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 12px;
 }
 .composer textarea {
   min-height: 26px;
@@ -4693,6 +4747,50 @@ html.island-window-html {
 .composer-bottom > span {
   font-size: 10px;
   letter-spacing: 0;
+}
+.composer-bottom {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.composer-bottom > .audio-recording {
+  flex: 1 0 100%;
+  min-width: 0;
+}
+.chat-composer-helper {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 180px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  color: #a9a5ad;
+}
+.chat-composer-helper small {
+  color: #c9a982;
+  font-size: 10px;
+}
+.chat-composer-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+.chat-composer-actions > .ui-button,
+.chat-composer-actions > .small-button,
+.chat-composer-actions > .send-button,
+.composer-bottom > .small-button {
+  min-width: 38px;
+  min-height: 34px;
+  height: 34px;
+  margin: 0;
+}
+.chat-composer-actions button:disabled,
+.composer-bottom > button:disabled {
+  cursor: not-allowed;
+  filter: saturate(0.55);
+  opacity: 0.5;
 }
 .send-button {
   width: auto;
@@ -4716,15 +4814,14 @@ html.island-window-html {
     padding-right: 14px;
     padding-left: 14px;
   }
-  .chat-header {
+  .chat-header-main {
     align-items: flex-start;
-    flex-direction: column;
+    flex-wrap: wrap;
     gap: 6px;
-    padding: 6px 0;
   }
-  .agent-controls {
+  .chat-header .agent-controls {
     justify-content: flex-start;
-    gap: 5px;
+    gap: 5px 8px;
   }
   .agent-workspace,
   .agent-unavailable {
@@ -4732,6 +4829,31 @@ html.island-window-html {
   }
   .agent-action-card {
     margin-left: 0;
+  }
+}
+@media (max-width: 720px) {
+  .chat-thread {
+    padding-right: 9px;
+    padding-left: 9px;
+  }
+  .chat-error {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .chat-error > div {
+    grid-column: 1;
+    grid-row: auto;
+    justify-content: flex-start;
+  }
+  .composer-bottom {
+    align-items: stretch;
+  }
+  .chat-composer-helper {
+    flex-basis: 100%;
+    order: 2;
+  }
+  .chat-composer-actions {
+    justify-content: flex-end;
+    order: 1;
   }
 }
 .history-confirm-backdrop {

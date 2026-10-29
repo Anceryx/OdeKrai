@@ -1,8 +1,23 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { ConversationsScreen } from './Conversations';
+import {
+  ConversationsScreen,
+  shouldFollowChatScroll,
+  shouldSubmitChatOnEnter,
+} from './Conversations';
 
 describe('ConversationsScreen', () => {
+  it('mantém a rolagem no fim apenas quando o usuário já está perto do fim', () => {
+    expect(shouldFollowChatScroll(1000, 850, 100)).toBe(true);
+    expect(shouldFollowChatScroll(1000, 500, 100)).toBe(false);
+  });
+
+  it('preserva Enter para enviar e Shift+Enter para inserir quebra de linha', () => {
+    expect(shouldSubmitChatOnEnter('Enter', false)).toBe(true);
+    expect(shouldSubmitChatOnEnter('Enter', true)).toBe(false);
+    expect(shouldSubmitChatOnEnter('Escape', false)).toBe(false);
+  });
+
   it('monta a conversa e identifica mensagens com o nome salvo no perfil', () => {
     const markup = renderToStaticMarkup(
       <ConversationsScreen
@@ -56,6 +71,11 @@ describe('ConversationsScreen', () => {
       />,
     );
     expect(markup).toContain('Nova conversa');
+    expect(markup).toContain('chat-header-main');
+    expect(markup).toContain('class="messages-area"');
+    expect(markup).toContain('class="composer"');
+    expect(markup).toContain('class="chat-composer-actions"');
+    expect(markup).toContain('Gravação de áudio desativada em Configurações.');
     expect(markup).toContain('Lista de conversas');
     expect(markup).toContain('Recolher lista de conversas');
     expect(markup).toContain('Redimensionar lista de conversas');
@@ -63,6 +83,8 @@ describe('ConversationsScreen', () => {
     expect(markup).toContain('message-role">Oli</span>');
     expect(markup).toContain('>Ouvir</button>');
     expect(markup).toContain('Detalhes técnicos');
+    expect(markup).toContain('class="chat-error-message"');
+    expect(markup).toContain('<pre>Verificação local da pasta pessoal falhou.</pre>');
     expect(markup).toContain('Resolver pasta');
   });
 

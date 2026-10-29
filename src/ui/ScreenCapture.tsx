@@ -172,6 +172,13 @@ export function ScreenCapture({
         type="button"
         variant="secondary"
         disabled={disabled || !isTauri()}
+        title={
+          !isTauri()
+            ? 'Captura de tela disponível apenas no aplicativo desktop.'
+            : disabled
+              ? 'Aguarde a resposta atual terminar para capturar a tela.'
+              : undefined
+        }
         onClick={() => {
           setNotice('');
           setPreview(null);
