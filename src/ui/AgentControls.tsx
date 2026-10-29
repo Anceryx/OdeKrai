@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { displayPath } from '../core/display-path';
+import { RiskBadge } from './RiskBadge';
 
 export type AgentActionCardData = {
   id: string;
@@ -89,7 +90,7 @@ export function AgentActionCard({
     <article className="agent-action-card" aria-label={`Ação: ${action.title}`} aria-live="polite">
       <header>
         <strong>{action.title}</strong>
-        <span className="agent-risk-chip">Risco: {action.risk}</span>
+        <RiskBadge risk={action.risk} className="agent-risk-chip" />
       </header>
       <p>{action.summary}</p>
       {action.resultSummary && <p className="agent-action-result">{action.resultSummary}</p>}

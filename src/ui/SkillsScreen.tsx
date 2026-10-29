@@ -15,18 +15,13 @@ import {
 import { DiscordWebhooksSettings } from './DiscordWebhooksSettings';
 import { Icon } from './Icon';
 import { Button, PageHeader, SelectInput, Toggle } from './DesignSystem';
+import { RiskBadge, type RiskLevel } from './RiskBadge';
 
-type Risk =
-  | 'leitura'
-  | 'escrita_reversivel'
-  | 'comunicacao_externa'
-  | 'destrutivo_financeiro'
-  | 'execucao_de_codigo';
 type Skill = {
   id: string;
   name: string;
   description: string;
-  risk: Risk;
+  risk: RiskLevel;
   resultTrust: 'local' | 'untrusted';
   enabled: boolean;
   morePermissive: boolean;
@@ -53,14 +48,6 @@ type GoogleOAuthStatus = {
   clientId: string | null;
   scopes: string[];
   reauthorize: boolean;
-};
-
-const riskLabels: Record<Risk, string> = {
-  leitura: 'Leitura',
-  escrita_reversivel: 'Escrita reversível',
-  comunicacao_externa: 'Comunicação externa',
-  destrutivo_financeiro: 'Destrutivo ou financeiro',
-  execucao_de_codigo: 'Execução de código (alto)',
 };
 
 export function SkillsScreen() {
@@ -398,7 +385,7 @@ export function SkillsScreen() {
                   </span>
                 </div>
                 <p>{skill.description}</p>
-                <small>Risco: {riskLabels[skill.risk]}</small>
+                <RiskBadge risk={skill.risk} />
               </div>
               <div className="skill-switch">
                 <label htmlFor={`skill-${skill.id}`}>Ativar capacidade</label>

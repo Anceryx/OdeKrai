@@ -4059,6 +4059,11 @@ html.island-window-html {
   background: var(--color-success-surface);
   color: var(--color-success);
 }
+.ui-badge--info {
+  border-color: var(--color-info);
+  background: var(--color-info-surface);
+  color: var(--color-info);
+}
 .ui-badge--warning {
   border-color: var(--color-warning);
   background: var(--color-warning-surface);

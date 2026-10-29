@@ -26,6 +26,12 @@ Usar o laranja da marca para ações principais, seleção, progresso e detalhes
 
 O alerta usa amarelo `--color-warning` e sua superfície escura; não usar o laranja de marca para comunicar aviso. Sucesso, perigo e informação também devem usar o par de superfície semântica correspondente.
 
+## Badges
+
+`RiskBadge` é o componente reutilizável único para rótulos de risco. Aceita identificadores Rust (`leitura`, `escrita_reversivel`, `comunicacao_externa`, `destrutivo_financeiro` e `execucao_de_codigo`) e os rótulos em português já persistidos nos cartões do agente. Cada categoria combina ícone Phosphor, nome acessível, rótulo em português e par de cor/superfície próprio. A execução de código permanece separada por ser uma categoria de alto risco já existente no OdeKrai. Valores desconhecidos aparecem como “Risco não identificado”, sem receber uma categoria permissiva.
+
+Para estados sem risco, usar `ui-badge--success`, `ui-badge--warning`, `ui-badge--danger` ou `ui-badge--info` junto de ícone e texto quando necessário. A cor nunca deve ser o único indicador; manter rótulo legível e ícone acessível no contexto.
+
 ## Modo de desempenho
 
 Definir `data-performance="on"` no elemento `<html>` ativa o modo de baixo custo visual: remove sombras e filtros, imagens de fundo em gradiente, animações de gradiente e translucidez em superfícies marcadas com `data-translucent`. O modo é opt-in e não altera preferências salvas nem a aparência padrão. Remover o atributo restaura o estilo usual.

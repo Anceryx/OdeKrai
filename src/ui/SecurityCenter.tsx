@@ -5,14 +5,9 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { loadSettings } from '../core/settings';
 import { normalizeSoundPreferences, playSound, SoundTriggerGate } from '../core/sounds';
 import { Button, PageHeader, SelectableCard } from './DesignSystem';
+import { RiskBadge, type RiskLevel } from './RiskBadge';
 
 type Mode = 'sempre_perguntar' | 'aprovar_por_mim' | 'controle_total';
-type Risk =
-  | 'leitura'
-  | 'escrita_reversivel'
-  | 'comunicacao_externa'
-  | 'destrutivo_financeiro'
-  | 'execucao_de_codigo';
 type ToolOverride = { tool: string; morePermissive: boolean };
 type PermissionSettings = {
   mode: Mode;
@@ -26,7 +21,7 @@ type AuditEntry = {
   timestamp: number;
   id: string;
   tool: string;
-  risk: Risk;
+  risk: RiskLevel;
   mode: Mode;
   origin: string;
   decision: string;
@@ -42,7 +37,7 @@ type AuditEntry = {
 type Pending = {
   id: string;
   tool: string;
-  risk: Risk;
+  risk: RiskLevel;
   origin: string;
   summary: string;
   preview: string;
@@ -71,7 +66,7 @@ const modes: { id: Mode; title: string; description: string }[] = [
       'Executa ações permitidas sem perguntar. Pagamentos, segredos e caminhos bloqueados continuam bloqueados ou exigem aprovação.',
   },
 ];
-const risks: { id: Risk; title: string }[] = [
+const risks: { id: RiskLevel; title: string }[] = [
   { id: 'leitura', title: 'Leitura de arquivos' },
   { id: 'escrita_reversivel', title: 'Escrita reversível' },
   { id: 'comunicacao_externa', title: 'Comunicação externa' },
@@ -90,11 +85,7 @@ function toolLabel(tool: string): string {
   return tools.find(([id]) => id === tool)?.[1] ?? 'Ação do OdeKrai';
 }
 
-function riskLabel(risk: Risk): string {
-  return risks.find(({ id }) => id === risk)?.title ?? 'Risco não identificado';
-}
-
-function decision(mode: Mode, risk: Risk): string {
+function decision(mode: Mode, risk: RiskLevel): string {
   if (risk === 'leitura') return 'Permitir em pastas permitidas';
   if (risk === 'execucao_de_codigo') return 'Sempre pedir aprovação';
   if (mode === 'sempre_perguntar') return 'Pedir aprovação';
@@ -503,8 +494,8 @@ export function SecurityCenter({ page }: { page: 'permissions' | 'activity' }) {
                 <div>
                   <strong>{toolLabel(entry.tool)}</strong>
                   <span>
-                    {new Date(entry.timestamp * 1000).toLocaleString()} · {riskLabel(entry.risk)} ·{' '}
-                    {entry.origin}
+                    {new Date(entry.timestamp * 1000).toLocaleString()} ·{' '}
+                    <RiskBadge risk={entry.risk} /> · {entry.origin}
                   </span>
                 </div>
                 <span className="audit-status">
@@ -629,7 +620,7 @@ export function ApprovalWindow() {
             </div>
             <div>
               <small>Risco</small>
-              <strong>{riskLabel(pending.risk)}</strong>
+              <RiskBadge risk={pending.risk} />
             </div>
             <div>
               <small>Origem</small>

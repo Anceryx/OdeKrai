@@ -54,7 +54,7 @@ describe('controles e cartões do agente', () => {
     expect(markup).toContain('Pasta de trabalho: D:\\OdeKrai');
     expect(markup).toContain('Aguardando aprovação na janela nativa de aprovação.');
     expect(markup).toContain('Parar agente');
-    expect(markup).toContain('Risco: escrita reversível');
+    expect(markup).toContain('aria-label="Risco: Escrita reversível"');
     expect(markup).toContain('Ver diferenças');
     expect(markup).toContain('antes');
   });
