@@ -5,6 +5,7 @@ description = "OdeKrai para Windows"
 authors = ["Anceryx"]
 license = "MIT"
 edition = "2021"
+default-run = "odekrai"
 
 [features]
 diagnostics = ["tauri/devtools"]
