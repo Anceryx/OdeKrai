@@ -23,6 +23,7 @@ describe('ConversationsScreen', () => {
         cancel={() => undefined}
         providerModel=""
         providerId="openai"
+        microphoneEnabled={false}
         providerConfigured={false}
         conversationSidebarCollapsed={false}
         conversationSidebarWidth={230}
@@ -86,6 +87,7 @@ describe('ConversationsScreen', () => {
         cancel={() => undefined}
         providerModel="gpt-test"
         providerId="openai"
+        microphoneEnabled={false}
         providerConfigured
         conversationSidebarCollapsed={false}
         conversationSidebarWidth={230}
@@ -134,6 +136,7 @@ describe('ConversationsScreen', () => {
         cancel={() => undefined}
         providerModel=""
         providerId="openai"
+        microphoneEnabled={false}
         providerConfigured={false}
         conversationSidebarCollapsed
         conversationSidebarWidth={230}

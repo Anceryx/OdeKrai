@@ -194,6 +194,25 @@ export function SettingsScreen({
           />
         </div>
       </section>
+      <section
+        className="settings-panel settings-section"
+        aria-labelledby="microphone-settings-heading"
+      >
+        <h2 id="microphone-settings-heading">Áudio</h2>
+        <div className="preference-row">
+          <div>
+            <strong>Usar microfone</strong>
+            <span>
+              Permite gravar áudio localmente no campo de mensagem. Nada é enviado nesta etapa.
+            </span>
+          </div>
+          <Toggle
+            checked={settings.microphoneEnabled}
+            label="Usar microfone"
+            onClick={() => update({ ...settings, microphoneEnabled: !settings.microphoneEnabled })}
+          />
+        </div>
+      </section>
       <section className="settings-panel settings-section" aria-labelledby="agent-settings-heading">
         <h2 id="agent-settings-heading">Agente</h2>
         <p className="settings-description">

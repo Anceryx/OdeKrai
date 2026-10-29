@@ -1,13 +1,34 @@
 use pet_position::{fit_size, WindowPosition, WindowSize};
 use std::{
     fs,
-    sync::Mutex,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
     time::{Duration, Instant},
 };
 use tauri::{
     Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 use tauri_plugin_opener::OpenerExt;
+
+#[derive(Default)]
+struct MicrophoneOptIn(AtomicBool);
+
+fn microphone_permission_allowed(window_label: &str, enabled: bool, is_microphone: bool) -> bool {
+    window_label == "main" && enabled && is_microphone
+}
+
+#[tauri::command]
+fn set_microphone_opt_in(
+    caller: tauri::WebviewWindow,
+    state: tauri::State<'_, MicrophoneOptIn>,
+    enabled: bool,
+) -> Result<(), String> {
+    require_main(&caller)?;
+    state.0.store(enabled, Ordering::SeqCst);
+    Ok(())
+}
 
 #[derive(serde::Serialize)]
 struct BuildInfo {
@@ -809,6 +830,23 @@ async fn set_pet_size(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> Result<(), tauri::Error> {
     tauri::Builder::default()
+        .manage(MicrophoneOptIn::default())
+        .on_permission_request(|webview, kind| {
+            use tauri::webview::{PermissionKind, PermissionResponse};
+            let enabled = webview
+                .app_handle()
+                .try_state::<MicrophoneOptIn>()
+                .is_some_and(|state| state.0.load(Ordering::SeqCst));
+            if microphone_permission_allowed(
+                webview.label(),
+                enabled,
+                kind == PermissionKind::Microphone,
+            ) {
+                PermissionResponse::Allow
+            } else {
+                PermissionResponse::Deny
+            }
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
@@ -857,6 +895,7 @@ pub fn run() -> Result<(), tauri::Error> {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            set_microphone_opt_in,
             show_main_window,
             open_build_commit,
             open_logs_folder,
@@ -971,4 +1010,17 @@ pub fn run() -> Result<(), tauri::Error> {
             agent_home::agent_memory_delete_all,
         ])
         .run(tauri::generate_context!())
+}
+
+#[cfg(test)]
+mod microphone_permission_tests {
+    use super::microphone_permission_allowed;
+
+    #[test]
+    fn microphone_requires_opt_in_main_window_and_audio_kind() {
+        assert!(microphone_permission_allowed("main", true, true));
+        assert!(!microphone_permission_allowed("main", false, true));
+        assert!(!microphone_permission_allowed("approval", true, true));
+        assert!(!microphone_permission_allowed("main", true, false));
+    }
 }

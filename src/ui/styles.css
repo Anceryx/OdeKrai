@@ -4874,3 +4874,38 @@ html.island-window-html {
     grid-column: auto;
   }
 }
+
+.audio-recording {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.audio-recording > span:not(.audio-level) {
+  font-size: 12px;
+}
+.audio-recording strong {
+  color: var(--danger, #b42318);
+}
+.audio-level {
+  display: inline-flex;
+  width: 80px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--border);
+}
+.audio-level i {
+  display: block;
+  width: 100%;
+  transform-origin: left;
+  background: #22a06b;
+}
+.audio-recording-error {
+  color: var(--danger, #b42318);
+  font-size: 13px;
+}

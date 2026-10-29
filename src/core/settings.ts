@@ -21,6 +21,7 @@ export type AppSettings = {
   language: 'pt-BR' | 'en';
   reduceMotion: boolean;
   useMascotAsAssistantAvatar: boolean;
+  microphoneEnabled: boolean;
   closeBehavior: 'minimize_to_tray' | 'exit';
   activeProviderId: string;
   fallbackProviderIds: string[];
@@ -78,6 +79,7 @@ export const defaultSettings: AppSettings = {
   language: 'pt-BR',
   reduceMotion: false,
   useMascotAsAssistantAvatar: false,
+  microphoneEnabled: false,
   closeBehavior: 'exit',
   activeProviderId: 'openai',
   fallbackProviderIds: [],
@@ -247,6 +249,7 @@ export function loadSettingsWithWarnings(): { settings: AppSettings; warnings: s
           typeof value.useMascotAsAssistantAvatar === 'boolean'
             ? value.useMascotAsAssistantAvatar
             : false,
+        microphoneEnabled: value.microphoneEnabled === true,
         closeBehavior: value.closeBehavior === 'minimize_to_tray' ? 'minimize_to_tray' : 'exit',
         activeProviderId,
         fallbackProviderIds,

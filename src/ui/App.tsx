@@ -176,6 +176,9 @@ function MainApp() {
   const shownProviderName = usedProvider?.name ?? activeProvider.name;
   const shownProviderId = usedProviderId ?? settings.activeProviderId;
   const shownProviderModel = shownProviderSettings?.model ?? activeProvider.model;
+  useEffect(() => {
+    if (isTauri()) void invoke('set_microphone_opt_in', { enabled: settings.microphoneEnabled });
+  }, [settings.microphoneEnabled]);
 
   useEffect(() => {
     if (!isTauri()) {
@@ -1016,6 +1019,7 @@ function MainApp() {
               cancel={cancelRequest}
               providerModel={shownProviderModel}
               providerId={shownProviderId}
+              microphoneEnabled={settings.microphoneEnabled}
               conversationSidebarCollapsed={settings.layout.conversationSidebarCollapsed}
               conversationSidebarWidth={settings.layout.conversationSidebarWidth}
               onToggleConversationSidebar={() =>
