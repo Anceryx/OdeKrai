@@ -2,6 +2,8 @@
 
 Regras fixas para qualquer agente de código (Codex, Claude Code etc.) que trabalhe neste repositório.
 Leia este arquivo inteiro antes de alterar qualquer coisa.
+As instruções permanentes complementares do proprietário estão em
+[`docs/CODEX-CLOUD-INSTRUCTIONS.md`](docs/CODEX-CLOUD-INSTRUCTIONS.md); leia-as também.
 
 ## O que é o projeto
 
