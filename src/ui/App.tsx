@@ -36,6 +36,13 @@ import {
   getTodayBounds,
   type HomeEvent,
 } from '../core/home';
+import {
+  islandReviewDestination,
+  islandSuggestions,
+  summarizeIslandResponse,
+  type IslandQuickRequest,
+  type IslandReviewState,
+} from '../core/island-quick';
 import type { CatalogSkill } from '../core/skills-catalog';
 const Overview = lazy(() =>
   import('./screens/Overview').then((module) => ({ default: withScreenBoundary(module.Overview) })),
@@ -187,6 +194,11 @@ function MainApp() {
     requestId: number;
   } | null>(null);
   const skillFamilyRequestId = useRef(0);
+  const quickRequestHandler = useRef<(request: IslandQuickRequest) => void>(() => undefined);
+  const openConversationHandler = useRef<(id: string) => void>(() => undefined);
+  const reviewAlertHandler = useRef<(state: IslandReviewState) => void>(() => undefined);
+  const quickSuggestionsRef = useRef<ReturnType<typeof islandSuggestions>>([]);
+  const activeConversationRef = useRef<string | null>(null);
   const [requestedSettingsEntry, setRequestedSettingsEntry] = useState<{
     section: import('../core/navigation').SettingsSection;
     anchor: string;
@@ -296,6 +308,11 @@ function MainApp() {
       conversations,
     ],
   );
+  quickSuggestionsRef.current = islandSuggestions(homeSuggestions);
+  activeConversationRef.current = conversationId;
+  useEffect(() => {
+    if (isTauri()) void emit('pet-quick-suggestions', quickSuggestionsRef.current);
+  }, [homeSuggestions]);
   const homeChecklist = useMemo(
     () =>
       createHomeChecklist({
@@ -585,6 +602,37 @@ function MainApp() {
   useEffect(() => {
     if (!isTauri()) return;
     let disposed = false;
+    const stops: Array<() => void> = [];
+    void Promise.all([
+      listen('pet-window-ready', () => {
+        void emit('pet-quick-suggestions', quickSuggestionsRef.current);
+      }),
+      listen<IslandQuickRequest>('island-quick-command', ({ payload }) => {
+        quickRequestHandler.current(payload);
+      }),
+      listen<string>('pet-open-conversation', ({ payload }) => {
+        void invoke('show_main_window')
+          .then(() => openConversationHandler.current(payload))
+          .catch(() => setToast('Não foi possível abrir essa conversa no OdeKrai.'));
+      }),
+      listen<IslandReviewState>('pet-review-alert', ({ payload }) => {
+        reviewAlertHandler.current(payload);
+      }),
+    ])
+      .then((off) => {
+        if (disposed) off.forEach((stop) => stop());
+        else stops.push(...off);
+      })
+      .catch(() => setToast('Não foi possível conectar os comandos rápidos da ilha.'));
+    return () => {
+      disposed = true;
+      stops.forEach((stop) => stop());
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
     let unlisten: (() => void) | undefined;
     const refresh = () => {
       void invoke<number>('get_pending_approval_count')
@@ -847,7 +895,12 @@ function MainApp() {
     rawText: string,
     reuseLastUserMessage = false,
     imageBase64?: string,
-    options: { newConversation?: boolean; agentEnabled?: boolean } = {},
+    options: {
+      newConversation?: boolean;
+      agentEnabled?: boolean;
+      conversationId?: string;
+      onResponse?: (text: string) => void;
+    } = {},
   ): Promise<boolean> {
     const text = rawText.trim();
     if (!text || busy) return false;
@@ -882,7 +935,8 @@ function MainApp() {
       setLastFailedPrompt('');
       return false;
     }
-    const activeId = isNewConversation ? crypto.randomUUID() : conversationId!;
+    const activeId =
+      options.conversationId ?? (isNewConversation ? crypto.randomUUID() : conversationId!);
     const sentAt = Math.floor(Date.now() / 1000);
     const next = reuseLastUserMessage
       ? messages
@@ -1082,6 +1136,7 @@ function MainApp() {
           dailyTokenLimit: settings.dailyTokenLimit,
           onEvent,
         });
+        options.onResponse?.(answer);
         setMessages([
           ...next,
           { role: 'assistant', content: answer, created_at: Math.floor(Date.now() / 1000) },
@@ -1141,6 +1196,7 @@ function MainApp() {
           onChunk,
         },
       );
+      options.onResponse?.(answer.content);
       await invoke('append_conversation_message', {
         conversationId: activeId,
         role: 'assistant',
@@ -1231,6 +1287,32 @@ function MainApp() {
     }
   }
 
+  quickRequestHandler.current = (request) => {
+    let summary = '';
+    void (async () => {
+      const success = await sendMessage(request.text, false, undefined, {
+        newConversation: true,
+        agentEnabled: agentAvailability.available,
+        conversationId: request.conversationId,
+        onResponse: (response) => {
+          summary = summarizeIslandResponse(response);
+        },
+      });
+      if (!summary) {
+        summary = success
+          ? 'A conversa foi concluída. Abra no OdeKrai para ver a resposta completa.'
+          : 'Não foi possível concluir. Revise a conversa no OdeKrai.';
+      }
+      void emit('pet-quick-result', {
+        requestId: request.requestId,
+        conversationId: request.conversationId,
+        title: request.text.slice(0, 80),
+        summary,
+        success,
+      });
+    })();
+  };
+
   function submitMessage(event: FormEvent): Promise<boolean> {
     event.preventDefault();
     return sendMessage(draft);
@@ -1260,6 +1342,27 @@ function MainApp() {
       })
       .catch(() => setError('Não foi possível abrir a conversa.'));
   }
+
+  openConversationHandler.current = openConversation;
+  reviewAlertHandler.current = (state) => {
+    void (async () => {
+      try {
+        await invoke('show_main_window');
+        const destination = islandReviewDestination(state, Boolean(activeConversationRef.current));
+        if (destination === 'approval-window') {
+          await invoke('show_pending_approval_window');
+        } else if (destination === 'calendar') {
+          navigate('calendar');
+        } else if (destination === 'conversation' && activeConversationRef.current) {
+          openConversationHandler.current(activeConversationRef.current);
+        } else {
+          navigate('chat');
+        }
+      } catch {
+        setToast('Não foi possível abrir o local para revisar este alerta.');
+      }
+    })();
+  };
 
   function cancelRequest() {
     if (agentRunConversation.current) {

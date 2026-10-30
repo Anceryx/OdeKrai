@@ -1,5 +1,12 @@
 # Estado da implementação
 
+## L8 — comando rápido na ilha
+
+- O modo expandido da janela `pet` inclui campo de uma linha e até três sugestões reais geradas pela mesma `createHomeSuggestions` usada no Início. Enviar encaminha o texto ao `sendMessage` existente no app principal, que persiste e executa a conversa no motor atual; a ilha mostra um resumo e oferece “Abrir no OdeKrai”.
+- A janela continua criada uma única vez sob demanda. O foco temporário é solicitado por `set_pet_keyboard_focus`, comando Rust async restrito à janela `pet`, e volta a `focusable(false)` ao perder foco, enviar ou pressionar Escape. Os alertas da fila aparecem com “Revisar”; aprovações abrem a janela nativa e a ilha não contém decisões de aprovação.
+- O pacote local `@tauri-apps/api` 2.8 documenta `setFocusable` e `setFocus`; o caminho nativo usado aqui é o equivalente Rust. A consulta à documentação da Microsoft sobre ativação/foco da janela foi bloqueada pelo ambiente (HTTP 403), portanto a semântica do Windows ainda requer confirmação e teste. Atalho global para o comando rápido não foi registrado: o handler atual do plugin de atalhos encaminha todo atalho registrado ao kill switch, e separar os destinos com segurança requer uma mudança própria.
+- Testes unitários cobrem a sequência de foco, envio duplicado, criação de conversa, limite de sugestões e roteamento de alertas. Validação visual/foco em Windows, monitores e DPI permanece pendente.
+
 ## Diálogo modal reutilizável
 
 - `src/ui/Modal.tsx` fornece um modal acessível seguindo o padrão [Dialog (Modal) da WAI-ARIA Authoring Practices](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/): nome por `aria-labelledby`, fundo inerte, foco inicial, ciclo de foco por Tab, Escape, retorno de foco e rolagem isolada. O conteúdo de fundo continua montado. A aparência respeita movimento reduzido e `data-performance="on"`; o componente ainda não substitui diálogos existentes.

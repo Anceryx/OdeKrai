@@ -84,6 +84,12 @@ detalhes sanitizados de stack ficam limitados ao painel local da interface.
 - `MessageComposer.test.tsx`, `Conversations.test.tsx` e `Overview.test.tsx` cobrem o campo compartilhado, Enter/Shift+Enter, estado de envio, envio inicial, retomar conversas e ausência de conteúdo fictício.
 - Validação visual no Windows pendente em 1000 × 600: conferir posição do mascote, sugestões, checklist, faixa de aprovação e acesso ao histórico sem cortes ou rolagem horizontal.
 
+### L8 — comando rápido da ilha
+
+- `island-quick.test.ts` cobre a solicitação de foco e sua liberação, envio sem duplicação, criação de conversa com texto revisável, limite de três sugestões reais, resumo e encaminhamento de cada tipo de alerta sem ação de aprovação na ilha.
+- Build, testes de frontend, codificação e ACL foram executados nesta sessão. A suíte completa tem três testes de publicação bloqueados pelo `spawnSync git EPERM` do sandbox; Rust não pôde ser compilado porque `cargo`/`rustfmt` não estão instalados no ambiente.
+- Validação visual e de foco no Windows pendente, incluindo monitores múltiplos e DPI misto. A confirmação documental Microsoft do comportamento de foco também está pendente por bloqueio HTTP 403 neste ambiente.
+
 ### L2 — Cartão de ação do agente
 
 - `AgentControls.test.tsx` cobre os estados apresentados, prévia como texto, timeline, parada, revisão pela janela nativa e controles de artefato sem botões de decisão.

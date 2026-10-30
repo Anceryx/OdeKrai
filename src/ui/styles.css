@@ -3441,6 +3441,111 @@ html.island-window-html {
 .island-expanded button svg {
   flex: none;
 }
+.island-quick-command,
+.island-quick-suggestions,
+.island-quick-result,
+.island-quick-error,
+.island-alerts {
+  grid-column: 1 / -1;
+}
+.island-quick-command {
+  display: flex;
+  min-width: 0;
+  gap: 6px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.island-quick-command input {
+  flex: 1;
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid #ffffff30;
+  border-radius: 7px;
+  background: #090a0d;
+  color: #f5f5f6;
+  font: inherit;
+  font-size: 12px;
+}
+.island-quick-command input:focus-visible,
+.island-quick-command button:focus-visible,
+.island-quick-suggestions button:focus-visible,
+.island-quick-result button:focus-visible,
+.island-alerts button:focus-visible {
+  outline: 2px solid #f97316;
+  outline-offset: 2px;
+}
+.island-quick-command button {
+  min-width: 58px;
+  white-space: nowrap;
+}
+.island-quick-suggestions {
+  display: flex;
+  min-width: 0;
+  gap: 5px;
+}
+.island-quick-suggestions button {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.island-quick-result {
+  display: grid;
+  gap: 4px;
+  max-height: 76px;
+  overflow: auto;
+  padding: 6px 8px;
+  border: 1px solid #ffffff18;
+  border-radius: 7px;
+  background: #15171c;
+  font-size: 11px;
+}
+.island-quick-result span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.island-quick-result button {
+  justify-self: start;
+  min-height: 25px;
+  color: #fdba74;
+}
+.island-quick-error {
+  margin: 0;
+  color: #fecaca;
+  font-size: 11px;
+}
+.island-alerts {
+  display: grid;
+  min-width: 0;
+  max-height: 68px;
+  gap: 3px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0 2px 0 0;
+  list-style: none;
+}
+.island-alerts li {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.island-alerts li > span {
+  overflow: hidden;
+  color: #e5e7eb;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.island-alerts button {
+  min-height: 25px !important;
+  color: #fdba74;
+  font-size: 10px !important;
+}
 .floating-island.state-expanded .island-shell {
   align-items: flex-start;
   padding-top: 8px;

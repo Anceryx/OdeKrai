@@ -797,6 +797,30 @@ async fn set_pet_visible(
 }
 
 #[tauri::command]
+async fn set_pet_keyboard_focus(
+    caller: tauri::WebviewWindow,
+    focused: bool,
+) -> Result<(), String> {
+    require_caller(&caller, &["pet"])?;
+    if focused {
+        caller
+            .set_focusable(true)
+            .map_err(|_| "Não foi possível atualizar o foco do pet.".to_string())?;
+        caller
+            .set_focus()
+            .map_err(|_| {
+                let _ = caller.set_focusable(false);
+                "Não foi possível focar o campo rápido do pet.".to_string()
+            })?;
+    } else {
+        caller
+            .set_focusable(false)
+            .map_err(|_| "Não foi possível atualizar o foco do pet.".to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 async fn set_pet_position(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
@@ -1002,6 +1026,7 @@ pub fn run() -> Result<(), tauri::Error> {
             diagnostics::complete_startup,
             diagnostics::record_diagnostic_event,
             set_pet_visible,
+            set_pet_keyboard_focus,
             set_pet_position,
             set_pet_topmost,
             set_pet_size,
