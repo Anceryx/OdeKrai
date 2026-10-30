@@ -234,3 +234,7 @@ Os testes de restauração de sistema devem usar `SystemAdapter` simulado e SQLi
 ## Planos informativos (L4)
 
 `skills::tests` verifica os limites e que texto instrucional no plano não muda seu risco de leitura; `workspace::files_tests` verifica que `plan.propose` não modifica arquivos. `agent_runtime::plan_state_tests` cobre avanço, falha e chamada fora das etapas listadas; `AgentControls.test.tsx` verifica renderização numerada e escaping do texto como dado. Os testes Rust usam somente dados em memória/diretórios temporários e precisam ser executados em ambiente com Cargo. A conferência visual do cartão no Windows permanece pendente.
+
+## Painel lateral de atividade (L5)
+
+`ActivitySidePanel.test.tsx` cobre as cinco seções com dados simulados, estados vazios, resumo de auditoria sem parâmetros, exclusão de executáveis, ausência de controles de aprovação, gatilho/estado fechado e lógica de foco/teclado. A consulta de auditoria é compartilhada com a página Atividade; a consulta só é iniciada com o painel aberto ou a página completa ativa. Não há polling do painel fechado. A validação de dimensões, sobreposição, foco real do WebView2 e operação dos comandos do Windows exige validação visual em Windows.

@@ -5,12 +5,20 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ComponentType,
   type FormEvent,
 } from 'react';
 import { resolveConversationSelection } from '../core/chat';
 import type { ChatMessage } from '../core/provider-messages';
 import type { AgentActionCardData } from './AgentControls';
+import {
+  ActivityPanelTrigger,
+  ActivitySidePanel,
+  shouldLoadPanelAudit,
+  toggleActivityPanel,
+  type ActivityAuditSummary,
+} from './ActivitySidePanel';
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import {
@@ -83,11 +91,11 @@ const ActivityScreen = lazy(() =>
   })),
 );
 import { ApprovalWindow, isApprovalWindow } from './SecurityCenter';
+import type { AuditEntry } from './SecurityCenter';
 import { SkillsScreen } from './SkillsScreen';
 import { PETS } from '../core/pets';
 import {
   navigationItems,
-  PendingApprovalIndicator,
   SidebarNavigation,
   SidebarProfileMenu,
   shouldShowStopAll,
@@ -170,9 +178,20 @@ function MainApp() {
     return () => window.clearTimeout(timer);
   }, [undoToast]);
   const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
+  const [activityPanelOpen, setActivityPanelOpen] = useState(false);
+  const activityPanelTriggerRef = useRef<HTMLButtonElement>(null);
+  const [activityAuditRecords, setActivityAuditRecords] = useState<AuditEntry[]>([]);
+  const [activityAuditVerified, setActivityAuditVerified] = useState<boolean | null>(null);
+  const [activityAuditLoading, setActivityAuditLoading] = useState(false);
+  const [activityAuditUnavailable, setActivityAuditUnavailable] = useState(false);
+  const activityAuditLoadedAt = useRef(0);
   const [homeSkills, setHomeSkills] = useState<CatalogSkill[] | null>(null);
   const [todayEvents, setTodayEvents] = useState<HomeEvent[]>([]);
+  const [scheduledEvents, setScheduledEvents] = useState<HomeEvent[]>([]);
   const [reminderCount, setReminderCount] = useState(0);
+  const [scheduleUnavailable, setScheduleUnavailable] = useState(false);
+  const [reminderUnavailable, setReminderUnavailable] = useState(false);
+  const homeContextLoadedAt = useRef(0);
   const agentRunConversation = useRef<string | null>(null);
   const thinkingSoundGate = useRef(new SoundTriggerGate());
   const lastThinkingSoundKey = useRef<string | null>(null);
@@ -336,16 +355,22 @@ function MainApp() {
   ]);
 
   useEffect(() => {
-    if (section !== 'overview') return;
+    if (section !== 'overview' && !activityPanelOpen) return;
     let disposed = false;
     let stopSkillsUpdated: (() => void) | undefined;
 
-    const refreshHomeContext = async () => {
+    const refreshHomeContext = async (force = false) => {
+      if (!force && Date.now() - homeContextLoadedAt.current < 30_000 && homeSkills !== null)
+        return;
       setHomeSkills(null);
       setTodayEvents([]);
+      setScheduledEvents([]);
       setReminderCount(0);
+      setScheduleUnavailable(true);
+      setReminderUnavailable(true);
       if (!isTauri()) {
         setHomeSkills([]);
+        homeContextLoadedAt.current = Date.now();
         return;
       }
       try {
@@ -359,7 +384,15 @@ function MainApp() {
         const canReadReminders = active.some(
           (skill) => skill.id === 'reminder.list' && skill.family === 'agenda_lembretes',
         );
-        const bounds = getTodayBounds(new Date());
+        const now = new Date();
+        const todayBounds = getTodayBounds(now);
+        const next24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        const bounds = {
+          from: todayBounds.from,
+          to: new Date(
+            Math.max(new Date(todayBounds.to).getTime(), next24Hours.getTime()),
+          ).toISOString(),
+        };
         const [events, reminders] = await Promise.allSettled([
           canReadCalendar
             ? invoke<HomeEvent[]>('calendar_list_events', bounds)
@@ -367,27 +400,106 @@ function MainApp() {
           canReadReminders ? invoke<number>('get_home_reminder_count') : Promise.resolve(0),
         ]);
         if (disposed) return;
-        setTodayEvents(events.status === 'fulfilled' ? events.value : []);
+        const availableEvents = events.status === 'fulfilled' ? events.value : [];
+        const todayStart = new Date(todayBounds.from).getTime();
+        const todayEnd = new Date(todayBounds.to).getTime();
+        setTodayEvents(
+          availableEvents.filter((event) => {
+            const startsAt = new Date(event.start).getTime();
+            return startsAt >= todayStart && startsAt < todayEnd;
+          }),
+        );
+        setScheduledEvents(
+          availableEvents.filter((event) => {
+            const startsAt = new Date(event.start).getTime();
+            return startsAt >= now.getTime() && startsAt <= next24Hours.getTime();
+          }),
+        );
         setReminderCount(reminders.status === 'fulfilled' ? reminders.value : 0);
+        setScheduleUnavailable(events.status === 'rejected' || !canReadCalendar);
+        setReminderUnavailable(reminders.status === 'rejected' || !canReadReminders);
+        homeContextLoadedAt.current = Date.now();
       } catch {
-        if (!disposed) setHomeSkills([]);
+        if (!disposed) {
+          setHomeSkills([]);
+          homeContextLoadedAt.current = Date.now();
+        }
       }
     };
 
     void refreshHomeContext();
-    void listen('skills-updated', () => void refreshHomeContext())
+    void listen('skills-updated', () => void refreshHomeContext(true))
       .then((stop) => {
         if (disposed) stop();
         else stopSkillsUpdated = stop;
       })
       .catch(() => setToast('Não foi possível atualizar o contexto do Início.'));
-    window.addEventListener('focus', refreshHomeContext);
+    const refreshOnFocus = () => void refreshHomeContext(true);
+    window.addEventListener('focus', refreshOnFocus);
     return () => {
       disposed = true;
       stopSkillsUpdated?.();
-      window.removeEventListener('focus', refreshHomeContext);
+      window.removeEventListener('focus', refreshOnFocus);
     };
-  }, [section]);
+  }, [section, activityPanelOpen]);
+
+  useEffect(() => {
+    if (
+      !shouldLoadPanelAudit(
+        activityPanelOpen ||
+          section === 'activity' ||
+          (settingsOpen && route.settingsSection === 'atividade'),
+      )
+    )
+      return;
+    if (Date.now() - activityAuditLoadedAt.current < 10_000) return;
+    let disposed = false;
+    setActivityAuditLoading(true);
+    setActivityAuditUnavailable(false);
+    void Promise.all([invoke<AuditEntry[]>('list_audit'), invoke<boolean>('verify_audit')])
+      .then(([entries, verified]) => {
+        if (!disposed) {
+          setActivityAuditRecords(entries);
+          setActivityAuditVerified(verified);
+          activityAuditLoadedAt.current = Date.now();
+        }
+      })
+      .catch(() => {
+        if (!disposed) {
+          setActivityAuditRecords([]);
+          setActivityAuditVerified(null);
+          setActivityAuditUnavailable(true);
+          activityAuditLoadedAt.current = Date.now();
+        }
+      })
+      .finally(() => {
+        if (!disposed) setActivityAuditLoading(false);
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [activityPanelOpen, section, settingsOpen, route.settingsSection]);
+
+  const sharedAudit = useMemo(
+    () => ({
+      entries: activityAuditRecords,
+      verified: activityAuditVerified,
+      loading: activityAuditLoading,
+      unavailable: activityAuditUnavailable,
+    }),
+    [activityAuditRecords, activityAuditVerified, activityAuditLoading, activityAuditUnavailable],
+  );
+  const activityAudit = useMemo<ActivityAuditSummary[]>(
+    () =>
+      activityAuditRecords.slice(0, 20).map(({ id, timestamp, tool, status, decision }) => ({
+        id,
+        timestamp,
+        tool,
+        status,
+        decision,
+      })),
+    [activityAuditRecords],
+  );
 
   useEffect(() => {
     const onShortcut = (event: KeyboardEvent) => {
@@ -1121,9 +1233,21 @@ function MainApp() {
     }
   }
 
+  const currentActivityAction =
+    [...agentActionCards]
+      .reverse()
+      .find(
+        (action) => action.status === 'Executando' || action.status === 'Aguardando aprovação',
+      ) ?? null;
+
   return (
     <div
-      className={`app-shell ${settings.reduceMotion ? 'reduce-motion' : ''} ${chatMode ? 'chat-mode' : ''}`}
+      className={`app-shell ${settings.reduceMotion ? 'reduce-motion' : ''} ${chatMode ? 'chat-mode' : ''} ${activityPanelOpen ? 'has-activity-panel' : ''}`}
+      style={
+        {
+          '--activity-sidebar-width': `${settings.layout.sidebarCollapsed ? 72 : settings.layout.sidebarWidth}px`,
+        } as CSSProperties
+      }
     >
       <aside
         className={`sidebar ${settings.layout.sidebarCollapsed ? 'sidebar-collapsed' : ''}`}
@@ -1191,9 +1315,11 @@ function MainApp() {
             </strong>
           </div>
           <div className="top-actions">
-            <PendingApprovalIndicator
+            <ActivityPanelTrigger
               count={pendingApprovalCount}
-              onOpen={() => navigate('activity')}
+              expanded={activityPanelOpen}
+              buttonRef={activityPanelTriggerRef}
+              onClick={() => setActivityPanelOpen(toggleActivityPanel)}
             />
             {shouldShowStopAll(busy, agentRunning) && (
               <button type="button" className="stop-all-button" onClick={() => void stopAll()}>
@@ -1491,7 +1617,7 @@ function MainApp() {
                 />
               )}
               {section === 'permissions' && <PermissionsScreen />}
-              {section === 'activity' && <ActivityScreen />}
+              {section === 'activity' && <ActivityScreen sharedAudit={sharedAudit} />}
               {section === 'agent' && (
                 <IdentityScreen
                   initialName={profile.displayName}
@@ -1505,6 +1631,46 @@ function MainApp() {
           )}
         </Suspense>
       </main>
+      <ActivitySidePanel
+        open={activityPanelOpen}
+        triggerRef={activityPanelTriggerRef}
+        pendingApprovalCount={pendingApprovalCount}
+        running={agentRunning}
+        awaitingApproval={agentAwaitingApproval}
+        currentAction={currentActivityAction}
+        events={scheduledEvents}
+        reminderCount={reminderCount}
+        scheduleUnavailable={scheduleUnavailable}
+        reminderUnavailable={reminderUnavailable}
+        actions={agentActionCards}
+        artifactHistoryAvailable={Boolean(conversationId)}
+        audit={activityAudit}
+        scheduleLoading={homeSkills === null}
+        auditLoading={activityAuditLoading}
+        auditUnavailable={activityAuditUnavailable}
+        onClose={() => setActivityPanelOpen(false)}
+        onStop={cancelRequest}
+        onReview={() =>
+          void invoke('show_pending_approval_window').catch(() =>
+            setToast('Não foi possível abrir a janela de aprovação.'),
+          )
+        }
+        onOpenArtifact={(path) =>
+          void invoke('open_agent_artifact', { path }).catch(() =>
+            setToast('Não foi possível abrir o arquivo.'),
+          )
+        }
+        onRevealArtifact={(path) =>
+          void invoke('reveal_agent_artifact', { path }).catch(() =>
+            setToast('Não foi possível mostrar o arquivo.'),
+          )
+        }
+        onViewAll={() => {
+          setActivityPanelOpen(false);
+          setChatMode(false);
+          navigate('activity');
+        }}
+      />
       {toast && (
         <div className="toast" role="status">
           {toast}
@@ -1572,6 +1738,7 @@ function MainApp() {
         onOpenPage={(page) => navigate(page)}
         onOpenActivityFullPage={() => openLegacyScreen('activity')}
         onAgentStatus={() => reportDiagnostic('agent_home_status', '')}
+        sharedAudit={sharedAudit}
       />
     </div>
   );

@@ -33,6 +33,7 @@ const ComputerScreen = lazy(() =>
 const SecurityCenter = lazy(() =>
   import('./SecurityCenter').then((module) => ({ default: module.SecurityCenter })),
 );
+import type { AuditEntry } from './SecurityCenter';
 
 export function SettingsModal({
   open,
@@ -52,6 +53,7 @@ export function SettingsModal({
   onOpenPage,
   onOpenActivityFullPage,
   onAgentStatus,
+  sharedAudit,
 }: {
   open: boolean;
   section: SettingsSection;
@@ -70,6 +72,12 @@ export function SettingsModal({
   onOpenPage: (page: Extract<Section, 'skills' | 'providers'>) => void;
   onOpenActivityFullPage: () => void;
   onAgentStatus: () => void;
+  sharedAudit?: {
+    entries: AuditEntry[];
+    verified: boolean | null;
+    loading: boolean;
+    unavailable?: boolean;
+  };
 }) {
   const [query, setQuery] = useState('');
   const [pendingAnchor, setPendingAnchor] = useState<string | null>(null);
@@ -151,7 +159,14 @@ export function SettingsModal({
           />
         );
       case 'atividade':
-        return <SecurityCenter page="activity" embedded onOpenFullPage={onOpenActivityFullPage} />;
+        return (
+          <SecurityCenter
+            page="activity"
+            embedded
+            onOpenFullPage={onOpenActivityFullPage}
+            sharedAudit={sharedAudit}
+          />
+        );
       case 'habilidades':
         return <SkillsSettingsSummary onOpenPage={() => onOpenPage('skills')} />;
       case 'conectores':

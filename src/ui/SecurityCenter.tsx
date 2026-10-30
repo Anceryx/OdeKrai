@@ -20,7 +20,7 @@ type PermissionSettings = {
   approvalTtlSeconds: number;
   overrides: ToolOverride[];
 };
-type AuditEntry = {
+export type AuditEntry = {
   timestamp: number;
   id: string;
   tool: string;
@@ -106,6 +106,7 @@ export function SecurityCenter({
   onDeleteAllHistory,
   appSettings,
   updateAppSettings,
+  sharedAudit,
 }: {
   page: 'permissions' | 'activity';
   embedded?: boolean;
@@ -113,6 +114,12 @@ export function SecurityCenter({
   onDeleteAllHistory?: () => Promise<boolean>;
   appSettings?: AppSettings;
   updateAppSettings?: (settings: AppSettings) => void;
+  sharedAudit?: {
+    entries: AuditEntry[];
+    verified: boolean | null;
+    loading: boolean;
+    unavailable?: boolean;
+  };
 }) {
   const [settings, setSettings] = useState<PermissionSettings | null>(null);
   const [entries, setEntries] = useState<AuditEntry[]>([]);
@@ -126,7 +133,7 @@ export function SecurityCenter({
       const current = await invoke<PermissionSettings>('get_permission_settings');
       setSettings(current);
       setShortcut(current.shortcut);
-      if (page === 'activity') {
+      if (page === 'activity' && !sharedAudit) {
         const [audit, valid] = await Promise.all([
           invoke<AuditEntry[]>('list_audit'),
           invoke<boolean>('verify_audit'),
@@ -208,14 +215,16 @@ export function SecurityCenter({
     }
   }
 
+  const displayedEntries = sharedAudit?.entries ?? entries;
+  const displayedVerified = sharedAudit?.verified ?? verified;
   const visibleEntries = useMemo(
     () =>
-      entries.filter((entry) =>
+      displayedEntries.filter((entry) =>
         `${entry.tool} ${entry.status} ${entry.origin} ${entry.decision}`
           .toLowerCase()
           .includes(filter.toLowerCase()),
       ),
-    [entries, filter],
+    [displayedEntries, filter],
   );
 
   return (
@@ -488,8 +497,14 @@ export function SecurityCenter({
                 alterações, mas não impede um processo local com os mesmos privilégios.
               </p>
             </div>
-            <span className={`state-chip ${verified ? 'connected' : 'warning'}`}>
-              {verified === null ? 'VERIFICANDO' : verified ? 'CADEIA ÍNTEGRA' : 'FALHA NA CADEIA'}
+            <span className={`state-chip ${displayedVerified ? 'connected' : 'warning'}`}>
+              {sharedAudit?.unavailable
+                ? 'INDISPONÍVEL'
+                : displayedVerified === null
+                  ? 'VERIFICANDO'
+                  : displayedVerified
+                    ? 'CADEIA ÍNTEGRA'
+                    : 'FALHA NA CADEIA'}
             </span>
             {embedded && onOpenFullPage && (
               <Button type="button" variant="secondary" onClick={onOpenFullPage}>
@@ -497,6 +512,7 @@ export function SecurityCenter({
               </Button>
             )}
           </div>
+          {sharedAudit?.loading && <p>Carregando registros de atividade…</p>}
           <div className="audit-toolbar">
             <input
               value={filter}
