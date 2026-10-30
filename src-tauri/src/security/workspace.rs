@@ -1895,7 +1895,7 @@ mod files_tests {
     fn temp_root(name: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!("odekrai-{name}-{}", now_millis()));
         fs::create_dir_all(&root).unwrap();
-        root
+        root.canonicalize().unwrap()
     }
 
     #[test]
