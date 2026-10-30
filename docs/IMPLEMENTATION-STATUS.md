@@ -17,7 +17,7 @@
 ## Sidebar e perfil
 
 - A janela principal pode consultar, por um comando Rust somente de leitura e restrito à janela principal, a quantidade de aprovações pendentes e não expiradas. As aprovações continuam sendo decididas exclusivamente na janela nativa; a contagem serve apenas para navegação.
-- A navegação lateral mostra Visão geral, Conversas, Agenda, Habilidades e Conectores de IA sem cabeçalhos de grupo. O cartão do perfil fica no rodapé e abre um menu por teclado; Ajuda e suporte abre a pasta `docs/` do repositório pelo fluxo existente de validação e confirmação de links externos. O contador de aprovações abre Atividade e Parar tudo aparece enquanto chat ou agente estão em execução.
+- A navegação lateral mostra Início, Conversas, Agenda, Habilidades e Conectores de IA sem cabeçalhos de grupo. Início concentra o mascote selecionado, campo de mensagem, sugestões baseadas em habilidades/dados locais disponíveis, checklist de requisitos e as três conversas mais recentes. A faixa de aprovação do Início abre a janela nativa por comando Rust restrito à janela principal; o indicador do cabeçalho continua abrindo Atividade. O cartão do perfil fica no rodapé e abre um menu por teclado; Ajuda e suporte abre a pasta `docs/` do repositório pelo fluxo existente de validação e confirmação de links externos. Parar tudo aparece enquanto chat ou agente estão em execução.
 - A validação visual do rodapé em janelas curtas, menu compacto, popover e controles do cabeçalho continua pendente no Windows.
 
 ## Captura de tela e análise visual

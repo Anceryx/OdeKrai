@@ -71,6 +71,12 @@ detalhes sanitizados de stack ficam limitados ao painel local da interface.
 - A barra lateral alterna com `Ctrl+B`; as alças dos painéis aceitam arraste e setas do teclado. As preferências ficam nas configurações locais da interface.
 - Validação visual pendente no executável Windows em 1000 × 600, incluindo foco, redimensionamento por ponteiro e legibilidade no modo compacto.
 
+### L0 — Início
+
+- `home.test.ts` verifica disponibilidade, ordem e limite das sugestões, requisitos do checklist, dados ausentes, preenchimento sem envio automático e limites do dia local.
+- `MessageComposer.test.tsx`, `Conversations.test.tsx` e `Overview.test.tsx` cobrem o campo compartilhado, Enter/Shift+Enter, estado de envio, envio inicial, retomar conversas e ausência de conteúdo fictício.
+- Validação visual no Windows pendente em 1000 × 600: conferir posição do mascote, sugestões, checklist, faixa de aprovação e acesso ao histórico sem cortes ou rolagem horizontal.
+
 ### Links em respostas
 
 - `markdown.test.ts` cobre links Markdown e URLs soltas, esquemas proibidos, caracteres de controle e normalização de domínios; `MessageMarkdown.test.tsx` verifica o rótulo do domínio de destino.
@@ -193,7 +199,7 @@ O teste `window_sizing::tests` usa uma área útil sintética de 1.920 × 1.040 
 
 ## Entrada e cabeçalho
 
-O estado inicial é a Visão geral; a falta de identidade é apresentada por um cartão dispensável nessa tela. O chip do cabeçalho abre Conectores e mostra o provedor/modelo quando há credencial disponível. A disposição precisa de conferência visual em Windows.
+O estado inicial é Início; nome/apelido, mascote, mensagens, sugestões e requisitos disponíveis usam o estado carregado pelo aplicativo. A falta de provedor ou pasta aparece em um checklist com navegação para resolução. O chip do cabeçalho abre Conectores e mostra o provedor/modelo quando há credencial disponível. A disposição precisa de conferência visual em Windows.
 
 O histórico local guarda o provedor e modelo da última resposta de cada conversa. `history.rs` testa a migração do esquema anterior e a leitura desses campos; `Conversations.test.tsx` verifica que o chip só aparece quando a conversa difere do modelo atual. A exibição ainda requer conferência visual em Windows.
 

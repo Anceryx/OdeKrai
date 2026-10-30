@@ -22,6 +22,13 @@ import {
 } from '../core/sounds';
 import { AI_PROVIDERS, type AiProvider } from '../core/providers';
 import { stopLocalSpeech } from '../core/speech';
+import {
+  createHomeChecklist,
+  createHomeSuggestions,
+  getTodayBounds,
+  type HomeEvent,
+} from '../core/home';
+import type { CatalogSkill } from '../core/skills-catalog';
 const Overview = lazy(() =>
   import('./screens/Overview').then((module) => ({ default: withScreenBoundary(module.Overview) })),
 );
@@ -157,6 +164,9 @@ function MainApp() {
   const [agentAwaitingApproval, setAgentAwaitingApproval] = useState(false);
   const [agentActionCards, setAgentActionCards] = useState<AgentActionCardData[]>([]);
   const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
+  const [homeSkills, setHomeSkills] = useState<CatalogSkill[] | null>(null);
+  const [todayEvents, setTodayEvents] = useState<HomeEvent[]>([]);
+  const [reminderCount, setReminderCount] = useState(0);
   const agentRunConversation = useRef<string | null>(null);
   const thinkingSoundGate = useRef(new SoundTriggerGate());
   const lastThinkingSoundKey = useRef<string | null>(null);
@@ -166,9 +176,6 @@ function MainApp() {
     setSettings,
     petVisible,
     setPetVisible,
-    identityConfigured,
-    identityCardDismissed,
-    setIdentityCardDismissed,
     permissionIndicator,
     profile,
     setProfile,
@@ -215,6 +222,47 @@ function MainApp() {
   const shownProviderName = usedProvider?.name ?? activeProvider.name;
   const shownProviderId = usedProviderId ?? settings.activeProviderId;
   const shownProviderModel = shownProviderSettings?.model ?? activeProvider.model;
+  const activeHomeSkills = useMemo(
+    () =>
+      (homeSkills ?? [])
+        .filter((skill) => skill.enabled && skill.status === 'installed')
+        .map(({ id, family, name }) => ({ id, family, name })),
+    [homeSkills],
+  );
+  const homeSuggestions = useMemo(
+    () =>
+      createHomeSuggestions({
+        activeSkills: activeHomeSkills,
+        agentAvailable: agentAvailability.available,
+        todayEvents,
+        reminderCount,
+        pendingApprovalCount,
+        recentConversations: conversations.slice(0, 5),
+      }),
+    [
+      activeHomeSkills,
+      agentAvailability.available,
+      todayEvents,
+      reminderCount,
+      pendingApprovalCount,
+      conversations,
+    ],
+  );
+  const homeChecklist = useMemo(
+    () =>
+      createHomeChecklist({
+        providerReady: keySavedForSession,
+        workspaceAvailable: Boolean(agentAvailability.workspacePath),
+        agentAvailable: agentAvailability.available,
+        agentReason: agentAvailability.reason,
+      }),
+    [
+      keySavedForSession,
+      agentAvailability.available,
+      agentAvailability.reason,
+      agentAvailability.workspacePath,
+    ],
+  );
   useEffect(() => {
     if (isTauri())
       void invoke('set_microphone_opt_in', { enabled: settings.microphoneEnabled }).catch(() =>
@@ -280,6 +328,60 @@ function MainApp() {
     conversationId,
     permissionIndicator?.halted,
   ]);
+
+  useEffect(() => {
+    if (section !== 'overview') return;
+    let disposed = false;
+    let stopSkillsUpdated: (() => void) | undefined;
+
+    const refreshHomeContext = async () => {
+      setHomeSkills(null);
+      setTodayEvents([]);
+      setReminderCount(0);
+      if (!isTauri()) {
+        setHomeSkills([]);
+        return;
+      }
+      try {
+        const skills = await invoke<CatalogSkill[]>('get_skills');
+        if (disposed) return;
+        setHomeSkills(skills);
+        const active = skills.filter((skill) => skill.enabled && skill.status === 'installed');
+        const canReadCalendar = active.some(
+          (skill) => skill.id === 'calendar.list_events' && skill.family === 'agenda_lembretes',
+        );
+        const canReadReminders = active.some(
+          (skill) => skill.id === 'reminder.list' && skill.family === 'agenda_lembretes',
+        );
+        const bounds = getTodayBounds(new Date());
+        const [events, reminders] = await Promise.allSettled([
+          canReadCalendar
+            ? invoke<HomeEvent[]>('calendar_list_events', bounds)
+            : Promise.resolve([] as HomeEvent[]),
+          canReadReminders ? invoke<number>('get_home_reminder_count') : Promise.resolve(0),
+        ]);
+        if (disposed) return;
+        setTodayEvents(events.status === 'fulfilled' ? events.value : []);
+        setReminderCount(reminders.status === 'fulfilled' ? reminders.value : 0);
+      } catch {
+        if (!disposed) setHomeSkills([]);
+      }
+    };
+
+    void refreshHomeContext();
+    void listen('skills-updated', () => void refreshHomeContext())
+      .then((stop) => {
+        if (disposed) stop();
+        else stopSkillsUpdated = stop;
+      })
+      .catch(() => setToast('Não foi possível atualizar o contexto do Início.'));
+    window.addEventListener('focus', refreshHomeContext);
+    return () => {
+      disposed = true;
+      stopSkillsUpdated?.();
+      window.removeEventListener('focus', refreshHomeContext);
+    };
+  }, [section]);
 
   useEffect(() => {
     const onShortcut = (event: KeyboardEvent) => {
@@ -467,6 +569,10 @@ function MainApp() {
     return Boolean(available);
   }
 
+  useEffect(() => {
+    void hasConfiguredChatProvider().catch(() => setKeySavedForSession(false));
+  }, [settings.activeProviderId, settings.fallbackProviderIds, settings.providers]);
+
   async function beginChat() {
     if (!isTauri() || !(await hasConfiguredChatProvider())) {
       navigate('providers');
@@ -476,34 +582,72 @@ function MainApp() {
     setChatMode(true);
   }
 
+  function startHomeConversation() {
+    setConversationId(null);
+    setMessages([]);
+    setAgentActionCards([]);
+    setAgentEnabled(agentAvailability.available);
+    setError('');
+    setAgentErrorDetails('');
+    setLastFailedPrompt('');
+    setChatMode(true);
+    navigate('chat');
+  }
+
+  function sendHomeFirstMessage(text: string) {
+    return sendMessage(text, false, undefined, {
+      newConversation: true,
+      agentEnabled: agentAvailability.available,
+    });
+  }
+
   async function sendMessage(
     rawText: string,
     reuseLastUserMessage = false,
     imageBase64?: string,
+    options: { newConversation?: boolean; agentEnabled?: boolean } = {},
   ): Promise<boolean> {
     const text = rawText.trim();
     if (!text || busy) return false;
-    if (agentEnabled && !agentAvailability.available) {
+    const isNewConversation = options.newConversation ?? !conversationId;
+    const useAgent = options.agentEnabled ?? agentEnabled;
+    if (useAgent && !agentAvailability.available) {
       setError(
         `Modo agente indisponível: ${agentAvailability.reason ?? 'verifique as configurações do agente.'}`,
       );
       setLastFailedPrompt('');
       return false;
     }
-    if (imageBase64 && (!agentEnabled || !agentAvailability.available)) {
+    if (imageBase64 && (!useAgent || !agentAvailability.available)) {
       setError('Ative o agente antes de enviar uma imagem para análise.');
       return false;
     }
-    if (!isTauri() || !(await hasConfiguredChatProvider())) {
+    if (!isTauri()) {
       setError('Configure um provedor de IA em Conectores para enviar mensagens.');
       setLastFailedPrompt('');
       return false;
     }
-    const activeId = conversationId ?? crypto.randomUUID();
+    let hasProvider = false;
+    try {
+      hasProvider = await hasConfiguredChatProvider();
+    } catch {
+      setError('Não foi possível verificar a credencial do provedor.');
+      setLastFailedPrompt('');
+      return false;
+    }
+    if (!hasProvider) {
+      setError('Configure um provedor de IA em Conectores para enviar mensagens.');
+      setLastFailedPrompt('');
+      return false;
+    }
+    const activeId = isNewConversation ? crypto.randomUUID() : conversationId!;
     const sentAt = Math.floor(Date.now() / 1000);
     const next = reuseLastUserMessage
       ? messages
-      : [...messages, { role: 'user' as const, content: text, created_at: sentAt }];
+      : [
+          ...(isNewConversation ? [] : messages),
+          { role: 'user' as const, content: text, created_at: sentAt },
+        ];
     setMessages(next);
     setDraft('');
     setError('');
@@ -547,18 +691,20 @@ function MainApp() {
           model: activeProvider.model,
           providerTargets: agentProviderTargets,
         });
-        if (!conversationId && !agentEnabled && agentAvailability.available) {
+        if (isNewConversation && !useAgent && agentAvailability.available) {
           await invoke('set_conversation_agent_mode', {
             conversationId: activeId,
             enabled: false,
           });
         }
-        setConversations((items) =>
-          items.map((item) => (item.id === activeId ? { ...item, preview: text } : item)),
-        );
+        setConversations((items) => {
+          const existing = items.find((item) => item.id === activeId);
+          if (!existing) return items;
+          return [{ ...existing, preview: text }, ...items.filter((item) => item.id !== activeId)];
+        });
       }
       setConversationId(activeId);
-      if (!conversationId)
+      if (isNewConversation)
         setConversations((items) => [
           {
             id: activeId,
@@ -567,11 +713,11 @@ function MainApp() {
             created_at: sentAt,
             provider_id: provider.id,
             model: activeProvider.model,
-            agent_enabled: agentEnabled && agentAvailability.available,
+            agent_enabled: useAgent && agentAvailability.available,
           },
           ...items,
         ]);
-      if (agentEnabled && agentAvailability.available) {
+      if (useAgent && agentAvailability.available) {
         const onEvent = new Channel<{
           type:
             | 'step'
@@ -817,9 +963,34 @@ function MainApp() {
     }
   }
 
-  function submitMessage(event: FormEvent) {
+  function submitMessage(event: FormEvent): Promise<boolean> {
     event.preventDefault();
-    void sendMessage(draft);
+    return sendMessage(draft);
+  }
+
+  function openConversation(id: string) {
+    if (busy) return;
+    const selectedId = resolveConversationSelection(conversations, id);
+    if (!selectedId) return;
+    setConversationId(selectedId);
+    setConversations((items) => {
+      const selected = items.find((item) => item.id === selectedId);
+      return selected ? [selected, ...items.filter((item) => item.id !== selectedId)] : items;
+    });
+    setError('');
+    setChatMode(true);
+    navigate('chat');
+    void Promise.all([
+      invoke<ChatMessage[]>('load_conversation', { conversationId: selectedId }),
+      invoke<boolean>('get_conversation_agent_mode', { conversationId: selectedId }),
+      invoke<AgentActionCardData[]>('load_agent_action_cards', { conversationId: selectedId }),
+    ])
+      .then(([loaded, enabled, cards]) => {
+        setMessages(loaded);
+        setAgentEnabled(enabled);
+        setAgentActionCards(cards);
+      })
+      .catch(() => setError('Não foi possível abrir a conversa.'));
   }
 
   function cancelRequest() {
@@ -1076,26 +1247,7 @@ function MainApp() {
               messages={messages}
               conversations={conversations}
               conversationId={conversationId}
-              onConversation={(id) => {
-                if (busy) return;
-                const selectedId = resolveConversationSelection(conversations, id);
-                if (!selectedId) return;
-                setConversationId(selectedId);
-                setError('');
-                void Promise.all([
-                  invoke<ChatMessage[]>('load_conversation', { conversationId: selectedId }),
-                  invoke<boolean>('get_conversation_agent_mode', { conversationId: selectedId }),
-                  invoke<AgentActionCardData[]>('load_agent_action_cards', {
-                    conversationId: selectedId,
-                  }),
-                ])
-                  .then(([loaded, enabled, cards]) => {
-                    setMessages(loaded);
-                    setAgentEnabled(enabled);
-                    setAgentActionCards(cards);
-                  })
-                  .catch(() => setError('Não foi possível abrir a conversa.'));
-              }}
+              onConversation={openConversation}
               onNewConversation={() => {
                 if (!busy) {
                   setConversationId(null);
@@ -1179,15 +1331,25 @@ function MainApp() {
             <div className="content-scroll">
               {section === 'overview' && (
                 <Overview
-                  onChat={beginChat}
-                  onOpen={(target) => navigate(target)}
-                  provider={activeProvider}
+                  draft={draft}
+                  setDraft={setDraft}
+                  busy={busy}
                   keyReady={keySavedForSession}
                   profile={profile}
                   selectedPet={selectedPet}
-                  needsIdentity={identityConfigured === false && !identityCardDismissed}
-                  onConfigureIdentity={() => navigate('agent')}
-                  onDismissIdentity={() => setIdentityCardDismissed(true)}
+                  suggestions={homeSuggestions}
+                  conversations={conversations.slice(0, 3)}
+                  checklist={homeChecklist}
+                  pendingApprovalCount={pendingApprovalCount}
+                  onStartConversation={startHomeConversation}
+                  onSendMessage={sendHomeFirstMessage}
+                  onResumeConversation={openConversation}
+                  onResolveChecklistItem={(item) => navigate(item.destination)}
+                  onOpenApprovals={() =>
+                    void invoke('show_pending_approval_window').catch(() =>
+                      setToast('Não foi possível abrir a janela de aprovação.'),
+                    )
+                  }
                 />
               )}
               {section === 'providers' && (

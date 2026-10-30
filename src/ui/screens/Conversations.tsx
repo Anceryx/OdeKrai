@@ -15,6 +15,7 @@ import { AgentActionCard, AgentControls, type AgentActionCardData } from '../Age
 import { ScreenCapture } from '../ScreenCapture';
 import { supportsTranscription, transcribeConfirmedRecording } from '../../core/transcription';
 import { getLocalSpeechReader, type SpeechState } from '../../core/speech';
+import { MessageComposer, shouldSubmitMessageOnEnter } from '../MessageComposer';
 
 export function shouldFollowChatScroll(
   scrollHeight: number,
@@ -25,9 +26,7 @@ export function shouldFollowChatScroll(
   return scrollHeight - scrollTop - clientHeight < threshold;
 }
 
-export function shouldSubmitChatOnEnter(key: string, shiftKey: boolean) {
-  return key === 'Enter' && !shiftKey;
-}
+export const shouldSubmitChatOnEnter = shouldSubmitMessageOnEnter;
 
 export function ConversationsScreen({
   messages,
@@ -88,7 +87,7 @@ export function ConversationsScreen({
   error: string;
   errorDetails: string;
   canFixConfiguration: boolean;
-  submit: (event: FormEvent) => void;
+  submit: (event: FormEvent) => void | Promise<unknown>;
   cancel: () => void;
   providerModel: string;
   providerId: string;
@@ -219,12 +218,6 @@ export function ConversationsScreen({
     speechVolume,
     speechVoiceURI,
   ]);
-  useEffect(() => {
-    const textarea = composerRef.current;
-    if (!textarea) return;
-    textarea.style.height = 'auto';
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
-  }, [draft]);
   useEffect(() => {
     followMessagesRef.current = true;
   }, [conversationId]);
@@ -814,114 +807,96 @@ export function ConversationsScreen({
             </div>
           </div>
         )}
-        <form className="composer" onSubmit={submit}>
-          <textarea
-            ref={composerRef}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (shouldSubmitChatOnEnter(event.key, event.shiftKey)) {
-                event.preventDefault();
-                event.currentTarget.form?.requestSubmit();
-              }
-            }}
-            placeholder="Escreva sua mensagem..."
-            rows={1}
-            aria-label="Mensagem"
-          />
-          <div className="composer-bottom">
-            {!recordingUrl && recordingState === 'idle' && (
-              <button
-                type="button"
-                className="secondary-button small-button"
-                aria-label="Gravar áudio"
-                title={
-                  !microphoneEnabled
-                    ? 'Ative Usar microfone nas Configurações para gravar.'
-                    : busy
-                      ? 'Aguarde a resposta atual terminar.'
-                      : undefined
-                }
-                disabled={!microphoneEnabled || busy}
-                onClick={() => void startRecording()}
-              >
-                🎙
-              </button>
-            )}
-            {(recordingState === 'recording' || recordingState === 'paused') && (
-              <div className="audio-recording" role="status" aria-live="polite">
-                <strong>
-                  {recordingState === 'recording' ? 'Gravando' : 'Gravação pausada'} ·{' '}
-                  {Math.floor(recordingSeconds / 60)}:
-                  {String(recordingSeconds % 60).padStart(2, '0')}
-                </strong>
-                {recordingState === 'recording' && (
-                  <span className="audio-level" aria-label="Nível do microfone">
-                    <i style={{ transform: `scaleX(${recordingLevel})` }} />
-                  </span>
-                )}
-                <span>Nenhum áudio será enviado. A gravação para ao sair desta tela.</span>
-                {recordingState === 'recording' ? (
-                  <button type="button" onClick={pauseRecording}>
-                    Pausar
-                  </button>
-                ) : (
-                  <button type="button" onClick={resumeRecording}>
-                    Retomar
-                  </button>
-                )}
-                <button type="button" onClick={cancelRecording}>
-                  Cancelar
+        <MessageComposer
+          draft={draft}
+          setDraft={setDraft}
+          busy={busy}
+          onSubmit={submit}
+          onCancel={cancel}
+          textareaRef={composerRef}
+          footer={(sendButton) => (
+            <div className="composer-bottom">
+              {!recordingUrl && recordingState === 'idle' && (
+                <button
+                  type="button"
+                  className="secondary-button small-button"
+                  aria-label="Gravar áudio"
+                  title={
+                    !microphoneEnabled
+                      ? 'Ative Usar microfone nas Configurações para gravar.'
+                      : busy
+                        ? 'Aguarde a resposta atual terminar.'
+                        : undefined
+                  }
+                  disabled={!microphoneEnabled || busy}
+                  onClick={() => void startRecording()}
+                >
+                  🎙
                 </button>
-                <button type="button" onClick={finishRecording}>
-                  Concluir
-                </button>
-              </div>
-            )}
-            {recordingUrl && recordingState === 'ready' && (
-              <div className="audio-recording" role="group" aria-label="Gravação local concluída">
-                <audio controls src={recordingUrl} />
-                {providerConfigured && supportsTranscription(providerId) && (
-                  <button type="button" onClick={() => setTranscriptionDialogOpen(true)}>
-                    Transcrever com {providerById(providerId)?.name ?? providerId}
-                  </button>
-                )}
-                <button type="button" onClick={discardRecording}>
-                  Descartar
-                </button>
-              </div>
-            )}
-            <span className="chat-composer-helper">
-              Enter envia · Shift + Enter quebra linha
-              {!microphoneEnabled && !recordingUrl && recordingState === 'idle' && (
-                <small>Gravação de áudio desativada em Configurações.</small>
               )}
-            </span>
-            <div className="chat-composer-actions">
-              <ScreenCapture
-                providerId={providerId}
-                providerModel={providerModel}
-                agentEnabled={agentEnabled}
-                agentAvailable={!agentUnavailableReason}
-                disabled={busy}
-                onAnalyze={onAnalyzeCapture}
-              />
-              <button
-                className={`send-button ${busy ? 'stop-button' : ''}`}
-                type={busy ? 'button' : 'submit'}
-                onClick={busy ? cancel : undefined}
-                disabled={!busy && !draft.trim()}
-                title={
-                  !busy && !draft.trim()
-                    ? 'Escreva uma mensagem para habilitar o envio.'
-                    : undefined
-                }
-                aria-label={busy ? 'Parar resposta' : 'Enviar mensagem'}
-              >
-                {busy ? 'Parar' : 'Enviar'}
-              </button>
+              {(recordingState === 'recording' || recordingState === 'paused') && (
+                <div className="audio-recording" role="status" aria-live="polite">
+                  <strong>
+                    {recordingState === 'recording' ? 'Gravando' : 'Gravação pausada'} ·{' '}
+                    {Math.floor(recordingSeconds / 60)}:
+                    {String(recordingSeconds % 60).padStart(2, '0')}
+                  </strong>
+                  {recordingState === 'recording' && (
+                    <span className="audio-level" aria-label="Nível do microfone">
+                      <i style={{ transform: `scaleX(${recordingLevel})` }} />
+                    </span>
+                  )}
+                  <span>Nenhum áudio será enviado. A gravação para ao sair desta tela.</span>
+                  {recordingState === 'recording' ? (
+                    <button type="button" onClick={pauseRecording}>
+                      Pausar
+                    </button>
+                  ) : (
+                    <button type="button" onClick={resumeRecording}>
+                      Retomar
+                    </button>
+                  )}
+                  <button type="button" onClick={cancelRecording}>
+                    Cancelar
+                  </button>
+                  <button type="button" onClick={finishRecording}>
+                    Concluir
+                  </button>
+                </div>
+              )}
+              {recordingUrl && recordingState === 'ready' && (
+                <div className="audio-recording" role="group" aria-label="Gravação local concluída">
+                  <audio controls src={recordingUrl} />
+                  {providerConfigured && supportsTranscription(providerId) && (
+                    <button type="button" onClick={() => setTranscriptionDialogOpen(true)}>
+                      Transcrever com {providerById(providerId)?.name ?? providerId}
+                    </button>
+                  )}
+                  <button type="button" onClick={discardRecording}>
+                    Descartar
+                  </button>
+                </div>
+              )}
+              <span className="chat-composer-helper">
+                Enter envia · Shift + Enter quebra linha
+                {!microphoneEnabled && !recordingUrl && recordingState === 'idle' && (
+                  <small>Gravação de áudio desativada em Configurações.</small>
+                )}
+              </span>
+              <div className="chat-composer-actions">
+                <ScreenCapture
+                  providerId={providerId}
+                  providerModel={providerModel}
+                  agentEnabled={agentEnabled}
+                  agentAvailable={!agentUnavailableReason}
+                  disabled={busy}
+                  onAnalyze={onAnalyzeCapture}
+                />
+                {sendButton}
+              </div>
             </div>
-          </div>
+          )}
+        >
           {recordingError && (
             <p className="audio-recording-error" role="alert">
               {recordingError}
@@ -977,7 +952,7 @@ export function ConversationsScreen({
               </div>
             </div>
           )}
-        </form>
+        </MessageComposer>
         <p className="chat-disclaimer">
           As respostas podem conter imprecisões. As mensagens são enviadas ao provedor configurado.
         </p>

@@ -5,7 +5,7 @@ import { Icon, type IconName } from './Icon';
 import type { Section } from './screens/types';
 
 export const navigationItems: { id: Section; label: string; icon: IconName }[] = [
-  { id: 'overview', label: 'Visão geral', icon: 'home' },
+  { id: 'overview', label: 'Início', icon: 'home' },
   { id: 'chat', label: 'Conversas', icon: 'chat' },
   { id: 'calendar', label: 'Agenda', icon: 'calendar' },
   { id: 'skills', label: 'Habilidades', icon: 'wrench' },
