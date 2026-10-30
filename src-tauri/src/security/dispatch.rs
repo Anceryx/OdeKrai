@@ -78,8 +78,8 @@ pub(super) fn action_metadata(
     let tool_name = match action {
         SimulatedAction::Productivity { skill_id, params } => match skill_id.as_str() {
             "plan.propose" => "plan.propose",
-            "files.write" | "files.append" | "files.restore" | "files.mkdir" | "files.copy" | "files.move"
-            | "files.rename" | "files.delete" | "files.apply_plan" => skill_id,
+            "files.write" | "files.append" | "files.restore" | "files.mkdir" | "files.copy"
+            | "files.move" | "files.rename" | "files.delete" | "files.apply_plan" => skill_id,
             "calendar.create_event" => "calendar.create_event",
             "google.calendar.create_event"
             | "google.calendar.update_event"
@@ -179,11 +179,29 @@ fn undo_descriptor_for_action(
 ) -> Option<crate::history::UndoDescriptor> {
     let (skill_id, path, label) = match action {
         SimulatedAction::Productivity { skill_id, params } => match skill_id.as_str() {
-            "wallpaper.set" => ("wallpaper.restore", None, "Restaurar o papel de parede anterior"),
-            "display.set_brightness" => ("display.restore_brightness", None, "Restaurar o brilho anterior"),
+            "wallpaper.set" => (
+                "wallpaper.restore",
+                None,
+                "Restaurar o papel de parede anterior",
+            ),
+            "display.set_brightness" => (
+                "display.restore_brightness",
+                None,
+                "Restaurar o brilho anterior",
+            ),
             "theme.set" => ("theme.restore", None, "Restaurar o tema anterior"),
-            "files.write" | "files.append" => ("files.restore", params.get("path").and_then(serde_json::Value::as_str), "Restaurar a versão anterior do arquivo"),
-            "files.rename" | "files.move" => ("files.restore", params.get("destination").and_then(serde_json::Value::as_str), "Desfazer a renomeação do arquivo"),
+            "files.write" | "files.append" => (
+                "files.restore",
+                params.get("path").and_then(serde_json::Value::as_str),
+                "Restaurar a versão anterior do arquivo",
+            ),
+            "files.rename" | "files.move" => (
+                "files.restore",
+                params
+                    .get("destination")
+                    .and_then(serde_json::Value::as_str),
+                "Desfazer a renomeação do arquivo",
+            ),
             _ => return None,
         },
         _ => return None,
@@ -675,7 +693,15 @@ async fn execute_action_with_timeout(
     let tool = tool_for(&action);
     tokio::time::timeout(
         timeout,
-        tool.execute_with_app(&action, &workspace, app, origin, cancel, operation_id, on_output),
+        tool.execute_with_app(
+            &action,
+            &workspace,
+            app,
+            origin,
+            cancel,
+            operation_id,
+            on_output,
+        ),
     )
     .await
     .map_err(|_| "A ferramenta excedeu o tempo limite.".to_string())?
@@ -749,9 +775,13 @@ pub(super) async fn submit_agent_action(
         return Err("A execução foi parada antes da ação.".into());
     }
     let (tool, risk, inside, fixed) = action_metadata(&action);
-    let fixed = if matches!(&action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "files.restore") && !matches!(&origin, Origin::User) {
+    let fixed = if matches!(&action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "files.restore")
+        && !matches!(&origin, Origin::User)
+    {
         Some("file_restore_user_origin_required")
-    } else { fixed };
+    } else {
+        fixed
+    };
     let fixed = enforce_power_lock_origin(&action, &origin, tainted, fixed);
     let id = id();
     let params = audit_params(&action);
@@ -1057,9 +1087,10 @@ pub(super) async fn submit_agent_action(
                 "started",
                 None,
             )?;
-            let execution =
-                execute_action_with_timeout(&action, app, timeout, &origin, cancel, &ticket_id, on_output)
-                    .await;
+            let execution = execute_action_with_timeout(
+                &action, app, timeout, &origin, cancel, &ticket_id, on_output,
+            )
+            .await;
             let error = execution.as_ref().err().cloned();
             let undo_descriptor = execution
                 .as_ref()

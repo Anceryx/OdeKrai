@@ -47,12 +47,24 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
         "system.info" => &[],
         _ => return Err("Habilidade do sistema desconhecida.".into()),
     };
-    let restore = matches!(skill_id, "wallpaper.restore" | "display.restore_brightness" | "theme.restore");
-    let keys_valid = object.keys().all(|key| expected.contains(&key.as_str()) || (restore && key == "history_id"));
-    if !keys_valid || (!restore && object.len() != expected.len()) || (restore && object.len() > 1) {
+    let restore = matches!(
+        skill_id,
+        "wallpaper.restore" | "display.restore_brightness" | "theme.restore"
+    );
+    let keys_valid = object
+        .keys()
+        .all(|key| expected.contains(&key.as_str()) || (restore && key == "history_id"));
+    if !keys_valid || (!restore && object.len() != expected.len()) || (restore && object.len() > 1)
+    {
         return Err("Os parâmetros não correspondem à habilidade permitida.".into());
     }
-    if restore && object.get("history_id").is_some_and(|value| value.as_str().is_none_or(|id| id.is_empty() || id.len() > 128 || id.chars().any(char::is_control))) {
+    if restore
+        && object.get("history_id").is_some_and(|value| {
+            value.as_str().is_none_or(|id| {
+                id.is_empty() || id.len() > 128 || id.chars().any(char::is_control)
+            })
+        })
+    {
         return Err("O identificador do estado anterior é inválido.".into());
     }
     match skill_id {
@@ -412,7 +424,9 @@ fn validate_agent_artifact_path(app: &tauri::AppHandle, raw: &str) -> Result<Pat
     roots
         .iter()
         .find_map(|root| checked_path(&params, root).ok())
-        .ok_or_else(|| "O arquivo não existe em uma pasta permitida ou não é seguro para abrir.".into())
+        .ok_or_else(|| {
+            "O arquivo não existe em uma pasta permitida ou não é seguro para abrir.".into()
+        })
 }
 
 pub(crate) fn preview_managed_control(
@@ -425,9 +439,16 @@ pub(crate) fn preview_managed_control(
     db.execute_batch("CREATE TABLE IF NOT EXISTS wallpaper_history (id INTEGER PRIMARY KEY, previous_path TEXT, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER); CREATE TABLE IF NOT EXISTS brightness_history (id INTEGER PRIMARY KEY, previous_value INTEGER NOT NULL, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER); CREATE TABLE IF NOT EXISTS theme_history (id INTEGER PRIMARY KEY, apps_type INTEGER, apps_data BLOB, system_type INTEGER, system_data BLOB, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER)")
         .map_err(|_| "Não foi possível preparar o histórico do papel de parede.".to_string())?;
     for table in ["wallpaper_history", "brightness_history", "theme_history"] {
-        let exists: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info(?1) WHERE name='operation_id')", [table], |row| row.get(0)).map_err(|_| "Não foi possível verificar o histórico de desfazer.".to_string())?;
+        let exists: bool = db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_table_info(?1) WHERE name='operation_id')",
+                [table],
+                |row| row.get(0),
+            )
+            .map_err(|_| "Não foi possível verificar o histórico de desfazer.".to_string())?;
         if !exists {
-            db.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN operation_id TEXT")).map_err(|_| "Não foi possível atualizar o histórico de desfazer.".to_string())?;
+            db.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN operation_id TEXT"))
+                .map_err(|_| "Não foi possível atualizar o histórico de desfazer.".to_string())?;
         }
     }
     let mut roots = vec![crate::agent_home::workspace_path(app)?];
@@ -805,7 +826,8 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("odekrai-artifact-{}-{stamp}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("odekrai-artifact-{}-{stamp}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("result.txt"), "ok").unwrap();
         std::fs::write(root.join("payload.exe"), "not executed").unwrap();

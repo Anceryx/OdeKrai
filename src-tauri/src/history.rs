@@ -132,14 +132,52 @@ pub(crate) fn save_agent_action_card(
         || card.summary.len() > 500
         || card.result_summary.len() > 500
         || card.diff.as_ref().is_some_and(|diff| diff.len() > 16_000)
-        || card.preview.as_ref().is_some_and(|preview| preview.len() > 32_000)
+        || card
+            .preview
+            .as_ref()
+            .is_some_and(|preview| preview.len() > 32_000)
         || card.artifacts.len() > 32
         || card.timeline.len() > 128
-        || card.undo_descriptor.as_ref().is_some_and(|undo| undo.skill_id.len() > 64 || undo.state_id.len() > 128 || undo.label.len() > 160 || undo.path.as_ref().is_some_and(|path| path.len() > 4096 || path.chars().any(char::is_control)))
-        || card.plan.as_ref().is_some_and(|plan| plan.title.is_empty() || plan.title.chars().count() > 120 || plan.steps.is_empty() || plan.steps.len() > 12 || plan.outside_plan_actions.len() > 8 || plan.steps.iter().any(|step| step.description.is_empty() || step.description.chars().count() > 240) || plan.outside_plan_actions.iter().any(|action| action.is_empty() || action.chars().count() > 120))
-        || card.artifacts.iter().any(|artifact| artifact.path.is_empty() || artifact.path.len() > 32_767 || artifact.kind.len() > 40 || artifact.path.chars().any(char::is_control))
-        || card.timeline.iter().any(|entry| entry.label.len() > 160 || entry.status.len() > 80 || entry.label.chars().any(char::is_control) || entry.status.chars().any(char::is_control))
-        || card.preview.as_ref().is_some_and(|preview| preview.chars().any(|character| character.is_control() && character != '\n' && character != '\t'))
+        || card.undo_descriptor.as_ref().is_some_and(|undo| {
+            undo.skill_id.len() > 64
+                || undo.state_id.len() > 128
+                || undo.label.len() > 160
+                || undo
+                    .path
+                    .as_ref()
+                    .is_some_and(|path| path.len() > 4096 || path.chars().any(char::is_control))
+        })
+        || card.plan.as_ref().is_some_and(|plan| {
+            plan.title.is_empty()
+                || plan.title.chars().count() > 120
+                || plan.steps.is_empty()
+                || plan.steps.len() > 12
+                || plan.outside_plan_actions.len() > 8
+                || plan.steps.iter().any(|step| {
+                    step.description.is_empty() || step.description.chars().count() > 240
+                })
+                || plan
+                    .outside_plan_actions
+                    .iter()
+                    .any(|action| action.is_empty() || action.chars().count() > 120)
+        })
+        || card.artifacts.iter().any(|artifact| {
+            artifact.path.is_empty()
+                || artifact.path.len() > 32_767
+                || artifact.kind.len() > 40
+                || artifact.path.chars().any(char::is_control)
+        })
+        || card.timeline.iter().any(|entry| {
+            entry.label.len() > 160
+                || entry.status.len() > 80
+                || entry.label.chars().any(char::is_control)
+                || entry.status.chars().any(char::is_control)
+        })
+        || card.preview.as_ref().is_some_and(|preview| {
+            preview
+                .chars()
+                .any(|character| character.is_control() && character != '\n' && character != '\t')
+        })
         || [
             &card.title,
             &card.risk,
@@ -164,7 +202,10 @@ pub(crate) fn save_agent_action_card(
     }
 }
 
-pub(crate) fn clear_undo_descriptor_for_state(app: &tauri::AppHandle, state_id: &str) -> Result<(), String> {
+pub(crate) fn clear_undo_descriptor_for_state(
+    app: &tauri::AppHandle,
+    state_id: &str,
+) -> Result<(), String> {
     let db = database(app)?;
     db.execute(
         "UPDATE agent_action_cards SET undo_descriptor=NULL WHERE json_extract(undo_descriptor,'$.stateId')=?1",
@@ -202,13 +243,29 @@ pub fn load_agent_action_cards(
                 diff: row.get(8)?,
                 created_at: row.get(9)?,
                 preview: row.get(10)?,
-                artifacts: row.get::<_, String>(11).ok().and_then(|value| serde_json::from_str(&value).ok()).unwrap_or_default(),
-                timeline: row.get::<_, String>(12).ok().and_then(|value| serde_json::from_str(&value).ok()).unwrap_or_default(),
+                artifacts: row
+                    .get::<_, String>(11)
+                    .ok()
+                    .and_then(|value| serde_json::from_str(&value).ok())
+                    .unwrap_or_default(),
+                timeline: row
+                    .get::<_, String>(12)
+                    .ok()
+                    .and_then(|value| serde_json::from_str(&value).ok())
+                    .unwrap_or_default(),
                 duration_ms: row.get(13)?,
                 approval_expires_at: row.get(14)?,
                 untrusted_result: row.get(15).unwrap_or(false),
-                undo_descriptor: row.get::<_, Option<String>>(16).ok().flatten().and_then(|value| serde_json::from_str(&value).ok()),
-                plan: row.get::<_, Option<String>>(17).ok().flatten().and_then(|value| serde_json::from_str(&value).ok()),
+                undo_descriptor: row
+                    .get::<_, Option<String>>(16)
+                    .ok()
+                    .flatten()
+                    .and_then(|value| serde_json::from_str(&value).ok()),
+                plan: row
+                    .get::<_, Option<String>>(17)
+                    .ok()
+                    .flatten()
+                    .and_then(|value| serde_json::from_str(&value).ok()),
             })
         })
         .map_err(|_| "Não foi possível ler as ações da conversa.".to_string())?;
@@ -286,8 +343,10 @@ fn init_schema(db: &Connection) -> Result<(), String> {
     ] {
         let exists: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('agent_action_cards') WHERE name = ?1)", [column], |row| row.get(0)).map_err(|_| "Não foi possível verificar os cartões de ação.".to_string())?;
         if !exists {
-            db.execute_batch(&format!("ALTER TABLE agent_action_cards ADD COLUMN {column} {definition}"))
-                .map_err(|_| "Não foi possível atualizar os cartões de ação.".to_string())?;
+            db.execute_batch(&format!(
+                "ALTER TABLE agent_action_cards ADD COLUMN {column} {definition}"
+            ))
+            .map_err(|_| "Não foi possível atualizar os cartões de ação.".to_string())?;
         }
     }
     Ok(())

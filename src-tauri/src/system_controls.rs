@@ -309,7 +309,11 @@ pub(crate) fn execute_managed_with_id<A: SystemAdapter>(
                 db.execute("UPDATE wallpaper_history SET restored_at=?1 WHERE id=(SELECT id FROM wallpaper_history WHERE restored_at IS NULL ORDER BY id DESC LIMIT 1)", [unix_seconds()])
             }
             .map_err(|_| "Não foi possível registrar a restauração do papel de parede.".to_string())?;
-            if updated == 0 { return Err("O estado anterior do papel de parede não está mais disponível.".into()); }
+            if updated == 0 {
+                return Err(
+                    "O estado anterior do papel de parede não está mais disponível.".into(),
+                );
+            }
             Ok("Papel de parede anterior restaurado.".into())
         }
         "display.get_brightness" => execute_with(adapter, skill_id, args),
@@ -341,7 +345,9 @@ pub(crate) fn execute_managed_with_id<A: SystemAdapter>(
             adapter.set_brightness(previous as u8)?;
             let updated = if let Some(history_id) = history_id { db.execute("UPDATE brightness_history SET restored_at=?1 WHERE operation_id=?2 AND restored_at IS NULL", params![unix_seconds(), history_id]) } else { db.execute("UPDATE brightness_history SET restored_at=?1 WHERE id=(SELECT id FROM brightness_history WHERE restored_at IS NULL ORDER BY id DESC LIMIT 1)", [unix_seconds()]) }
                 .map_err(|_| "Não foi possível registrar a restauração do brilho.".to_string())?;
-            if updated == 0 { return Err("O estado anterior do brilho não está mais disponível.".into()); }
+            if updated == 0 {
+                return Err("O estado anterior do brilho não está mais disponível.".into());
+            }
             Ok("Brilho anterior restaurado.".into())
         }
         "theme.set" => {
@@ -375,7 +381,9 @@ pub(crate) fn execute_managed_with_id<A: SystemAdapter>(
             adapter.restore_theme(&snapshot)?;
             let updated = if let Some(history_id) = history_id { db.execute("UPDATE theme_history SET restored_at=?1 WHERE operation_id=?2 AND restored_at IS NULL", params![unix_seconds(), history_id]) } else { db.execute("UPDATE theme_history SET restored_at=?1 WHERE id=(SELECT id FROM theme_history WHERE restored_at IS NULL ORDER BY id DESC LIMIT 1)", [unix_seconds()]) }
                 .map_err(|_| "Não foi possível registrar a restauração do tema.".to_string())?;
-            if updated == 0 { return Err("O estado anterior do tema não está mais disponível.".into()); }
+            if updated == 0 {
+                return Err("O estado anterior do tema não está mais disponível.".into());
+            }
             Ok("Tema anterior restaurado.".into())
         }
         _ => execute_with(adapter, skill_id, args),
@@ -1165,15 +1173,24 @@ mod tests {
     fn undo_uses_the_requested_operation_id_and_reports_missing_state_without_native_effects() {
         let folder = std::env::temp_dir().join(format!(
             "odekrai-undo-sim-{}",
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         std::fs::create_dir_all(&folder).unwrap();
         let image = folder.join("new.png");
         std::fs::write(&image, b"\x89PNG\r\n\x1a\ncontent").unwrap();
         let db = Connection::open_in_memory().unwrap();
         let original_theme = ThemeSnapshot {
-            apps_use_light_theme: Some(RegistryValue { kind: REG_DWORD_VALUE, data: 1_u32.to_le_bytes().to_vec() }),
-            system_uses_light_theme: Some(RegistryValue { kind: REG_DWORD_VALUE, data: 1_u32.to_le_bytes().to_vec() }),
+            apps_use_light_theme: Some(RegistryValue {
+                kind: REG_DWORD_VALUE,
+                data: 1_u32.to_le_bytes().to_vec(),
+            }),
+            system_uses_light_theme: Some(RegistryValue {
+                kind: REG_DWORD_VALUE,
+                data: 1_u32.to_le_bytes().to_vec(),
+            }),
         };
         let mut sim = SimulatedAdapter {
             current_wallpaper: Some("old-wallpaper.png".into()),
@@ -1181,18 +1198,87 @@ mod tests {
             theme: original_theme.clone(),
             ..Default::default()
         };
-        execute_managed_with_id(&mut sim, "wallpaper.set", &json!({"path": image}), &db, std::slice::from_ref(&folder), "user", "wall-op").unwrap();
-        execute_managed_with_id(&mut sim, "display.set_brightness", &json!({"brightness": 81}), &db, &[], "user", "brightness-op").unwrap();
-        execute_managed_with_id(&mut sim, "theme.set", &json!({"mode":"escuro"}), &db, &[], "user", "theme-op").unwrap();
+        execute_managed_with_id(
+            &mut sim,
+            "wallpaper.set",
+            &json!({"path": image}),
+            &db,
+            std::slice::from_ref(&folder),
+            "user",
+            "wall-op",
+        )
+        .unwrap();
+        execute_managed_with_id(
+            &mut sim,
+            "display.set_brightness",
+            &json!({"brightness": 81}),
+            &db,
+            &[],
+            "user",
+            "brightness-op",
+        )
+        .unwrap();
+        execute_managed_with_id(
+            &mut sim,
+            "theme.set",
+            &json!({"mode":"escuro"}),
+            &db,
+            &[],
+            "user",
+            "theme-op",
+        )
+        .unwrap();
 
-        execute_managed_with_id(&mut sim, "wallpaper.restore", &json!({"history_id":"wall-op"}), &db, &[], "user", "undo-wall").unwrap();
-        execute_managed_with_id(&mut sim, "display.restore_brightness", &json!({"history_id":"brightness-op"}), &db, &[], "user", "undo-brightness").unwrap();
-        execute_managed_with_id(&mut sim, "theme.restore", &json!({"history_id":"theme-op"}), &db, &[], "user", "undo-theme").unwrap();
+        execute_managed_with_id(
+            &mut sim,
+            "wallpaper.restore",
+            &json!({"history_id":"wall-op"}),
+            &db,
+            &[],
+            "user",
+            "undo-wall",
+        )
+        .unwrap();
+        execute_managed_with_id(
+            &mut sim,
+            "display.restore_brightness",
+            &json!({"history_id":"brightness-op"}),
+            &db,
+            &[],
+            "user",
+            "undo-brightness",
+        )
+        .unwrap();
+        execute_managed_with_id(
+            &mut sim,
+            "theme.restore",
+            &json!({"history_id":"theme-op"}),
+            &db,
+            &[],
+            "user",
+            "undo-theme",
+        )
+        .unwrap();
         assert_eq!(sim.current_wallpaper.as_deref(), Some("old-wallpaper.png"));
         assert_eq!(sim.brightness, Some(27));
         assert_eq!(sim.theme, original_theme);
-        assert!(execute_managed_with_id(&mut sim, "display.restore_brightness", &json!({"history_id":"missing"}), &db, &[], "user", "undo-missing").is_err());
-        let origin: String = db.query_row("SELECT origin FROM brightness_history WHERE operation_id='brightness-op'", [], |row| row.get(0)).unwrap();
+        assert!(execute_managed_with_id(
+            &mut sim,
+            "display.restore_brightness",
+            &json!({"history_id":"missing"}),
+            &db,
+            &[],
+            "user",
+            "undo-missing"
+        )
+        .is_err());
+        let origin: String = db
+            .query_row(
+                "SELECT origin FROM brightness_history WHERE operation_id='brightness-op'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
         assert_eq!(origin, "user");
         let _ = std::fs::remove_dir_all(folder);
     }

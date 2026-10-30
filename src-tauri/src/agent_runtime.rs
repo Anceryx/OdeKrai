@@ -194,7 +194,8 @@ fn start_plan_step(plan: &mut crate::history::AgentPlan, action_label: &str) -> 
         Some(index)
     } else {
         if plan.outside_plan_actions.len() < 8 {
-            plan.outside_plan_actions.push(action_label.chars().take(120).collect());
+            plan.outside_plan_actions
+                .push(action_label.chars().take(120).collect());
         }
         None
     }
@@ -352,7 +353,9 @@ impl AgentBackend for RuntimeBackend<'_> {
                     .as_secs() as i64,
             });
             crate::history::save_agent_action_card(&self.app, &conversation_id, &card)?;
-            let _ = self.events.send(AgentEvent::ActionCard { card: card.clone() });
+            let _ = self
+                .events
+                .send(AgentEvent::ActionCard { card: card.clone() });
             let approved_by_user = Arc::new(AtomicBool::new(false));
             let approval_state = approved_by_user.clone();
             let channel = self.events.clone();
@@ -416,7 +419,9 @@ impl AgentBackend for RuntimeBackend<'_> {
                         .as_secs() as i64,
                 });
                 let _ = crate::history::save_agent_action_card(&app, &card_conversation, &waiting);
-                let _ = channel.send(AgentEvent::ActionCard { card: waiting.clone() });
+                let _ = channel.send(AgentEvent::ActionCard {
+                    card: waiting.clone(),
+                });
                 let _ = channel.send(AgentEvent::AwaitingApproval {
                     id: approval_id.clone(),
                     audit_id: approval_id,
@@ -448,9 +453,8 @@ impl AgentBackend for RuntimeBackend<'_> {
                         "automática".into()
                     };
                     card.status = "Falhou".into();
-                    card.duration_ms = Some(
-                        action_started.elapsed().as_millis().min(i64::MAX as u128) as i64,
-                    );
+                    card.duration_ms =
+                        Some(action_started.elapsed().as_millis().min(i64::MAX as u128) as i64);
                     card.timeline.push(crate::history::AgentTimelineEntry {
                         label: format!("Resultado da ferramenta: {} falhou", skill.name),
                         status: "erro".into(),
@@ -476,7 +480,9 @@ impl AgentBackend for RuntimeBackend<'_> {
                     .and_then(|text| serde_json::from_str::<crate::history::AgentPlan>(text).ok())
                 {
                     card.title = format!("Plano: {}", plan.title);
-                    card.summary = "Plano informativo. Cada ação continua sujeita às permissões locais.".into();
+                    card.summary =
+                        "Plano informativo. Cada ação continua sujeita às permissões locais."
+                            .into();
                     card.result_summary = "Este plano não executa nem autoriza ações.".into();
                     card.plan = Some(plan);
                 }
@@ -488,14 +494,12 @@ impl AgentBackend for RuntimeBackend<'_> {
                     | "doc.create_markdown"
                     | "doc.create_text"
                     | "sheet.create_csv"
-                    | "workspace.write_file" => call
-                        .args
-                        .get("path")
-                        .and_then(serde_json::Value::as_str),
-                    "calendar.create_event" => call
-                        .args
-                        .get("path")
-                        .and_then(serde_json::Value::as_str),
+                    | "workspace.write_file" => {
+                        call.args.get("path").and_then(serde_json::Value::as_str)
+                    }
+                    "calendar.create_event" => {
+                        call.args.get("path").and_then(serde_json::Value::as_str)
+                    }
                     "files.copy" | "files.move" | "files.rename" => call
                         .args
                         .get("destination")
@@ -540,9 +544,8 @@ impl AgentBackend for RuntimeBackend<'_> {
                 _ => "Interrompida",
             }
             .into();
-            card.duration_ms = Some(
-                action_started.elapsed().as_millis().min(i64::MAX as u128) as i64,
-            );
+            card.duration_ms =
+                Some(action_started.elapsed().as_millis().min(i64::MAX as u128) as i64);
             card.timeline.push(crate::history::AgentTimelineEntry {
                 label: format!("Resultado da ferramenta: {}", card.status.to_lowercase()),
                 status: card.status.to_lowercase(),
@@ -563,8 +566,20 @@ impl AgentBackend for RuntimeBackend<'_> {
             };
             if status == "completed" && skill.id == "calendar.create_event" {
                 let field = |name: &str| -> String {
-                    call.args.get(name).and_then(serde_json::Value::as_str).unwrap_or("Não informado")
-                        .chars().map(|character| if character.is_control() { ' ' } else { character }).take(100).collect()
+                    call.args
+                        .get(name)
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("Não informado")
+                        .chars()
+                        .map(|character| {
+                            if character.is_control() {
+                                ' '
+                            } else {
+                                character
+                            }
+                        })
+                        .take(100)
+                        .collect()
                 };
                 card.result_summary = format!(
                     "Evento: {}\nData: {}\nLocal: {}\nGravado em: {}",
@@ -575,7 +590,9 @@ impl AgentBackend for RuntimeBackend<'_> {
                 );
             }
             if status == "completed" && skill.id == "files.delete" {
-                card.result_summary = "Arquivo enviado à Lixeira do Windows; restaure pela Lixeira do Windows.".into();
+                card.result_summary =
+                    "Arquivo enviado à Lixeira do Windows; restaure pela Lixeira do Windows."
+                        .into();
             }
             if let Some(index) = plan_step_index {
                 self.finish_plan_action(index, status == "completed")?;
@@ -815,7 +832,7 @@ async fn agent_run_inner(context: AgentRunContext<'_>) -> Result<String, String>
         active_skills,
         events: on_event.clone(),
         daily_token_limit,
-            plan_card: None,
+        plan_card: None,
     };
     let result = agent::run_agent(
         &mut backend,
@@ -957,13 +974,22 @@ mod plan_state_tests {
     fn real_actions_advance_plan_and_extras_are_reported_without_blocking() {
         let mut plan = plan();
         let first = start_plan_step(&mut plan, "Ler dados").unwrap();
-        assert_eq!(plan.steps[first].status, crate::history::AgentPlanStepStatus::InProgress);
+        assert_eq!(
+            plan.steps[first].status,
+            crate::history::AgentPlanStepStatus::InProgress
+        );
         assert!(finish_plan_step(&mut plan, first, true));
-        assert_eq!(plan.steps[first].status, crate::history::AgentPlanStepStatus::Completed);
+        assert_eq!(
+            plan.steps[first].status,
+            crate::history::AgentPlanStepStatus::Completed
+        );
 
         let second = start_plan_step(&mut plan, "Criar arquivo").unwrap();
         assert!(finish_plan_step(&mut plan, second, false));
-        assert_eq!(plan.steps[second].status, crate::history::AgentPlanStepStatus::Failed);
+        assert_eq!(
+            plan.steps[second].status,
+            crate::history::AgentPlanStepStatus::Failed
+        );
         assert_eq!(start_plan_step(&mut plan, "Consultar lembrete"), None);
         assert_eq!(plan.outside_plan_actions, ["Consultar lembrete"]);
     }

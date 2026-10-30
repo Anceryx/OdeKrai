@@ -58,8 +58,10 @@ pub async fn undo_agent_action(
     confirm_modified: bool,
 ) -> Result<ActionResult, String> {
     crate::require_main(&caller)?;
-    if !matches!(descriptor.skill_id.as_str(), "wallpaper.restore" | "display.restore_brightness" | "theme.restore" | "files.restore")
-        || descriptor.state_id.is_empty()
+    if !matches!(
+        descriptor.skill_id.as_str(),
+        "wallpaper.restore" | "display.restore_brightness" | "theme.restore" | "files.restore"
+    ) || descriptor.state_id.is_empty()
         || descriptor.state_id.len() > 128
         || descriptor.state_id.chars().any(char::is_control)
     {
@@ -70,10 +72,24 @@ pub async fn undo_agent_action(
     let action = SimulatedAction::Productivity {
         skill_id: descriptor.skill_id.clone(),
         params: if is_file_restore {
-            let path = descriptor.path.as_deref().ok_or("O cartão não identifica o arquivo para restaurar.")?;
-            let (root, normalized) = skills::resolve_action_target(&app, &SimulatedAction::Productivity { skill_id: "files.restore".into(), params: serde_json::json!({"path":path,"state_id":state_id.clone(),"confirm_modified":confirm_modified}) }, true)?;
-            let SimulatedAction::Productivity { params, .. } = normalized else { unreachable!() };
-            let normalized_path = params["path"].as_str().ok_or("Caminho de restauração inválido.")?;
+            let path = descriptor
+                .path
+                .as_deref()
+                .ok_or("O cartão não identifica o arquivo para restaurar.")?;
+            let (root, normalized) = skills::resolve_action_target(
+                &app,
+                &SimulatedAction::Productivity {
+                    skill_id: "files.restore".into(),
+                    params: serde_json::json!({"path":path,"state_id":state_id.clone(),"confirm_modified":confirm_modified}),
+                },
+                true,
+            )?;
+            let SimulatedAction::Productivity { params, .. } = normalized else {
+                unreachable!()
+            };
+            let normalized_path = params["path"]
+                .as_str()
+                .ok_or("Caminho de restauração inválido.")?;
             let (_, changed) = workspace::inspect_file_undo(&root, &state_id, normalized_path)?;
             if changed && !confirm_modified {
                 return Ok(ActionResult { id: state_id, status: "confirmation_required".into(), message: "O arquivo foi alterado depois da ação. Confirme se quer restaurar mesmo assim; a versão atual será preservada em .history.".into(), result: None, undo_descriptor: None, confirmation_required: true });
@@ -83,7 +99,9 @@ pub async fn undo_agent_action(
             serde_json::json!({"history_id": state_id.clone()})
         },
     };
-    let result = dispatch::submit_simulated_action_inner(app.clone(), state, ActionRequest { action }).await?;
+    let result =
+        dispatch::submit_simulated_action_inner(app.clone(), state, ActionRequest { action })
+            .await?;
     if result.status == "completed" {
         crate::history::clear_undo_descriptor_for_state(&app, &state_id)?;
     }
