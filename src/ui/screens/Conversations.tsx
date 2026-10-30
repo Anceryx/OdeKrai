@@ -65,6 +65,7 @@ export function ConversationsScreen({
   agentAwaitingApproval,
   agentActionCards,
   onReviewApproval,
+  onUndo,
   onOpenArtifact,
   onRevealArtifact,
   onToggleAgent,
@@ -113,6 +114,7 @@ export function ConversationsScreen({
   agentAwaitingApproval: boolean;
   agentActionCards: AgentActionCardData[];
   onReviewApproval: () => void;
+  onUndo: (action: AgentActionCardData) => void;
   onOpenArtifact: (path: string) => void;
   onRevealArtifact: (path: string) => void;
   onToggleAgent: (enabled: boolean) => void;
@@ -777,6 +779,7 @@ export function ConversationsScreen({
                   onReviewApproval={onReviewApproval}
                   onOpenArtifact={onOpenArtifact}
                   onRevealArtifact={onRevealArtifact}
+                  onUndo={() => onUndo(action)}
                 />
               ))}
               {busy && !agentAwaitingApproval && (

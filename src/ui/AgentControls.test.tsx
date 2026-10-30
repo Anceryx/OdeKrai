@@ -61,6 +61,28 @@ describe('controles e cartões do agente', () => {
     expect(onReview).not.toHaveBeenCalled();
   });
 
+  it('só mostra desfazer quando o resultado tem descritor reversível', () => {
+    const descriptor = {
+      skillId: 'theme.restore',
+      stateId: 'op-123',
+      label: 'Restaurar tema anterior',
+    };
+    const reversible = renderToStaticMarkup(
+      <AgentActionCard
+        action={action('Concluída', { undoDescriptor: descriptor })}
+        onUndo={() => undefined}
+      />,
+    );
+    const irreversible = renderToStaticMarkup(
+      <AgentActionCard
+        action={action('Concluída', { skillId: 'discord.send' })}
+        onUndo={() => undefined}
+      />,
+    );
+    expect(reversible).toContain('Desfazer');
+    expect(irreversible).not.toContain('Desfazer');
+  });
+
   it('renderiza prévia como texto, detalhes, timeline e dado externo não confiável', () => {
     const markup = renderToStaticMarkup(
       <AgentActionCard

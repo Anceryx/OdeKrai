@@ -163,6 +163,12 @@ function MainApp() {
   const [agentErrorDetails, setAgentErrorDetails] = useState('');
   const [agentAwaitingApproval, setAgentAwaitingApproval] = useState(false);
   const [agentActionCards, setAgentActionCards] = useState<AgentActionCardData[]>([]);
+  const [undoToast, setUndoToast] = useState<{ cardId: string } | null>(null);
+  useEffect(() => {
+    if (!undoToast) return;
+    const timer = window.setTimeout(() => setUndoToast(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [undoToast]);
   const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
   const [homeSkills, setHomeSkills] = useState<CatalogSkill[] | null>(null);
   const [todayEvents, setTodayEvents] = useState<HomeEvent[]>([]);
@@ -750,6 +756,9 @@ function MainApp() {
               const next = items.filter((item) => item.id !== event.card!.id);
               return [...next, event.card!].slice(-100);
             });
+            if (event.card.status === 'Concluída' && event.card.undoDescriptor) {
+              setUndoToast({ cardId: event.card.id });
+            }
             setAgentAwaitingApproval(event.card.status === 'Aguardando aprovação');
           } else if (event.type === 'awaitingApproval') {
             setAgentAwaitingApproval(true);
@@ -1346,6 +1355,42 @@ function MainApp() {
                   setToast('Não foi possível abrir a janela de aprovação.'),
                 )
               }
+              onUndo={(action) => {
+                const descriptor = action.undoDescriptor;
+                if (!descriptor) return;
+                const requestUndo = (confirmModified: boolean) =>
+                  invoke<{ message: string; confirmationRequired: boolean; status: string }>(
+                    'undo_agent_action',
+                    { descriptor, confirmModified },
+                  )
+                    .then((result) => {
+                      if (result.confirmationRequired) {
+                        if (window.confirm(result.message)) requestUndo(true);
+                        return;
+                      }
+                      setAgentActionCards((items) =>
+                        items.map((item) =>
+                          item.id === action.id
+                            ? {
+                                ...item,
+                                undoDescriptor: null,
+                                resultSummary: `${item.resultSummary ?? ''}\n${result.message}`,
+                              }
+                            : item,
+                        ),
+                      );
+                      setUndoToast(null);
+                      setToast(result.message);
+                    })
+                    .catch((error) =>
+                      setToast(
+                        error instanceof Error
+                          ? error.message
+                          : 'Não foi possível desfazer a ação.',
+                      ),
+                    );
+                void requestUndo(false);
+              }}
               onOpenArtifact={(path) =>
                 void invoke('open_agent_artifact', { path }).catch((error) =>
                   setToast(
@@ -1463,6 +1508,50 @@ function MainApp() {
       {toast && (
         <div className="toast" role="status">
           {toast}
+        </div>
+      )}
+      {undoToast && (
+        <div className="toast" role="status">
+          Ação reversível concluída.
+          <button
+            type="button"
+            onClick={() => {
+              const action = agentActionCards.find((item) => item.id === undoToast.cardId);
+              if (!action?.undoDescriptor) return;
+              const requestUndo = (confirmModified: boolean) =>
+                invoke<{ message: string; confirmationRequired: boolean; status: string }>(
+                  'undo_agent_action',
+                  { descriptor: action.undoDescriptor, confirmModified },
+                )
+                  .then((result) => {
+                    if (result.confirmationRequired) {
+                      if (window.confirm(result.message)) requestUndo(true);
+                      return;
+                    }
+                    setAgentActionCards((items) =>
+                      items.map((item) =>
+                        item.id === action.id
+                          ? {
+                              ...item,
+                              undoDescriptor: null,
+                              resultSummary: `${item.resultSummary ?? ''}\n${result.message}`,
+                            }
+                          : item,
+                      ),
+                    );
+                    setUndoToast(null);
+                    setToast(result.message);
+                  })
+                  .catch((error) =>
+                    setToast(
+                      error instanceof Error ? error.message : 'Não foi possível desfazer a ação.',
+                    ),
+                  );
+              void requestUndo(false);
+            }}
+          >
+            Desfazer
+          </button>
         </div>
       )}
       <SettingsModal

@@ -16,6 +16,12 @@ import {
 import { RiskBadge } from './RiskBadge';
 
 export type AgentArtifact = { path: string; kind: string };
+export type UndoDescriptor = {
+  skillId: string;
+  stateId: string;
+  path?: string | null;
+  label: string;
+};
 export type AgentTimelineEntry = {
   label: string;
   status: string;
@@ -39,6 +45,7 @@ export type AgentActionCardData = {
   durationMs?: number | null;
   approvalExpiresAt?: number | null;
   untrustedResult?: boolean;
+  undoDescriptor?: UndoDescriptor | null;
   createdAt?: number;
 };
 
@@ -114,6 +121,7 @@ export function AgentActionCard({
   onReviewApproval,
   onOpenArtifact,
   onRevealArtifact,
+  onUndo,
 }: {
   action: AgentActionCardData;
   running?: boolean;
@@ -121,6 +129,7 @@ export function AgentActionCard({
   onReviewApproval?: () => void;
   onOpenArtifact?: (path: string) => void;
   onRevealArtifact?: (path: string) => void;
+  onUndo?: (descriptor: UndoDescriptor) => void;
 }) {
   const state = getAgentCardState(action);
   const [now, setNow] = useState(Date.now());
@@ -180,6 +189,15 @@ export function AgentActionCard({
           {action.untrustedResult && <strong>Resultado externo · dado não confiável. </strong>}
           {action.resultSummary}
         </p>
+      )}
+      {action.undoDescriptor && onUndo && (
+        <button
+          type="button"
+          className="agent-undo-button"
+          onClick={() => onUndo(action.undoDescriptor!)}
+        >
+          Desfazer
+        </button>
       )}
       <dl>
         <div>
