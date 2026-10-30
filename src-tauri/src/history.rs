@@ -714,7 +714,7 @@ pub async fn list_conversations(
 fn read_conversations(db: &Connection) -> Result<Vec<Conversation>, String> {
     let mut stmt = db
         .prepare(
-            "SELECT c.id, c.title, c.created_at, COALESCE((SELECT substr(content, 1, 240) FROM messages WHERE conversation_id = c.id ORDER BY id DESC LIMIT 1), ''), c.provider_id, c.model, c.agent_enabled FROM conversations c ORDER BY c.created_at DESC, c.rowid DESC LIMIT 100",
+            "SELECT c.id, c.title, c.created_at, COALESCE((SELECT substr(content, 1, 240) FROM messages WHERE conversation_id = c.id ORDER BY id DESC LIMIT 1), ''), c.provider_id, c.model, c.agent_enabled FROM conversations c ORDER BY COALESCE((SELECT MAX(id) FROM messages WHERE conversation_id = c.id), 0) DESC, c.created_at DESC, c.rowid DESC LIMIT 100",
         )
         .map_err(|_| "Não foi possível ler o histórico local.".to_string())?;
     let rows = stmt
@@ -1094,6 +1094,24 @@ mod tests {
         assert_eq!(items[0].preview, "");
         assert_eq!(items[0].provider_id, "");
         assert_eq!(items[0].model, "");
+    }
+
+    #[test]
+    fn conversation_list_sorts_by_latest_message_activity() {
+        let db = Connection::open_in_memory().unwrap();
+        init_schema(&db).unwrap();
+        db.execute_batch(
+            "INSERT INTO conversations (id, title, created_at) VALUES
+                ('older-active', 'Mais ativa', 10),
+                ('newer-idle', 'Mais nova', 20);
+             INSERT INTO messages (conversation_id, role, content, created_at)
+                VALUES ('older-active', 'user', 'Retomada recente', 30);",
+        )
+        .unwrap();
+
+        let items = read_conversations(&db).unwrap();
+        assert_eq!(items[0].id, "older-active");
+        assert_eq!(items[1].id, "newer-idle");
     }
 
     #[test]

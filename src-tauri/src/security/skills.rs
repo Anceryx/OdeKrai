@@ -1177,6 +1177,19 @@ pub fn get_skills(
 }
 
 #[tauri::command]
+pub fn get_home_reminder_count(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+) -> Result<usize, String> {
+    crate::require_main(&caller)?;
+    let enabled = is_skill_enabled(&app, "reminder.list")?;
+    if !skill_exposed_to_agent("reminder.list", enabled, false) {
+        return Ok(0);
+    }
+    crate::reminders::pending_count(&app)
+}
+
+#[tauri::command]
 pub fn set_skill_enabled(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,

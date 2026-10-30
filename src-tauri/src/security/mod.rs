@@ -69,6 +69,19 @@ pub fn get_pending_approval_count(
 }
 
 #[tauri::command]
+pub fn show_pending_approval_window(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    state: State<'_, SecurityState>,
+) -> Result<(), String> {
+    crate::require_main(&caller)?;
+    if dispatch::get_pending_approval_count_inner(state)? == 0 {
+        return Err("Não há aprovações pendentes.".into());
+    }
+    dispatch::open_approval(&app)
+}
+
+#[tauri::command]
 pub fn get_full_approval_preview(
     app: tauri::AppHandle,
     caller: tauri::WebviewWindow,

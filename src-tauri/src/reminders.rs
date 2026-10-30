@@ -175,6 +175,11 @@ fn list(connection: &Connection) -> Result<Vec<Reminder>, String> {
     Ok(reminders)
 }
 
+pub(crate) fn pending_count(app: &tauri::AppHandle) -> Result<usize, String> {
+    let connection = open(&database_path(app)?)?;
+    Ok(list(&connection)?.len())
+}
+
 fn cancel(connection: &Connection, id: &str) -> Result<(), String> {
     let changed = connection
         .execute(
