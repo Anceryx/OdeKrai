@@ -42,13 +42,17 @@ Para estados sem risco, usar `ui-badge--success`, `ui-badge--warning`, `ui-badge
 
 ## Modo de desempenho
 
-Definir `data-performance="on"` no elemento `<html>` ativa o modo de baixo custo visual: remove sombras e filtros, imagens de fundo em gradiente, animações de gradiente e translucidez em superfícies marcadas com `data-translucent`. O modo é opt-in e não altera preferências salvas nem a aparência padrão. Remover o atributo restaura o estilo usual.
+`AppSettings.performanceMode` guarda `automatic`, `enabled` ou `disabled`. Automático ativa com `prefers-reduced-motion`, até 8 GiB de RAM total ou até 4 núcleos lógicos, usando `get_hardware_profile`; perfil ausente não é interpretado como hardware fraco e a Configuração exibe o motivo. O modo calculado define `data-performance="on"` no `<html>` principal e é enviado à janela `pet` pelo evento `performance-mode-updated`. A janela do pet recebe o valor e o aplica ao próprio `<html>`.
+
+Com `data-performance="on"`, o CSS remove sombras, filtros, imagens de fundo e animações de gradiente/mascote. Superfícies marcadas como `data-translucent`, o fundo do modal e superfícies principais listadas em `styles.css` recebem cores opacas. O modal não se move. O modo muda a apresentação, não as capacidades disponíveis. Sem Tauri, Automático informa que não conseguiu consultar o perfil.
 
 ## Teclado e movimento
 
 No diálogo modal, o foco inicial vai para a pesquisa de configurações; a ordem de Tab segue o DOM, inclui o botão de fechar e os controles da seção, e permanece dentro do diálogo. `Escape` fecha e devolve o foco ao acionador. Em largura abaixo de 800 px, a navegação por seções usa uma lista suspensa rotulada. Controles interativos mantêm indicação `:focus-visible`.
 
-As animações devem respeitar `prefers-reduced-motion`; o CSS global desliga animações e transições nessa preferência. O modo `data-performance="on"` aplica as reduções visuais e remove os efeitos de maior custo listados acima. A validação automatizada cobre os contratos de foco, rótulos, tokens, contraste e seletores; a inspeção no WebView2 continua manual.
+As animações devem respeitar `prefers-reduced-motion`; o CSS global desliga animações e transições nessa preferência. O modo `data-performance="on"` aplica as reduções visuais e remove os efeitos de maior custo listados acima. O Início usa o campo compartilhado: Enter envia, Shift+Enter insere linha, e as sugestões só preenchem o campo para revisão. A paleta usa combobox/listbox e `aria-activedescendant`; setas mudam a opção ativa, Enter executa e Escape fecha o modal. O painel de Atividade limita Tab/Shift+Tab, Escape fecha e o foco volta ao acionador.
+
+Os testes automatizados verificam rótulos e papéis dos componentes, navegação por teclado, retorno de foco do modal/painel, combobox da paleta, regras de movimento, contraste dos pares de tokens e renderização textual de dados não confiáveis. O teste de contraste não substitui uma auditoria de cada combinação de cor da interface. Ordem de foco, contraste percebido, escalas e comportamento no WebView2 ainda precisam de inspeção manual no Windows, seguindo [`WINDOWS-MANUAL-VALIDATION.md`](WINDOWS-MANUAL-VALIDATION.md).
 
 ## Verificação
 

@@ -1,5 +1,13 @@
 # Estado da implementação
 
+## L12 — auditoria de interface e limpeza
+
+- Rastreamento local confirmou os componentes atuais do Início e os testes de regressão; removidos apenas `.home-footer` e três regras CSS específicas do Início sem referências nos arquivos TSX. O componente de tela não foi descartado: continua como destino interno da rota Início.
+- A sequência de commits deste ramo cobre L0 e L2–L11: Design System (`0203b5a`), Início (`c5a8ace`), cartões (`e903124`, `bd407a3`), desfazer (`50c2846`, `83efcae`), planos (`e1dbcaf`, `83b5ba2`), painel (`bada860`), paleta (`ab2f1ac`), mascote (`488b789`), Compacto (`eeaa545`), primeiro uso (`7ea4896`), novidades (`94ff788`) e Desempenho (`883280c`). L1 foi pulado: não há prompt com requisitos nem fase nomeada correspondente no histórico disponível; não é possível implementá-lo ou validá-lo sem inventar seu escopo.
+- Auditoria estática e testes existentes cobrem ordem de foco/modal/painel, rótulos, combobox, redução de movimento, dados externos como texto, ausência de decisões de aprovação fora da janela nativa e validação nativa de caminhos. Contraste automatizado cobre pares de tokens principais, não cada combinação de pixels da UI.
+- Bundle JS+CSS medido antes da limpeza: 881.681 bytes (861,0 KiB); depois da limpeza: 881.282 bytes (860,6 KiB), redução de 399 bytes (0,39 KiB). IPC total por 60 s e CPU em idle antes/depois dependem do executável instrumentado no Windows e permanecem pendentes.
+- O roteiro para 1000×600 e 1250×700 está em [`WINDOWS-MANUAL-VALIDATION.md`](WINDOWS-MANUAL-VALIDATION.md). A validação visual, foco, DPI e medições no exe seguem pendentes.
+
 ## L11 — modo Desempenho
 
 - A preferência é Automático, Ligado ou Desligado. Automático ativa com `prefers-reduced-motion` ou com até 8 GiB de RAM total ou no máximo 4 núcleos lógicos; falhas de consulta não presumem hardware fraco e a interface informa o motivo.

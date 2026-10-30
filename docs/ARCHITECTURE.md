@@ -46,7 +46,9 @@ retoma a ação após receber o canal.
 
 ## Aplicativo
 
-O frontend usa React + TypeScript + Vite. `src/core/` mantém regras sem dependência da apresentação; `src/ui/` contém o Hub e a janela única `pet`. Na abertura, o Tauri cria somente `main`; a janela `pet` é criada sob demanda e opera nos modos Ilha ou Livre. A janela de aprovação continua independente. Comandos Rust controlam posição, tamanho, visibilidade e prioridade; eventos conectam o chat à FSM do pet.
+O frontend usa React + TypeScript + Vite. `src/core/` mantém regras sem dependência da apresentação; `src/ui/` contém o Hub e a janela única `pet`. Na abertura, o Tauri cria somente `main`; a janela `pet` é criada sob demanda e opera nos modos Ilha/Compacto ou Livre. O modo Compacto expande a janela existente, não cria outro WebView. A janela de aprovação continua independente. Comandos Rust controlam posição, tamanho, visibilidade e prioridade; eventos conectam o chat à FSM do pet.
+
+O Início (`Overview`) combina o campo compartilhado `MessageComposer`, sugestões puras de `core/home`, checklist de configuração e retomada de conversas. Sugestões são inseridas como rascunho e nunca enviadas automaticamente. Ctrl+K abre `CommandPalette`; o gatilho de Atividade abre `ActivitySidePanel` somente quando solicitado. O modo Desempenho aplica uma preferência persistida ao `<html>` principal e sincroniza o mesmo estado para a janela do pet.
 
 ## Pet 2D
 
@@ -56,7 +58,7 @@ frontend e no Rust; nomes de arquivo aceitos são apenas nomes simples `.png`. E
 convertidos em animações CSS, que ficam estáticas quando a preferência do aplicativo ou do sistema
 reduz movimento está ativa.
 
-O componente `PetSprite` renderiza o PNG selecionado e animações CSS associadas aos estados da FSM. Ele é usado na Visão geral, no chat, na prévia do Assistente e nas janelas auxiliares. A preferência `reduzir animações` e `prefers-reduced-motion` mantêm o sprite estático. Three.js é usado somente pelo script de desenvolvimento `scripts/render-pets.mjs`; não é importado pelo frontend nem pelo runtime Tauri. Modelos proprietários não são necessários para compilar ou executar o aplicativo.
+O componente `PetSprite` renderiza o PNG selecionado e animações CSS associadas aos estados da FSM. Ele é usado no Início, no chat, nos estados vazios, na prévia do Assistente e nas janelas auxiliares. A preferência `reduzir animações`, `prefers-reduced-motion` e o modo Desempenho podem manter o sprite estático. Three.js é usado somente pelo script de desenvolvimento `scripts/render-pets.mjs`; não é importado pelo frontend nem pelo runtime Tauri. Modelos proprietários não são necessários para compilar ou executar o aplicativo.
 
 ## Ilha, áudio e armazenamento
 
@@ -75,7 +77,7 @@ A janela `pet` usa transparência sem região Win32 e não ignora eventos do pon
 
 ## Navegação e configurações
 
-`src/ui/hooks/useNavigation.ts` concentra a navegação. A barra lateral abre Visão geral, Conversas, Agenda, Habilidades e Conectores de IA. As seções legadas continuam registradas para telas completas e para os acionadores existentes; quando o destino tem correspondência, `resolveLegacySettingsNavigation` abre Configurações sobre a página atual. Os mapeamentos `agent`, `companion`, `settings`, `permissions`, `activity` e `computer` apontam, respectivamente, para Perfil e memória, Assistente e mascote, Geral, Privacidade e permissões, Atividade e Seu computador.
+`src/ui/hooks/useNavigation.ts` concentra a navegação. A barra lateral abre Início, Conversas, Agenda, Habilidades e Conectores de IA. As seções legadas continuam registradas para telas completas e para os acionadores existentes; quando o destino tem correspondência, `resolveLegacySettingsNavigation` abre Configurações sobre a página atual. Os mapeamentos `agent`, `companion`, `settings`, `permissions`, `activity` e `computer` apontam, respectivamente, para Perfil e memória, Assistente e mascote, Geral, Privacidade e permissões, Atividade e Seu computador.
 
 `SettingsModal` usa os componentes existentes das telas. `Modal` mantém o conteúdo de fundo montado e inerte enquanto está aberto, confina o foco, bloqueia a rolagem do documento e restaura o foco ao fechar; cada tela continua usando o estado do `App`, sem uma segunda cópia de configurações. A busca é alimentada por `src/core/settings-navigation.ts`. Os destinos legados têm testes unitários; dimensões, escala, aparência e comportamento no WebView2 exigem validação no executável Windows.
 
@@ -103,6 +105,14 @@ O plugin Tauri `global-shortcut` registra o atalho no processo nativo. O kill sw
 - A nitidez dos sprites, as animações, o recorte dos avatares e o hit-testing das janelas auxiliares precisam de validação visual no Windows.
 - Escalas DPI, monitores adicionais, reconexão, fullscreen e hit-testing ainda precisam de validação manual.
 - Nenhum áudio Kenney foi integrado.
+
+## Acessibilidade e fronteira de confiança da interface
+
+`Modal` fornece nome acessível, foco inicial, contenção de Tab/Shift+Tab, fechamento por Escape e restauração do foco. `CommandPalette` segue combobox/listbox com `aria-activedescendant`; o painel lateral tem as próprias regras de foco e não oferece decisões de aprovação. Cartões do agente também não oferecem aprovar/negar: apenas encaminham “Revisar” à janela nativa. A tela `SecurityCenter` resolve a decisão via `approval_respond`, validada no Rust.
+
+Resultados externos passam por `core/markdown.ts`, que transforma uma gramática Markdown limitada em nós tipados e rejeita esquemas de URL não permitidos; o React renderiza os valores como texto e não usa `dangerouslySetInnerHTML`. Artefatos do cartão passam por `isSafeArtifactPath` no frontend e pelos comandos `system.open_path`/`system.reveal_in_folder` no Rust, que validam extensões e pastas permitidas antes do plugin opener. Essa checagem na UI é conveniência; a autorização efetiva é nativa.
+
+Os testes de `AgentControls`, `ActivitySidePanel`, `command-palette`, `markdown`, `Modal` e `Overview` cobrem as respectivas garantias de interface. A inspeção final de tabulação, contraste e apresentação ainda requer o executável Windows; o roteiro está em [`WINDOWS-MANUAL-VALIDATION.md`](WINDOWS-MANUAL-VALIDATION.md).
 
 ## Inicialização do painel
 

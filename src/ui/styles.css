@@ -1456,18 +1456,6 @@ select:focus-visible {
   color: #fdba74;
   margin-left: 4px;
 }
-.home-footer {
-  display: flex;
-  justify-content: space-between;
-  margin: 20px 0 0;
-  color: #a0a0a8;
-  font: 10px var(--font-sans);
-  letter-spacing: 0.7px;
-}
-.home-footer b {
-  color: #d66516;
-  font-weight: 400;
-}
 .subpage {
   padding-top: 37px;
   max-width: 1100px;
@@ -5618,19 +5606,6 @@ html.island-window-html {
   min-height: 26px;
   max-height: 120px;
   font-size: 13px;
-}
-.overview-page .home-message-composer {
-  width: 100%;
-  margin-top: 0;
-  box-shadow: none;
-}
-.overview-page .home-message-composer textarea {
-  min-height: 50px;
-  font-size: var(--font-size-14);
-}
-.overview-page .home-pet {
-  width: 100px;
-  height: 100px;
 }
 .composer-bottom > span {
   font-size: 10px;
