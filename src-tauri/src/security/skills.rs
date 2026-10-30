@@ -15,6 +15,7 @@ pub enum ResultTrust {
     Untrusted,
 }
 
+#[derive(Clone)]
 pub struct Skill {
     pub id: &'static str,
     pub name: &'static str,

@@ -76,7 +76,7 @@ pub(super) fn action_metadata(
         _ => None,
     };
     let tool_name = match action {
-        SimulatedAction::Productivity { skill_id, params } => match skill_id.as_str() {
+        SimulatedAction::Productivity { skill_id, .. } => match skill_id.as_str() {
             "plan.propose" => "plan.propose",
             "files.write" | "files.append" | "files.restore" | "files.mkdir" | "files.copy"
             | "files.move" | "files.rename" | "files.delete" | "files.apply_plan" => skill_id,

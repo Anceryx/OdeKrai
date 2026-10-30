@@ -279,6 +279,7 @@ impl AgentBackend for RuntimeBackend<'_> {
                 .active_skills
                 .iter()
                 .find(|skill| skill.id == call.name)
+                .cloned()
                 .ok_or_else(|| "A habilidade não está ativa; chamada recusada.".to_string())?;
             let conversation_id = self.conversation_id.clone();
             let plan_step_index = if skill.id == "plan.propose" {
