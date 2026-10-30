@@ -139,7 +139,7 @@ mod tray;
 mod web_fetch;
 mod window_sizing;
 
-fn require_main(window: &tauri::WebviewWindow) -> Result<(), String> {
+pub(crate) fn require_main(window: &tauri::WebviewWindow) -> Result<(), String> {
     require_caller(window, &["main"])
 }
 
@@ -1088,6 +1088,7 @@ pub fn run() -> Result<(), tauri::Error> {
             security::skills::get_skills,
             security::skills::get_skill_family_summaries,
             security::skills::get_home_reminder_count,
+            reminders::get_upcoming_reminders,
             security::skills::get_public_catalog,
             security::skills::set_skill_enabled,
             security::skills::set_skill_group_enabled,

@@ -50,6 +50,8 @@ O frontend usa React + TypeScript + Vite. `src/core/` mantém regras sem depend�
 
 O Início (`Overview`) combina o campo compartilhado `MessageComposer`, sugestões puras de `core/home`, checklist de configuração e retomada de conversas. Sugestões são inseridas como rascunho e nunca enviadas automaticamente. Ctrl+K abre `CommandPalette`; o gatilho de Atividade abre `ActivitySidePanel` somente quando solicitado. O modo Desempenho aplica uma preferência persistida ao `<html>` principal e sincroniza o mesmo estado para a janela do pet.
 
+Com o painel lateral aberto e a habilidade `reminder.list` ativa, o comando assíncrono `get_upcoming_reminders` consulta no SQLite os próximos lembretes (máximo de 20, até 168 horas). Retorna apenas título truncado, horário local com fuso e status; notas nunca são expostas. O limite do painel é 24 horas.
+
 ## Pet 2D
 
 O pet padrão é o sprite CSS de `assets/pets/kenney-mini-characters/`, escolhido pelo usuário e
