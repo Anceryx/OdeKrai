@@ -960,7 +960,11 @@ pub fn model_tools(app: &tauri::AppHandle) -> Result<Vec<crate::providers::ToolD
         .collect())
 }
 
-pub(crate) fn skill_exposed_to_agent(skill_id: &str, enabled: bool, discord_configured: bool) -> bool {
+pub(crate) fn skill_exposed_to_agent(
+    skill_id: &str,
+    enabled: bool,
+    discord_configured: bool,
+) -> bool {
     skill_available(skill_id) && enabled && (skill_id != "discord.send" || discord_configured)
 }
 

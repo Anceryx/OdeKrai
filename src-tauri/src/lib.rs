@@ -737,7 +737,9 @@ async fn show_pet_quick_command(app: &tauri::AppHandle) -> Result<(), String> {
     let window = ensure_pet_window(app).await?;
     if !window.is_visible().unwrap_or(false) {
         restore_pet_position(app, &window)?;
-        window.show().map_err(|_| "Não foi possível mostrar a ilha para o comando rápido.".to_string())?;
+        window
+            .show()
+            .map_err(|_| "Não foi possível mostrar a ilha para o comando rápido.".to_string())?;
         let _ = app.emit("pet-window-visibility", true);
     }
     let _ = app.emit("pet-quick-focus-request", ());

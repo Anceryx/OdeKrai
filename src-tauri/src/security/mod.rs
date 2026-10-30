@@ -741,7 +741,8 @@ pub async fn set_kill_shortcut(
     if shortcut.len() > 80 || shortcut.trim() != shortcut || !shortcut.contains('+') {
         return Err("Formato de atalho inválido.".into());
     }
-    let parsed = shortcut.parse::<tauri_plugin_global_shortcut::Shortcut>()
+    let parsed = shortcut
+        .parse::<tauri_plugin_global_shortcut::Shortcut>()
         .map_err(|_| "Formato de atalho inválido.".to_string())?;
     let parsed_id = parsed.id();
     let previous = db_setting(&app, "shortcut")?;
@@ -791,10 +792,16 @@ pub async fn get_island_quick_shortcut(
 ) -> Result<IslandQuickShortcutSettings, String> {
     super::require_main(&caller)?;
     let state = app.state::<SecurityState>();
-    let error = state.quick_shortcut_error.lock().map_err(|_| "Estado do atalho indisponível.")?.clone();
+    let error = state
+        .quick_shortcut_error
+        .lock()
+        .map_err(|_| "Estado do atalho indisponível.")?
+        .clone();
     Ok(IslandQuickShortcutSettings {
-        shortcut: db_setting(&app, "island_quick_shortcut").unwrap_or_else(|_| "Ctrl+Alt+Space".into()),
-        enabled: db_setting(&app, "island_quick_shortcut_enabled").is_ok_and(|value| value == "true"),
+        shortcut: db_setting(&app, "island_quick_shortcut")
+            .unwrap_or_else(|_| "Ctrl+Alt+Space".into()),
+        enabled: db_setting(&app, "island_quick_shortcut_enabled")
+            .is_ok_and(|value| value == "true"),
         error,
     })
 }
