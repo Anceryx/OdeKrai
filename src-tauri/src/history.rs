@@ -57,6 +57,31 @@ pub struct UndoDescriptor {
 }
 
 #[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentPlanStepStatus {
+    Pending,
+    InProgress,
+    Completed,
+    Failed,
+}
+
+#[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentPlanStep {
+    pub description: String,
+    pub status: AgentPlanStepStatus,
+}
+
+#[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentPlan {
+    pub title: String,
+    pub steps: Vec<AgentPlanStep>,
+    #[serde(default)]
+    pub outside_plan_actions: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentActionCard {
     pub id: String,
@@ -82,6 +107,8 @@ pub struct AgentActionCard {
     pub untrusted_result: bool,
     #[serde(default)]
     pub undo_descriptor: Option<UndoDescriptor>,
+    #[serde(default)]
+    pub plan: Option<AgentPlan>,
     pub created_at: i64,
 }
 
@@ -109,6 +136,7 @@ pub(crate) fn save_agent_action_card(
         || card.artifacts.len() > 32
         || card.timeline.len() > 128
         || card.undo_descriptor.as_ref().is_some_and(|undo| undo.skill_id.len() > 64 || undo.state_id.len() > 128 || undo.label.len() > 160 || undo.path.as_ref().is_some_and(|path| path.len() > 4096 || path.chars().any(char::is_control)))
+        || card.plan.as_ref().is_some_and(|plan| plan.title.is_empty() || plan.title.chars().count() > 120 || plan.steps.is_empty() || plan.steps.len() > 12 || plan.outside_plan_actions.len() > 8 || plan.steps.iter().any(|step| step.description.is_empty() || step.description.chars().count() > 240) || plan.outside_plan_actions.iter().any(|action| action.is_empty() || action.chars().count() > 120))
         || card.artifacts.iter().any(|artifact| artifact.path.is_empty() || artifact.path.len() > 32_767 || artifact.kind.len() > 40 || artifact.path.chars().any(char::is_control))
         || card.timeline.iter().any(|entry| entry.label.len() > 160 || entry.status.len() > 80 || entry.label.chars().any(char::is_control) || entry.status.chars().any(char::is_control))
         || card.preview.as_ref().is_some_and(|preview| preview.chars().any(|character| character.is_control() && character != '\n' && character != '\t'))
@@ -126,8 +154,8 @@ pub(crate) fn save_agent_action_card(
         return Err("Cartão de ação inválido.".into());
     }
     let changed = database(app)?.execute(
-        "INSERT INTO agent_action_cards(conversation_id,id,skill_id,title,risk,decision,status,summary,result_summary,diff,preview,artifacts,timeline,duration_ms,approval_expires_at,untrusted_result,undo_descriptor) SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17 WHERE EXISTS(SELECT 1 FROM conversations WHERE id=?1) ON CONFLICT(conversation_id,id) DO UPDATE SET decision=excluded.decision,status=excluded.status,result_summary=excluded.result_summary,diff=excluded.diff,preview=excluded.preview,artifacts=excluded.artifacts,timeline=excluded.timeline,duration_ms=excluded.duration_ms,approval_expires_at=excluded.approval_expires_at,untrusted_result=excluded.untrusted_result,undo_descriptor=excluded.undo_descriptor",
-        params![conversation_id,card.id,card.skill_id,card.title,card.risk,card.decision,card.status,card.summary,card.result_summary,card.diff,card.preview,serde_json::to_string(&card.artifacts).unwrap_or_else(|_| "[]".into()),serde_json::to_string(&card.timeline).unwrap_or_else(|_| "[]".into()),card.duration_ms,card.approval_expires_at,card.untrusted_result,card.undo_descriptor.as_ref().and_then(|undo| serde_json::to_string(undo).ok())],
+        "INSERT INTO agent_action_cards(conversation_id,id,skill_id,title,risk,decision,status,summary,result_summary,diff,preview,artifacts,timeline,duration_ms,approval_expires_at,untrusted_result,undo_descriptor,plan) SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18 WHERE EXISTS(SELECT 1 FROM conversations WHERE id=?1) ON CONFLICT(conversation_id,id) DO UPDATE SET decision=excluded.decision,status=excluded.status,result_summary=excluded.result_summary,diff=excluded.diff,preview=excluded.preview,artifacts=excluded.artifacts,timeline=excluded.timeline,duration_ms=excluded.duration_ms,approval_expires_at=excluded.approval_expires_at,untrusted_result=excluded.untrusted_result,undo_descriptor=excluded.undo_descriptor,plan=excluded.plan",
+        params![conversation_id,card.id,card.skill_id,card.title,card.risk,card.decision,card.status,card.summary,card.result_summary,card.diff,card.preview,serde_json::to_string(&card.artifacts).unwrap_or_else(|_| "[]".into()),serde_json::to_string(&card.timeline).unwrap_or_else(|_| "[]".into()),card.duration_ms,card.approval_expires_at,card.untrusted_result,card.undo_descriptor.as_ref().and_then(|undo| serde_json::to_string(undo).ok()),card.plan.as_ref().and_then(|plan| serde_json::to_string(plan).ok())],
     ).map_err(|_| "Não foi possível salvar o cartão da ação.".to_string())?;
     if changed == 1 {
         Ok(())
@@ -158,7 +186,7 @@ pub fn load_agent_action_cards(
     }
     let db = database(&app)?;
     let mut statement = db
-        .prepare("SELECT id,skill_id,title,risk,decision,status,summary,result_summary,diff,created_at,preview,artifacts,timeline,duration_ms,approval_expires_at,untrusted_result,undo_descriptor FROM agent_action_cards WHERE conversation_id=?1 ORDER BY created_at,id LIMIT 200")
+        .prepare("SELECT id,skill_id,title,risk,decision,status,summary,result_summary,diff,created_at,preview,artifacts,timeline,duration_ms,approval_expires_at,untrusted_result,undo_descriptor,plan FROM agent_action_cards WHERE conversation_id=?1 ORDER BY created_at,id LIMIT 200")
         .map_err(|_| "Não foi possível ler as ações da conversa.".to_string())?;
     let rows = statement
         .query_map([conversation_id], |row| {
@@ -180,6 +208,7 @@ pub fn load_agent_action_cards(
                 approval_expires_at: row.get(14)?,
                 untrusted_result: row.get(15).unwrap_or(false),
                 undo_descriptor: row.get::<_, Option<String>>(16).ok().flatten().and_then(|value| serde_json::from_str(&value).ok()),
+                plan: row.get::<_, Option<String>>(17).ok().flatten().and_then(|value| serde_json::from_str(&value).ok()),
             })
         })
         .map_err(|_| "Não foi possível ler as ações da conversa.".to_string())?;
@@ -205,7 +234,7 @@ fn init_schema(db: &Connection) -> Result<(), String> {
         CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()), provider_id TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '', agent_enabled INTEGER NOT NULL DEFAULT 0 CHECK(agent_enabled IN (0,1)), provider_targets TEXT NOT NULL DEFAULT '[]');
         CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('user','assistant')), content TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
         CREATE TABLE IF NOT EXISTS agent_messages (id INTEGER PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('tool_call','tool_result')), skill_id TEXT NOT NULL, audit_id TEXT, content TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));
-        CREATE TABLE IF NOT EXISTS agent_action_cards (conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, id TEXT NOT NULL, skill_id TEXT NOT NULL, title TEXT NOT NULL, risk TEXT NOT NULL, decision TEXT NOT NULL, status TEXT NOT NULL, summary TEXT NOT NULL, result_summary TEXT NOT NULL DEFAULT '', diff TEXT, created_at INTEGER NOT NULL DEFAULT (unixepoch()), preview TEXT, artifacts TEXT NOT NULL DEFAULT '[]', timeline TEXT NOT NULL DEFAULT '[]', duration_ms INTEGER, approval_expires_at INTEGER, untrusted_result INTEGER NOT NULL DEFAULT 0, undo_descriptor TEXT, PRIMARY KEY(conversation_id,id));
+        CREATE TABLE IF NOT EXISTS agent_action_cards (conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, id TEXT NOT NULL, skill_id TEXT NOT NULL, title TEXT NOT NULL, risk TEXT NOT NULL, decision TEXT NOT NULL, status TEXT NOT NULL, summary TEXT NOT NULL, result_summary TEXT NOT NULL DEFAULT '', diff TEXT, created_at INTEGER NOT NULL DEFAULT (unixepoch()), preview TEXT, artifacts TEXT NOT NULL DEFAULT '[]', timeline TEXT NOT NULL DEFAULT '[]', duration_ms INTEGER, approval_expires_at INTEGER, untrusted_result INTEGER NOT NULL DEFAULT 0, undo_descriptor TEXT, plan TEXT, PRIMARY KEY(conversation_id,id));
         CREATE INDEX IF NOT EXISTS messages_conversation ON messages(conversation_id, id);
         CREATE TABLE IF NOT EXISTS pet_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS provider_tool_support (
@@ -253,6 +282,7 @@ fn init_schema(db: &Connection) -> Result<(), String> {
         ("approval_expires_at", "INTEGER"),
         ("untrusted_result", "INTEGER NOT NULL DEFAULT 0"),
         ("undo_descriptor", "TEXT"),
+        ("plan", "TEXT"),
     ] {
         let exists: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('agent_action_cards') WHERE name = ?1)", [column], |row| row.get(0)).map_err(|_| "Não foi possível verificar os cartões de ação.".to_string())?;
         if !exists {
@@ -1060,18 +1090,22 @@ mod tests {
         assert!(legacy.timeline.is_empty());
         assert!(legacy.artifacts.is_empty());
         assert!(legacy.undo_descriptor.is_none());
+        assert!(legacy.plan.is_none());
         assert_eq!(legacy.status, "Concluída");
 
         let db = Connection::open_in_memory().unwrap();
         db.execute_batch("CREATE TABLE conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch())); CREATE TABLE agent_action_cards (conversation_id TEXT NOT NULL, id TEXT NOT NULL, skill_id TEXT NOT NULL, title TEXT NOT NULL, risk TEXT NOT NULL, decision TEXT NOT NULL, status TEXT NOT NULL, summary TEXT NOT NULL, result_summary TEXT NOT NULL DEFAULT '', diff TEXT, created_at INTEGER NOT NULL DEFAULT (unixepoch()), PRIMARY KEY(conversation_id,id)); INSERT INTO conversations(id,title) VALUES ('keep','Histórico'); INSERT INTO agent_action_cards(conversation_id,id,skill_id,title,risk,decision,status,summary,result_summary) VALUES ('keep','call-legacy','files.read','Ler arquivo','leitura','automática','Concluída','Resumo','Texto');").unwrap();
         init_schema(&db).unwrap();
-        let (status, artifacts, timeline, undo): (String, String, String, Option<String>) = db.query_row("SELECT status,artifacts,timeline,undo_descriptor FROM agent_action_cards WHERE id='call-legacy'", [], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?))).unwrap();
+        let (status, artifacts, timeline, undo, plan): (String, String, String, Option<String>, Option<String>) = db.query_row("SELECT status,artifacts,timeline,undo_descriptor,plan FROM agent_action_cards WHERE id='call-legacy'", [], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?))).unwrap();
         assert_eq!(status, "Concluída");
         assert_eq!(artifacts, "[]");
         assert_eq!(timeline, "[]");
         assert!(undo.is_none());
+        assert!(plan.is_none());
         let has_undo_column: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('agent_action_cards') WHERE name='undo_descriptor')", [], |row| row.get(0)).unwrap();
         assert!(has_undo_column);
+        let has_plan_column: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('agent_action_cards') WHERE name='plan')", [], |row| row.get(0)).unwrap();
+        assert!(has_plan_column);
     }
 
     #[test]

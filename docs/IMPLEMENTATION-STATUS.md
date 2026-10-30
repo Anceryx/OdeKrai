@@ -129,3 +129,7 @@ Resultados de alteração de papel de parede, brilho, tema, gravação/acréscim
 Para arquivos, o manifesto e a versão anterior ficam em `.history`. Se o conteúdo atual mudou, o aplicativo pede confirmação e preserva a versão modificada antes de restaurar; renomeações não sobrescrevem um arquivo que já exista no caminho original. Operações irreversíveis, inclusive mensagens e envio à Lixeira, não recebem descritor. Para arquivos enviados à Lixeira, a interface informa: “restaure pela Lixeira do Windows”.
 
 Testes Rust usam `SystemAdapter` simulado e pastas temporárias isoladas. Eles não alteram o computador real. A execução desses testes e a compilação Rust precisam ser repetidas em ambiente com Rust instalado; a validação visual e nativa no Windows continua pendente.
+
+## Planos informativos (L4)
+
+`plan.propose` valida e retorna um plano textual de até 12 etapas, sem executar ações. O texto é dado inerte; risco de leitura. O cartão guarda os passos e os atualiza somente quando chamadas reais de habilidades começam e terminam. Chamadas adicionais após todas as etapas serem consumidas são registradas como “Ação fora do plano”; isso é apenas informativo e não bloqueia nem autoriza ações. Cada habilidade continua passando pelo dispatcher, motor de políticas e aprovações usuais. Planos são persistidos em campo opcional para preservar cartões antigos. Não há execução automática. Testes de Rust foram adicionados; a validação visual e a execução Rust permanecem pendentes neste ambiente.

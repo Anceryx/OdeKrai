@@ -77,6 +77,7 @@ pub(super) fn action_metadata(
     };
     let tool_name = match action {
         SimulatedAction::Productivity { skill_id, params } => match skill_id.as_str() {
+            "plan.propose" => "plan.propose",
             "files.write" | "files.append" | "files.restore" | "files.mkdir" | "files.copy" | "files.move"
             | "files.rename" | "files.delete" | "files.apply_plan" => skill_id,
             "calendar.create_event" => "calendar.create_event",
@@ -132,7 +133,9 @@ fn is_workspace_skill(skill_id: &str) -> bool {
     skill_id.starts_with("files.")
         || matches!(
             skill_id,
-            "calendar.create_event"
+            // A proposta não acessa pasta; o contexto permite apenas sua leitura inofensiva.
+            "plan.propose"
+                | "calendar.create_event"
                 | "doc.create_markdown"
                 | "doc.create_text"
                 | "sheet.create_csv"
