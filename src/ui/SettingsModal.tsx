@@ -53,6 +53,8 @@ export function SettingsModal({
   onOpenPage,
   onOpenActivityFullPage,
   onAgentStatus,
+  releaseNotesUrl,
+  onOpenReleaseNotes,
   sharedAudit,
   requestedEntry,
 }: {
@@ -73,6 +75,8 @@ export function SettingsModal({
   onOpenPage: (page: Extract<Section, 'skills' | 'providers'>) => void;
   onOpenActivityFullPage: () => void;
   onAgentStatus: () => void;
+  releaseNotesUrl: string;
+  onOpenReleaseNotes: () => void;
   sharedAudit?: {
     entries: AuditEntry[];
     verified: boolean | null;
@@ -135,7 +139,12 @@ export function SettingsModal({
           />
         );
       case 'sobre':
-        return <AboutSettings />;
+        return (
+          <AboutSettings
+            releaseNotesUrl={releaseNotesUrl}
+            onOpenReleaseNotes={onOpenReleaseNotes}
+          />
+        );
       case 'perfil-memoria':
         return (
           <IdentityScreen

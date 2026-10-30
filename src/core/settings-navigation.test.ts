@@ -45,6 +45,9 @@ describe('navegação das configurações', () => {
   });
 
   it('filtra opções e seções pelo mesmo índice', () => {
+    expect(filterSettingsIndex('novidades').map((entry) => entry.anchor)).toContain(
+      'settings-updates',
+    );
     expect(filterSettingsIndex('microfone').map((entry) => entry.anchor)).toContain(
       'settings-audio',
     );

@@ -33,6 +33,12 @@ export const SETTINGS_INDEX: readonly SettingsIndexEntry[] = [
     anchor: 'settings-window',
   },
   {
+    title: 'Novidades de novas versões',
+    keywords: ['atualizações', 'notas de versão', 'novidades'],
+    section: 'geral',
+    anchor: 'settings-updates',
+  },
+  {
     title: 'Aparência e movimento',
     keywords: ['animação', 'movimento reduzido'],
     section: 'geral',

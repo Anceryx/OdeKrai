@@ -1,5 +1,11 @@
 # Testes e validação
 
+## L10 — notas de versão no app
+
+- `scripts/generate-release-notes.test.mjs` verifica extração, ordenação, validação de Markdown e ausência da nota atual; `release-notes.test.ts` cobre nova versão, versão já vista, primeira instalação, opção desligada e notas ausentes.
+- `ReleaseNotesModal.test.tsx` verifica que a tela usa resumo e mudanças do manifesto local e lista todas as versões embutidas. `Settings.test.tsx` e `settings.test.ts` cobrem o toggle e sua persistência.
+- A suíte completa e a build devem ser executadas em validação final; teste visual no Windows continua pendente.
+
 ## Paleta de comandos
 
 `src/core/command-palette.test.ts` verifica busca aproximada, recência, destinos canônicos, despacho

@@ -2994,6 +2994,35 @@ html[data-performance='on'] .modal-surface {
   overflow: hidden;
   padding: 0;
 }
+.release-notes-content {
+  display: grid;
+  gap: 20px;
+  max-width: 760px;
+  margin: 0 auto;
+}
+.release-notes-entry {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.release-notes-entry h3 {
+  margin: 0 0 6px;
+}
+.release-notes-entry p {
+  line-height: 1.6;
+}
+.release-notes-date {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+}
+.release-notes-entry li + li {
+  margin-top: 8px;
+}
+.release-notes-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-bottom: 4px;
+}
 .first-use-wizard {
   display: grid;
   height: 100%;

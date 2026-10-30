@@ -10,7 +10,13 @@ type BuildInfo = {
   windows_version: string;
 };
 
-export function AboutSettings() {
+export function AboutSettings({
+  releaseNotesUrl,
+  onOpenReleaseNotes,
+}: {
+  releaseNotesUrl: string;
+  onOpenReleaseNotes: () => void;
+}) {
   const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null);
   const [message, setMessage] = useState('');
   const buildDate = buildInfo?.build_date ? new Date(buildInfo.build_date) : null;
@@ -92,6 +98,17 @@ export function AboutSettings() {
             <Kbd>Ctrl+K</Kbd> Abrir a paleta de comandos
           </p>
         </section>
+        <p className="settings-description">
+          <a
+            href={releaseNotesUrl}
+            onClick={(event) => {
+              event.preventDefault();
+              onOpenReleaseNotes();
+            }}
+          >
+            Notas completas da versão
+          </a>
+        </p>
         <div className="about-actions">
           <button
             className="secondary-button small-button"

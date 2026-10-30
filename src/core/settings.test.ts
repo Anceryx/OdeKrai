@@ -97,6 +97,18 @@ describe('preferências persistidas', () => {
     expect(loadSettings().reduceMascot).toBe(true);
   });
 
+  it('usa novidades ativadas por padrão e migra a opção persistida', () => {
+    expect(defaultSettings.showReleaseNotes).toBe(true);
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) =>
+        key === 'odekrai.settings.v2'
+          ? JSON.stringify({ ...defaultSettings, showReleaseNotes: false })
+          : null,
+      setItem: () => undefined,
+    });
+    expect(loadSettings().showReleaseNotes).toBe(false);
+  });
+
   it('persiste a substituição de efeito sonoro selecionada', () => {
     const storage = new Map<string, string>();
     vi.stubGlobal('localStorage', {

@@ -37,6 +37,8 @@ import {
   type HomeEvent,
 } from '../core/home';
 import { loadFirstUseProgress, shouldAutoOpenFirstUse } from '../core/first-use';
+import { decideReleasePrompt, RELEASE_NOTES_LAST_SEEN_KEY } from '../core/release-notes';
+import { releaseNotesManifest } from '../core/release-notes-manifest';
 import {
   islandReviewDestination,
   islandSuggestions,
@@ -121,6 +123,7 @@ import { useAppState } from './hooks/useAppState';
 import { useNavigation } from './hooks/useNavigation';
 import { SettingsModal } from './SettingsModal';
 import { FirstUseAssistant, type FirstUseStepContent } from './FirstUseAssistant';
+import { ReleaseNotesModal } from './ReleaseNotesModal';
 import { resolveAgentReason, resolveConfigurationReason } from '../core/navigation';
 import { ScreenErrorBoundary } from './ScreenErrorBoundary';
 import { ResizeHandle } from './ResizeHandle';
@@ -149,6 +152,7 @@ const withScreenBoundary = <Props extends object>(
   }
   return BoundedScreen;
 };
+const currentReleaseNotesUrl = `https://github.com/Anceryx/OdeKrai/blob/main/docs/releases/v${releaseNotesManifest.currentVersion}.md`;
 
 export function App() {
   if (isApprovalWindow()) return <ApprovalWindow />;
@@ -167,6 +171,15 @@ export function App() {
 }
 
 function MainApp() {
+  const [hadSettingsAtStartup] = useState(() => {
+    try {
+      return Boolean(
+        localStorage.getItem('odekrai.settings.v2') || localStorage.getItem('odekrai.settings.v1'),
+      );
+    } catch {
+      return false;
+    }
+  });
   const appState = useAppState();
   const {
     section,
@@ -209,6 +222,9 @@ function MainApp() {
   const settingsEntryRequestId = useRef(0);
   const [undoToast, setUndoToast] = useState<{ cardId: string } | null>(null);
   const [firstUseOpen, setFirstUseOpen] = useState(false);
+  const [releaseNotesPending, setReleaseNotesPending] = useState(false);
+  const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
+  const [showAllReleaseNotes, setShowAllReleaseNotes] = useState(false);
   useEffect(() => {
     if (!undoToast) return;
     const timer = window.setTimeout(() => setUndoToast(null), 8000);
@@ -281,6 +297,41 @@ function MainApp() {
     if (!shouldAutoOpenFirstUse(progress)) return;
     setFirstUseOpen(true);
   }, []);
+  useEffect(() => {
+    if (!isTauri()) return;
+    const current = releaseNotesManifest.releases.find(
+      (release) => release.version === releaseNotesManifest.currentVersion,
+    );
+    if (!current) return;
+    try {
+      const previousVersion = localStorage.getItem(RELEASE_NOTES_LAST_SEEN_KEY);
+      const decision = decideReleasePrompt({
+        currentVersion: releaseNotesManifest.currentVersion,
+        previousVersion,
+        notesAvailable: true,
+        hasExistingPreferences: hadSettingsAtStartup,
+        enabled: settings.showReleaseNotes,
+      });
+      if (decision.markSeen && !decision.show) {
+        localStorage.setItem(RELEASE_NOTES_LAST_SEEN_KEY, releaseNotesManifest.currentVersion);
+      }
+      if (decision.show) setReleaseNotesPending(true);
+    } catch {
+      // Sem armazenamento local não é possível garantir a exibição única por versão.
+    }
+  }, []);
+  useEffect(() => {
+    if (!releaseNotesPending || firstUseOpen) return;
+    try {
+      localStorage.setItem(RELEASE_NOTES_LAST_SEEN_KEY, releaseNotesManifest.currentVersion);
+    } catch {
+      setReleaseNotesPending(false);
+      return;
+    }
+    setReleaseNotesPending(false);
+    setShowAllReleaseNotes(false);
+    setReleaseNotesOpen(true);
+  }, [firstUseOpen, releaseNotesPending]);
   const emitCompanionState = (payload: { type: 'activity'; state: string; message: string }) => {
     setAssistantPetState(petAnimationForAssistantActivity(payload.state));
     void emit('companion-state', payload).catch(() =>
@@ -2075,6 +2126,13 @@ function MainApp() {
           void openResponseLink('https://github.com/Anceryx/OdeKrai/tree/main/docs')
         }
       />
+      <ReleaseNotesModal
+        open={releaseNotesOpen}
+        showAllVersions={showAllReleaseNotes}
+        onShowAllVersions={() => setShowAllReleaseNotes(true)}
+        onShowCurrent={() => setShowAllReleaseNotes(false)}
+        onClose={() => setReleaseNotesOpen(false)}
+      />
       <SettingsModal
         open={settingsOpen}
         section={route.settingsSection ?? 'geral'}
@@ -2093,6 +2151,8 @@ function MainApp() {
         onOpenPage={(page) => navigate(page)}
         onOpenActivityFullPage={() => openLegacyScreen('activity')}
         onAgentStatus={() => reportDiagnostic('agent_home_status', '')}
+        releaseNotesUrl={currentReleaseNotesUrl}
+        onOpenReleaseNotes={() => void openResponseLink(currentReleaseNotesUrl)}
         sharedAudit={sharedAudit}
         requestedEntry={requestedSettingsEntry}
       />

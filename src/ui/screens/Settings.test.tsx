@@ -25,13 +25,20 @@ describe('SettingsScreen', () => {
     expect(markup).toContain('Preferências deste dispositivo');
     expect(markup).toContain('Reduzir mascote');
     expect(markup).toContain('A janela do pet continua seguindo Reduzir animações');
+    expect(markup).toContain('Mostrar novidades de novas versões');
   });
 
   it('exibe as informações de versão em um componente independente', () => {
-    const markup = renderToStaticMarkup(<AboutSettings />);
+    const markup = renderToStaticMarkup(
+      <AboutSettings
+        releaseNotesUrl="https://github.com/Anceryx/OdeKrai/blob/main/docs/releases/v0.15.0.md"
+        onOpenReleaseNotes={() => undefined}
+      />,
+    );
     expect(markup).toContain('id="settings-about"');
     expect(markup).toContain('WebView2');
     expect(markup).toContain('Licença');
     expect(markup).toContain('Abrir pasta de logs');
+    expect(markup).toContain('Notas completas da versão');
   });
 });

@@ -115,6 +115,20 @@ export function SettingsScreen({
           </select>
         </div>
       </section>
+      <section id="settings-updates" className="settings-panel settings-section">
+        <h2>Atualizações</h2>
+        <div className="preference-row">
+          <div>
+            <strong>Mostrar novidades de novas versões</strong>
+            <span>Exibe as notas da versão uma vez quando uma versão nova for aberta.</span>
+          </div>
+          <Toggle
+            checked={settings.showReleaseNotes}
+            label="Mostrar novidades de novas versões"
+            onClick={() => update({ ...settings, showReleaseNotes: !settings.showReleaseNotes })}
+          />
+        </div>
+      </section>
       <section id="settings-window" className="settings-panel settings-section">
         <h2>Janela</h2>
         <div className="preference-row">

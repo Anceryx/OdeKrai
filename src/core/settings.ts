@@ -22,6 +22,7 @@ export type AppSettings = {
   reduceMotion: boolean;
   reduceMascot: boolean;
   useMascotAsAssistantAvatar: boolean;
+  showReleaseNotes: boolean;
   microphoneEnabled: boolean;
   readRepliesAutomatically: boolean;
   speechVoiceURI: string;
@@ -85,6 +86,7 @@ export const defaultSettings: AppSettings = {
   reduceMotion: false,
   reduceMascot: false,
   useMascotAsAssistantAvatar: false,
+  showReleaseNotes: true,
   microphoneEnabled: false,
   readRepliesAutomatically: false,
   speechVoiceURI: '',
@@ -260,6 +262,10 @@ export function loadSettingsWithWarnings(): { settings: AppSettings; warnings: s
           typeof value.useMascotAsAssistantAvatar === 'boolean'
             ? value.useMascotAsAssistantAvatar
             : false,
+        showReleaseNotes:
+          typeof value.showReleaseNotes === 'boolean'
+            ? value.showReleaseNotes
+            : defaultSettings.showReleaseNotes,
         microphoneEnabled: value.microphoneEnabled === true,
         readRepliesAutomatically: value.readRepliesAutomatically === true,
         speechVoiceURI:

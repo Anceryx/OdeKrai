@@ -1,5 +1,11 @@
 # Estado da implementação
 
+## L10 — notas de versão no app
+
+- `scripts/generate-release-notes.mjs` valida `docs/releases/*.md` e gera o manifesto JSON que entra no bundle. A geração ocorre antes de dev, build e testes e exige versão atual com notas formatadas.
+- Instalações existentes veem o resumo extraído da nota atual uma vez por versão; primeira instalação apenas registra a versão. A lista de versões usa o manifesto local. Configurações permite desligar o aviso, e Sobre abre as notas completas da versão pelo fluxo seguro de link externo.
+- Testes cobrem manifesto, erro de formatação, nota ausente, primeira instalação, versão igual/nova, opção desligada e renderização das notas embutidas.
+
 ## L9 — assistente de primeiro uso
 
 - O Modal apresenta provedor, pasta, mascote e permissões reutilizando `ProvidersScreen`, `IdentityScreen`/`AgentHome`, `AssistantScreen` e `SecurityCenter`; as configurações continuam no estado compartilhado do app. A etapa de provedores começa na aba de planos gratuitos verificados, e a chave continua no Gerenciador de Credenciais do Windows e é apagada do campo após salvar. No modo do assistente, descoberta/listagem de modelos e teste rápido ficam indisponíveis; salvar valida apenas o formato/endereço localmente, sem enviar dados ao provedor. A conexão só é testada pela ação explícita “Testar conexão sem gerar resposta”.
