@@ -122,7 +122,7 @@ pub enum AgentEvent {
         is_error: bool,
     },
     ActionCard {
-        card: crate::history::AgentActionCard,
+        card: Box<crate::history::AgentActionCard>,
     },
     FinalResponse {
         content: String,

@@ -6,6 +6,7 @@ pub(super) trait Tool: Sync {
     fn risk(&self, action: &SimulatedAction) -> Risk;
     fn preview(&self, action: &SimulatedAction, workspace: &Path) -> Result<String, String>;
     fn execute(&self, action: &SimulatedAction, workspace: &Path) -> Result<String, String>;
+    #[allow(clippy::too_many_arguments)] // Encaminha contexto de segurança e cancelamento ao dispatcher.
     fn execute_with_app<'a>(
         &'a self,
         action: &'a SimulatedAction,

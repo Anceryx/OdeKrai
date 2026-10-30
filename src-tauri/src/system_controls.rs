@@ -211,6 +211,7 @@ pub(crate) fn execute(skill_id: &str, params: &Value) -> Result<String, String> 
     execute_with(&mut NativeAdapter, skill_id, params)
 }
 
+#[cfg(test)]
 pub(crate) fn execute_managed(
     skill_id: &str,
     params: &Value,
@@ -228,6 +229,7 @@ pub(crate) fn execute_managed(
     )
 }
 
+#[cfg(test)]
 pub(crate) fn execute_managed_with<A: SystemAdapter>(
     adapter: &mut A,
     skill_id: &str,

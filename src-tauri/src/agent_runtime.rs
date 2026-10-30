@@ -227,7 +227,9 @@ impl RuntimeBackend<'_> {
         let index = start_plan_step(plan, action_label);
         let snapshot = card.clone();
         crate::history::save_agent_action_card(&self.app, &self.conversation_id, &snapshot)?;
-        let _ = self.events.send(AgentEvent::ActionCard { card: snapshot });
+        let _ = self.events.send(AgentEvent::ActionCard {
+            card: Box::new(snapshot),
+        });
         Ok(index)
     }
 
@@ -243,7 +245,9 @@ impl RuntimeBackend<'_> {
         }
         let snapshot = card.clone();
         crate::history::save_agent_action_card(&self.app, &self.conversation_id, &snapshot)?;
-        let _ = self.events.send(AgentEvent::ActionCard { card: snapshot });
+        let _ = self.events.send(AgentEvent::ActionCard {
+            card: Box::new(snapshot),
+        });
         Ok(())
     }
 }
@@ -340,9 +344,9 @@ impl AgentBackend for RuntimeBackend<'_> {
                     .as_secs() as i64,
             };
             crate::history::save_agent_action_card(&self.app, &conversation_id, &card)?;
-            let _ = self
-                .events
-                .send(AgentEvent::ActionCard { card: card.clone() });
+            let _ = self.events.send(AgentEvent::ActionCard {
+                card: Box::new(card.clone()),
+            });
             card.status = "Executando".into();
             card.timeline.push(crate::history::AgentTimelineEntry {
                 label: format!("Chamada de ferramenta: {}", skill.name),
@@ -354,9 +358,9 @@ impl AgentBackend for RuntimeBackend<'_> {
                     .as_secs() as i64,
             });
             crate::history::save_agent_action_card(&self.app, &conversation_id, &card)?;
-            let _ = self
-                .events
-                .send(AgentEvent::ActionCard { card: card.clone() });
+            let _ = self.events.send(AgentEvent::ActionCard {
+                card: Box::new(card.clone()),
+            });
             let approved_by_user = Arc::new(AtomicBool::new(false));
             let approval_state = approved_by_user.clone();
             let channel = self.events.clone();
@@ -392,7 +396,7 @@ impl AgentBackend for RuntimeBackend<'_> {
                     &stream_card,
                 );
                 let _ = stream_events.send(AgentEvent::ActionCard {
-                    card: stream_card.clone(),
+                    card: Box::new(stream_card.clone()),
                 });
             };
             let mut on_approval = move |approval_id: String, preview: String, expires_at: u64| {
@@ -421,7 +425,7 @@ impl AgentBackend for RuntimeBackend<'_> {
                 });
                 let _ = crate::history::save_agent_action_card(&app, &card_conversation, &waiting);
                 let _ = channel.send(AgentEvent::ActionCard {
-                    card: waiting.clone(),
+                    card: Box::new(waiting.clone()),
                 });
                 let _ = channel.send(AgentEvent::AwaitingApproval {
                     id: approval_id.clone(),
@@ -468,7 +472,9 @@ impl AgentBackend for RuntimeBackend<'_> {
                     card.result_summary =
                         "A ferramenta falhou; nenhum resultado foi confirmado.".into();
                     crate::history::save_agent_action_card(&self.app, &conversation_id, &card)?;
-                    let _ = self.events.send(AgentEvent::ActionCard { card });
+                    let _ = self.events.send(AgentEvent::ActionCard {
+                        card: Box::new(card),
+                    });
                     return Err("A ferramenta falhou durante a execução.".into());
                 }
             };
@@ -616,9 +622,9 @@ impl AgentBackend for RuntimeBackend<'_> {
                 }
             }
             crate::history::save_agent_action_card(&self.app, &conversation_id, &card)?;
-            let _ = self
-                .events
-                .send(AgentEvent::ActionCard { card: card.clone() });
+            let _ = self.events.send(AgentEvent::ActionCard {
+                card: Box::new(card.clone()),
+            });
             let result_text = result.result.as_deref().unwrap_or(&result.message);
             let result_hash = format!("{:x}", Sha256::digest(result_text.as_bytes()));
             crate::history::persist_agent_record(
