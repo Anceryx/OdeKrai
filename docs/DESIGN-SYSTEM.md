@@ -2,6 +2,14 @@
 
 Este documento registra os tokens globais e padrões reutilizáveis. O objetivo é consolidar estilos sem reorganizar telas. As bordas fortes ficam mais claras que o valor legado porque controles essenciais precisam alcançar contraste mínimo de 3:1.
 
+## Inventário dos componentes base
+
+Auditoria de `src/ui/DesignSystem.tsx`: antes da galeria, já existiam `Button`, `Card`, `Badge`, `Banner`, `TextInput`, `SelectInput`, `Toggle`, `SelectableCard` e `PageHeader`. `RiskBadge` permanece um componente específico para classificação de risco. Esta implementação completa a biblioteca com `StatusBadge`, `Tabs`, `Toast`, `EmptyState`, `Skeleton`, `Tooltip`, `Kbd` e `ListItem`, sem substituir esses componentes existentes nem alterar as telas.
+
+`Tabs` oferece navegação por setas, `Home` e `End`, ignora abas desabilitadas e publica `tablist`/`tab`/`tabpanel`. `Toast` anuncia atualizações com `aria-live="polite"` e recebe uma ação de desfazer. `EmptyState` associa o título à região e aceita ícone ou mascote e ação opcional. `Skeleton` é decorativo para leitores de tela. `Tooltip` associa a descrição por `aria-describedby`; `Kbd` usa o elemento semântico `<kbd>`. `ListItem` é um `<li>` para uso dentro de uma lista.
+
+A galeria interna fica disponível em `/__dev/design-system` somente durante `vite dev`; o módulo é carregado por importação dinâmica protegida por `import.meta.env.DEV` e a rota não integra o build de produção. Os testes de `DesignSystem.test.tsx` também renderizam essa galeria como amostra integrada.
+
 ## Tokens
 
 | Grupo               | Tokens                                                                                                                                                                                                                                                                                           | Valor ou regra                                                                                                                            |

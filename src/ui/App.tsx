@@ -25,6 +25,11 @@ import { stopLocalSpeech } from '../core/speech';
 const Overview = lazy(() =>
   import('./screens/Overview').then((module) => ({ default: withScreenBoundary(module.Overview) })),
 );
+const DevDesignSystemGallery = import.meta.env.DEV
+  ? lazy(() =>
+      import('./DesignSystemGallery').then((module) => ({ default: module.DesignSystemGallery })),
+    )
+  : null;
 const AssistantScreen = lazy(() =>
   import('./screens/Assistant').then((module) => ({
     default: withScreenBoundary(module.AssistantScreen),
@@ -114,7 +119,19 @@ const withScreenBoundary = <Props extends object>(
 };
 
 export function App() {
-  return isApprovalWindow() ? <ApprovalWindow /> : <MainApp />;
+  if (isApprovalWindow()) return <ApprovalWindow />;
+  if (
+    import.meta.env.DEV &&
+    location.pathname === '/__dev/design-system' &&
+    DevDesignSystemGallery
+  ) {
+    return (
+      <Suspense fallback={screenLoading}>
+        <DevDesignSystemGallery />
+      </Suspense>
+    );
+  }
+  return <MainApp />;
 }
 
 function MainApp() {
