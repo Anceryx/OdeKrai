@@ -230,3 +230,7 @@ A geometria tem testes unitários para escala alterada, monitor removido, origem
 ## Desfazer (L3)
 
 Os testes de restauração de sistema devem usar `SystemAdapter` simulado e SQLite em memória; os testes de arquivo usam diretórios temporários isolados. Não execute esses testes sobre configurações reais do Windows nem sobre arquivos do usuário. Cobrem IDs de operação independentes, estado ausente, edição posterior do arquivo, confirmação e ausência de botão para ações irreversíveis. A suíte `cargo test` ainda deve ser executada no ambiente Rust; valide também a janela e o aviso no Windows.
+
+## Planos informativos (L4)
+
+`skills::tests` verifica os limites e que texto instrucional no plano não muda seu risco de leitura; `workspace::files_tests` verifica que `plan.propose` não modifica arquivos. `agent_runtime::plan_state_tests` cobre avanço, falha e chamada fora das etapas listadas; `AgentControls.test.tsx` verifica renderização numerada e escaping do texto como dado. Os testes Rust usam somente dados em memória/diretórios temporários e precisam ser executados em ambiente com Cargo. A conferência visual do cartão no Windows permanece pendente.

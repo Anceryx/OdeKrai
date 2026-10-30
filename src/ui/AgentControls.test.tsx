@@ -104,6 +104,30 @@ describe('controles e cartões do agente', () => {
     expect(markup).toContain('1.3 s');
   });
 
+  it('exibe plano informativo numerado, estados reais e ações fora do plano como texto', () => {
+    const markup = renderToStaticMarkup(
+      <AgentActionCard
+        action={action('Concluída', {
+          plan: {
+            title: 'Preparar relatório',
+            steps: [
+              { description: 'Ler dados', status: 'completed' },
+              { description: '<script>não executar</script>', status: 'in_progress' },
+            ],
+            outsidePlanActions: ['Atualizar agenda'],
+          },
+        })}
+      />,
+    );
+    expect(markup).toContain('aria-label="Etapas do plano"');
+    expect(markup).toContain('Ler dados');
+    expect(markup).toContain('Concluída');
+    expect(markup).toContain('&lt;script&gt;não executar&lt;/script&gt;');
+    expect(markup).toContain('Ação fora do plano');
+    expect(markup).toContain('Atualizar agenda');
+    expect(markup).toContain('apenas informativo');
+  });
+
   it('expõe controles de artefato somente para caminho de arquivo seguro', () => {
     const markup = renderToStaticMarkup(
       <AgentActionCard

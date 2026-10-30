@@ -4701,6 +4701,41 @@ html.island-window-html {
   font-weight: 650;
   text-transform: capitalize;
 }
+.agent-plan {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+.agent-plan > p {
+  margin: 0 0 8px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+.agent-plan ol,
+.agent-plan ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 22px;
+}
+.agent-plan li {
+  padding-left: 2px;
+}
+.agent-plan li small {
+  display: block;
+  color: var(--color-text-secondary);
+}
+.agent-plan-outside {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+}
+.agent-plan-outside strong {
+  color: var(--color-warning);
+}
 .agent-untrusted-label {
   color: var(--color-warning) !important;
   font-size: 11px;

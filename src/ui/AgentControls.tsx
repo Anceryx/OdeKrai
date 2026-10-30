@@ -28,6 +28,15 @@ export type AgentTimelineEntry = {
   durationMs?: number | null;
   at: number;
 };
+export type AgentPlanStepData = {
+  description: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+};
+export type AgentPlanData = {
+  title: string;
+  steps: AgentPlanStepData[];
+  outsidePlanActions: string[];
+};
 
 export type AgentActionCardData = {
   id: string;
@@ -46,6 +55,7 @@ export type AgentActionCardData = {
   approvalExpiresAt?: number | null;
   untrustedResult?: boolean;
   undoDescriptor?: UndoDescriptor | null;
+  plan?: AgentPlanData | null;
   createdAt?: number;
 };
 
@@ -189,6 +199,40 @@ export function AgentActionCard({
           {action.untrustedResult && <strong>Resultado externo · dado não confiável. </strong>}
           {action.resultSummary}
         </p>
+      )}
+      {action.plan && (
+        <section className="agent-plan" aria-label="Plano informativo">
+          <p>Este plano é apenas informativo. Cada ação continua sujeita às permissões locais.</p>
+          <ol aria-label="Etapas do plano">
+            {action.plan.steps.map((step, index) => (
+              <li key={`${index}-${step.description}`}>
+                <span>{step.description}</span>
+                <small>
+                  {
+                    (
+                      {
+                        pending: 'Pendente',
+                        in_progress: 'Em andamento',
+                        completed: 'Concluída',
+                        failed: 'Falhou',
+                      } as const
+                    )[step.status]
+                  }
+                </small>
+              </li>
+            ))}
+          </ol>
+          {action.plan.outsidePlanActions.length > 0 && (
+            <div className="agent-plan-outside" role="status" aria-live="polite">
+              <strong>Ação fora do plano</strong>
+              <ul>
+                {action.plan.outsidePlanActions.map((label, index) => (
+                  <li key={`${index}-${label}`}>{label}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
       )}
       {action.undoDescriptor && onUndo && (
         <button
