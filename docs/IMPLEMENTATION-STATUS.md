@@ -121,3 +121,11 @@ Atualizado em 24/10/2026 após a verificação de fechamento da Fase 3. Requisit
 - `dist/`: nenhuma imagem GLB e nenhuma referência `three.module`, `GLTFLoader` ou `WebGLRenderer`.
 - `npm test`: 26 testes passaram em 7 arquivos; `cargo test --lib`: 50 testes passaram. `npm run format:check`, `cargo fmt --check` e `git diff --check` passaram.
 - `npm run tauri:build` e validação visual nativa no Windows não foram executados nesta revisão.
+
+## Desfazer de ações (L3, parcial)
+
+Resultados de alteração de papel de parede, brilho, tema, gravação/acréscimo e renomeação podem carregar um descritor de restauração associado ao ID da execução. O cartão exibe “Desfazer” apenas quando o resultado o inclui; o aviso dura oito segundos. Restaurações entram no dispatcher como origem do usuário e passam pelas regras de política e auditoria. O histórico de papel de parede, brilho e tema migra com uma coluna de ID de operação, preservando instalações anteriores.
+
+Para arquivos, o manifesto e a versão anterior ficam em `.history`. Se o conteúdo atual mudou, o aplicativo pede confirmação e preserva a versão modificada antes de restaurar; renomeações não sobrescrevem um arquivo que já exista no caminho original. Operações irreversíveis, inclusive mensagens e envio à Lixeira, não recebem descritor. Para arquivos enviados à Lixeira, a interface informa: “restaure pela Lixeira do Windows”.
+
+Testes Rust usam `SystemAdapter` simulado e pastas temporárias isoladas. Eles não alteram o computador real. A execução desses testes e a compilação Rust precisam ser repetidas em ambiente com Rust instalado; a validação visual e nativa no Windows continua pendente.

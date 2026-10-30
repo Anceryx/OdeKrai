@@ -93,6 +93,7 @@ fn skill_metadata(
         | "files.read"
         | "files.write"
         | "files.append"
+        | "files.restore"
         | "files.mkdir"
         | "files.copy"
         | "files.move"
@@ -195,7 +196,7 @@ fn action_id(action: &SimulatedAction) -> &str {
         SimulatedAction::SendMessage { .. } => "simulated.send_message",
         SimulatedAction::Payment { .. } => "simulated.payment",
         SimulatedAction::Productivity { skill_id, .. } => match skill_id.as_str() {
-            "files.write" | "files.append" | "files.mkdir" | "files.copy" | "files.move"
+            "files.write" | "files.append" | "files.restore" | "files.mkdir" | "files.copy" | "files.move"
             | "files.rename" | "files.delete" | "files.apply_plan" => skill_id,
             "calendar.create_event"
             | "calendar.list_events"
@@ -251,6 +252,7 @@ fn parse_action(id: &str, params: &Value) -> Result<SimulatedAction, String> {
     let payload = if matches!(
         id,
         "files.write"
+            | "files.restore"
             | "files.append"
             | "files.mkdir"
             | "files.copy"
@@ -555,19 +557,20 @@ pub fn registry() -> Vec<Skill> {
         ("media.next", "Próxima faixa", "Envia a tecla de próxima faixa ao Windows.", "Avance para a próxima faixa.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
         ("media.previous", "Faixa anterior", "Envia a tecla de faixa anterior ao Windows.", "Volte para a faixa anterior.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
         ("wallpaper.set", "Alterar papel de parede", "Define uma imagem PNG, JPG ou BMP em pasta permitida e permite restauração.", "Altere o papel de parede usando um caminho de imagem em pasta permitida.", json!({"type":"object","properties":{"path":{"type":"string","minLength":1,"maxLength":32767}},"required":["path"],"additionalProperties":false}), ResultTrust::Local),
-        ("wallpaper.restore", "Restaurar papel de parede", "Restaura o papel de parede salvo antes da última alteração.", "Restaure o papel de parede anterior.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
+        ("wallpaper.restore", "Restaurar papel de parede", "Restaura o papel de parede salvo antes da última alteração.", "Restaure o papel de parede anterior.", json!({"type":"object","properties":{"history_id":{"type":"string","maxLength":128}},"required":[],"additionalProperties":false}), ResultTrust::Local),
         ("power.lock", "Bloquear estação", "Solicita o bloqueio da sessão do Windows; sempre exige aprovação.", "Bloqueie a sessão atual do Windows.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
         ("display.get_brightness", "Consultar brilho", "Consulta o brilho atual se o monitor permitir controle por software.", "Consulte o brilho atual da tela.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
         ("display.set_brightness", "Definir brilho", "Altera o brilho entre 0 e 100% e permite desfazer.", "Defina o brilho com um inteiro entre 0 e 100.", json!({"type":"object","properties":{"brightness":{"type":"integer","minimum":0,"maximum":100}},"required":["brightness"],"additionalProperties":false}), ResultTrust::Local),
-        ("display.restore_brightness", "Restaurar brilho", "Restaura o brilho salvo antes da última alteração.", "Restaure o brilho anterior.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
+        ("display.restore_brightness", "Restaurar brilho", "Restaura o brilho salvo antes da última alteração.", "Restaure o brilho anterior.", json!({"type":"object","properties":{"history_id":{"type":"string","maxLength":128}},"required":[],"additionalProperties":false}), ResultTrust::Local),
         ("power.sleep", "Suspender computador", "Suspende o computador; sempre exige aprovação e não pode ser iniciada por conteúdo externo.", "O computador vai suspender agora.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
         ("theme.set", "Alterar tema do Windows", "experimental: usa uma configuração do Windows que a Microsoft não documenta oficialmente. Altera entre claro e escuro e permite desfazer.", "Altere o tema do Windows para claro ou escuro. Habilidade experimental.", json!({"type":"object","properties":{"mode":{"type":"string","enum":["claro","escuro"]}},"required":["mode"],"additionalProperties":false}), ResultTrust::Local),
-        ("theme.restore", "Restaurar tema do Windows", "Restaura os valores de tema do usuário salvos antes da última alteração experimental.", "Restaure as preferências de tema anteriores do Windows.", json!({"type":"object","properties":{},"required":[],"additionalProperties":false}), ResultTrust::Local),
+        ("theme.restore", "Restaurar tema do Windows", "Restaura os valores de tema do usuário salvos antes da última alteração experimental.", "Restaure as preferências de tema anteriores do Windows.", json!({"type":"object","properties":{"history_id":{"type":"string","maxLength":128}},"required":[],"additionalProperties":false}), ResultTrust::Local),
         ("files.list", "Listar arquivos", "Lista arquivos e pastas em uma pasta permitida, com limites.", "Liste itens de uma pasta usando profundidade e limite explícitos.", json!({"type":"object","properties":{"path":{"type":"string"},"depth":{"type":"integer","minimum":1,"maximum":8},"limit":{"type":"integer","minimum":1,"maximum":500}},"required":["path","depth","limit"],"additionalProperties":false}), ResultTrust::Local),
         ("files.search", "Pesquisar arquivos", "Pesquisa nomes ou conteúdo textual com limites explícitos.", "Pesquise arquivos por nome ou trecho de texto. Informe pasta, modo, profundidade, tamanho máximo e limite de resultados.", json!({"type":"object","properties":{"path":{"type":"string"},"query":{"type":"string","minLength":1,"maxLength":256},"by":{"type":"string","enum":["name","text"]},"depth":{"type":"integer","minimum":1,"maximum":8},"max_file_bytes":{"type":"integer","minimum":1,"maximum":65536},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["path","query","by","depth","max_file_bytes","limit"],"additionalProperties":false}), ResultTrust::Local),
         ("files.read", "Ler arquivo de texto", "Lê texto UTF-8 ou Windows-1252 de até 64 KiB; recusa binários.", "Leia um arquivo textual de até 64 KiB em pasta permitida.", json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}), ResultTrust::Local),
         ("files.write", "Gravar arquivo", "Cria ou substitui arquivo textual com backup em .history.", "Grave um arquivo de texto; substituições preservam a versão anterior.", json!({"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string","maxLength":1000000}},"required":["path","content"],"additionalProperties":false}), ResultTrust::Local),
         ("files.append", "Acrescentar ao arquivo", "Acrescenta texto a arquivo existente.", "Acrescente texto a arquivo existente.", json!({"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string","maxLength":1000000}},"required":["path","content"],"additionalProperties":false}), ResultTrust::Local),
+        ("files.restore", "Desfazer alteração de arquivo", "Restaura uma versão anterior guardada em .history; disponível apenas por ação explícita do usuário.", "Não solicite esta ferramenta. A restauração é iniciada pelo usuário a partir do cartão de resultado.", json!({"type":"object","properties":{"path":{"type":"string"},"state_id":{"type":"string","maxLength":128},"confirm_modified":{"type":"boolean"}},"required":["path","state_id","confirm_modified"],"additionalProperties":false}), ResultTrust::Local),
         ("files.mkdir", "Criar pasta", "Cria uma pasta em local permitido.", "Crie uma pasta em local permitido.", json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}), ResultTrust::Local),
         ("files.copy", "Copiar arquivo", "Copia um arquivo para outro caminho permitido.", "Copie um arquivo com destino relativo em destination.", json!({"type":"object","properties":{"path":{"type":"string"},"destination":{"type":"string"}},"required":["path","destination"],"additionalProperties":false}), ResultTrust::Local),
         ("files.move", "Mover arquivo", "Move um arquivo para outro caminho permitido.", "Mova um arquivo com destino relativo em destination.", json!({"type":"object","properties":{"path":{"type":"string"},"destination":{"type":"string"}},"required":["path","destination"],"additionalProperties":false}), ResultTrust::Local),

@@ -76,8 +76,8 @@ pub(super) fn action_metadata(
         _ => None,
     };
     let tool_name = match action {
-        SimulatedAction::Productivity { skill_id, .. } => match skill_id.as_str() {
-            "files.write" | "files.append" | "files.mkdir" | "files.copy" | "files.move"
+        SimulatedAction::Productivity { skill_id, params } => match skill_id.as_str() {
+            "files.write" | "files.append" | "files.restore" | "files.mkdir" | "files.copy" | "files.move"
             | "files.rename" | "files.delete" | "files.apply_plan" => skill_id,
             "calendar.create_event" => "calendar.create_event",
             "google.calendar.create_event"
@@ -168,6 +168,29 @@ fn require_batch_approval(action: &SimulatedAction, decision: Decision) -> Decis
     } else {
         decision
     }
+}
+
+fn undo_descriptor_for_action(
+    action: &SimulatedAction,
+    state_id: &str,
+) -> Option<crate::history::UndoDescriptor> {
+    let (skill_id, path, label) = match action {
+        SimulatedAction::Productivity { skill_id, params } => match skill_id.as_str() {
+            "wallpaper.set" => ("wallpaper.restore", None, "Restaurar o papel de parede anterior"),
+            "display.set_brightness" => ("display.restore_brightness", None, "Restaurar o brilho anterior"),
+            "theme.set" => ("theme.restore", None, "Restaurar o tema anterior"),
+            "files.write" | "files.append" => ("files.restore", params.get("path").and_then(serde_json::Value::as_str), "Restaurar a versão anterior do arquivo"),
+            "files.rename" | "files.move" => ("files.restore", params.get("destination").and_then(serde_json::Value::as_str), "Desfazer a renomeação do arquivo"),
+            _ => return None,
+        },
+        _ => return None,
+    };
+    Some(crate::history::UndoDescriptor {
+        skill_id: skill_id.into(),
+        state_id: state_id.into(),
+        path: path.map(str::to_owned),
+        label: label.into(),
+    })
 }
 
 fn enforce_power_lock_origin(
@@ -620,6 +643,7 @@ async fn execute_action_with_timeout(
     timeout: Duration,
     origin: &Origin,
     cancel: &tokio_util::sync::CancellationToken,
+    operation_id: &str,
     on_output: &mut (dyn FnMut(String) + Send),
 ) -> Result<String, String> {
     let workspace_action = match action {
@@ -648,7 +672,7 @@ async fn execute_action_with_timeout(
     let tool = tool_for(&action);
     tokio::time::timeout(
         timeout,
-        tool.execute_with_app(&action, &workspace, app, origin, cancel, on_output),
+        tool.execute_with_app(&action, &workspace, app, origin, cancel, operation_id, on_output),
     )
     .await
     .map_err(|_| "A ferramenta excedeu o tempo limite.".to_string())?
@@ -722,6 +746,9 @@ pub(super) async fn submit_agent_action(
         return Err("A execução foi parada antes da ação.".into());
     }
     let (tool, risk, inside, fixed) = action_metadata(&action);
+    let fixed = if matches!(&action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "files.restore") && !matches!(&origin, Origin::User) {
+        Some("file_restore_user_origin_required")
+    } else { fixed };
     let fixed = enforce_power_lock_origin(&action, &origin, tainted, fixed);
     let id = id();
     let params = audit_params(&action);
@@ -748,6 +775,8 @@ pub(super) async fn submit_agent_action(
                 status: "denied".into(),
                 message: error,
                 result: None,
+                undo_descriptor: None,
+                confirmation_required: false,
             });
         }
     };
@@ -789,6 +818,8 @@ pub(super) async fn submit_agent_action(
             status: "denied".into(),
             message: format!("Ação bloqueada pela regra {rule}."),
             result: None,
+            undo_descriptor: None,
+            confirmation_required: false,
         });
     }
     if !allowed_rate_with_limit(state, tool, rate_limit_per_minute)? {
@@ -812,6 +843,8 @@ pub(super) async fn submit_agent_action(
             status: "denied".into(),
             message: "Limite de frequência da habilidade atingido.".into(),
             result: None,
+            undo_descriptor: None,
+            confirmation_required: false,
         });
     }
     if let Decision::Allow(rule) = decision {
@@ -831,8 +864,13 @@ pub(super) async fn submit_agent_action(
             None,
         )?;
         let result =
-            execute_action_with_timeout(&action, app, timeout, &origin, cancel, on_output).await;
+            execute_action_with_timeout(&action, app, timeout, &origin, cancel, &id, on_output)
+                .await;
         let error = result.as_ref().err().cloned();
+        let undo_descriptor = result
+            .as_ref()
+            .ok()
+            .and_then(|_| undo_descriptor_for_action(&action, &id));
         record(
             app,
             state,
@@ -862,6 +900,8 @@ pub(super) async fn submit_agent_action(
             .into(),
             message: error.unwrap_or_else(|| "Ação concluída.".into()),
             result: result.ok(),
+            undo_descriptor,
+            confirmation_required: false,
         });
     }
     let ttl = db_setting(app, "approval_ttl_seconds")?
@@ -928,6 +968,8 @@ pub(super) async fn submit_agent_action(
             status: "denied".into(),
             message: "Fila de aprovação cheia; a ação foi negada.".into(),
             result: None,
+            undo_descriptor: None,
+            confirmation_required: false,
         });
     }
     if let Err(error) = open_approval(app) {
@@ -1013,9 +1055,13 @@ pub(super) async fn submit_agent_action(
                 None,
             )?;
             let execution =
-                execute_action_with_timeout(&action, app, timeout, &origin, cancel, on_output)
+                execute_action_with_timeout(&action, app, timeout, &origin, cancel, &ticket_id, on_output)
                     .await;
             let error = execution.as_ref().err().cloned();
+            let undo_descriptor = execution
+                .as_ref()
+                .ok()
+                .and_then(|_| undo_descriptor_for_action(&action, &ticket_id));
             record(
                 app,
                 state,
@@ -1045,6 +1091,8 @@ pub(super) async fn submit_agent_action(
                 .into(),
                 message: error.unwrap_or_else(|| "Ação aprovada e concluída.".into()),
                 result: execution.ok(),
+                undo_descriptor,
+                confirmation_required: false,
             })
         }
         decision => {
@@ -1082,6 +1130,8 @@ pub(super) async fn submit_agent_action(
                 status: "denied".into(),
                 message: detail.into(),
                 result: None,
+                undo_descriptor: None,
+                confirmation_required: false,
             })
         }
     }
@@ -1289,6 +1339,8 @@ pub(super) async fn approval_respond_inner(
             status: "decision_sent".into(),
             message: "Decisão encaminhada à execução segura.".into(),
             result: None,
+            undo_descriptor: None,
+            confirmation_required: false,
         });
     }
     Err("A aprovação não está mais disponível ou já foi resolvida.".into())

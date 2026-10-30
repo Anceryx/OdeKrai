@@ -47,9 +47,13 @@ pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
         "system.info" => &[],
         _ => return Err("Habilidade do sistema desconhecida.".into()),
     };
-    if object.len() != expected.len() || object.keys().any(|key| !expected.contains(&key.as_str()))
-    {
+    let restore = matches!(skill_id, "wallpaper.restore" | "display.restore_brightness" | "theme.restore");
+    let keys_valid = object.keys().all(|key| expected.contains(&key.as_str()) || (restore && key == "history_id"));
+    if !keys_valid || (!restore && object.len() != expected.len()) || (restore && object.len() > 1) {
         return Err("Os parâmetros não correspondem à habilidade permitida.".into());
+    }
+    if restore && object.get("history_id").is_some_and(|value| value.as_str().is_none_or(|id| id.is_empty() || id.len() > 128 || id.chars().any(char::is_control))) {
+        return Err("O identificador do estado anterior é inválido.".into());
     }
     match skill_id {
         "audio.get_volume"
@@ -340,6 +344,7 @@ pub(crate) fn execute_managed_control(
     skill_id: &str,
     params: &Value,
     origin: &str,
+    operation_id: &str,
 ) -> Result<String, String> {
     validate(skill_id, params)?;
     let db = crate::security::database(app)?;
@@ -353,7 +358,15 @@ pub(crate) fn execute_managed_control(
         .query_map([], |row| row.get::<_, String>(0))
         .map_err(|_| "Não foi possível consultar as pastas permitidas.".to_string())?;
     roots.extend(folders.filter_map(Result::ok).map(PathBuf::from));
-    crate::system_controls::execute_managed(skill_id, params, &db, &roots, origin)
+    crate::system_controls::execute_managed_with_id(
+        &mut crate::system_controls::NativeAdapter,
+        skill_id,
+        params,
+        &db,
+        &roots,
+        origin,
+        operation_id,
+    )
 }
 
 #[tauri::command]
@@ -409,8 +422,14 @@ pub(crate) fn preview_managed_control(
 ) -> Result<String, String> {
     validate(skill_id, params)?;
     let db = crate::security::database(app)?;
-    db.execute_batch("CREATE TABLE IF NOT EXISTS wallpaper_history (id INTEGER PRIMARY KEY, previous_path TEXT, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER)")
+    db.execute_batch("CREATE TABLE IF NOT EXISTS wallpaper_history (id INTEGER PRIMARY KEY, previous_path TEXT, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER); CREATE TABLE IF NOT EXISTS brightness_history (id INTEGER PRIMARY KEY, previous_value INTEGER NOT NULL, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER); CREATE TABLE IF NOT EXISTS theme_history (id INTEGER PRIMARY KEY, apps_type INTEGER, apps_data BLOB, system_type INTEGER, system_data BLOB, created_at INTEGER NOT NULL, origin TEXT NOT NULL, restored_at INTEGER)")
         .map_err(|_| "Não foi possível preparar o histórico do papel de parede.".to_string())?;
+    for table in ["wallpaper_history", "brightness_history", "theme_history"] {
+        let exists: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info(?1) WHERE name='operation_id')", [table], |row| row.get(0)).map_err(|_| "Não foi possível verificar o histórico de desfazer.".to_string())?;
+        if !exists {
+            db.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN operation_id TEXT")).map_err(|_| "Não foi possível atualizar o histórico de desfazer.".to_string())?;
+        }
+    }
     let mut roots = vec![crate::agent_home::workspace_path(app)?];
     let mut statement = db
         .prepare("SELECT path FROM allowed_folders ORDER BY path")
@@ -434,11 +453,7 @@ pub(crate) fn preview_managed_control(
         }
         "wallpaper.restore" => {
             let available: bool = db
-                .query_row(
-                    "SELECT EXISTS(SELECT 1 FROM wallpaper_history WHERE restored_at IS NULL)",
-                    [],
-                    |row| row.get(0),
-                )
+                .query_row("SELECT EXISTS(SELECT 1 FROM wallpaper_history WHERE restored_at IS NULL AND (?1 IS NULL OR operation_id=?1))", [params.get("history_id").and_then(Value::as_str)], |row| row.get(0))
                 .map_err(|_| {
                     "Não foi possível consultar o histórico do papel de parede.".to_string()
                 })?;
@@ -457,11 +472,7 @@ pub(crate) fn preview_managed_control(
         )),
         "display.restore_brightness" => {
             let available: bool = db
-                .query_row(
-                    "SELECT EXISTS(SELECT 1 FROM brightness_history WHERE restored_at IS NULL)",
-                    [],
-                    |row| row.get(0),
-                )
+                .query_row("SELECT EXISTS(SELECT 1 FROM brightness_history WHERE restored_at IS NULL AND (?1 IS NULL OR operation_id=?1))", [params.get("history_id").and_then(Value::as_str)], |row| row.get(0))
                 .map_err(|_| "Não foi possível consultar o histórico do brilho.".to_string())?;
             if !available {
                 return Err("Não há brilho anterior para restaurar.".into());
@@ -475,11 +486,7 @@ pub(crate) fn preview_managed_control(
         )),
         "theme.restore" => {
             let available: bool = db
-                .query_row(
-                    "SELECT EXISTS(SELECT 1 FROM theme_history WHERE restored_at IS NULL)",
-                    [],
-                    |row| row.get(0),
-                )
+                .query_row("SELECT EXISTS(SELECT 1 FROM theme_history WHERE restored_at IS NULL AND (?1 IS NULL OR operation_id=?1))", [params.get("history_id").and_then(Value::as_str)], |row| row.get(0))
                 .map_err(|_| "Não foi possível consultar o histórico do tema.".to_string())?;
             if !available {
                 return Err("Não há tema anterior para restaurar.".into());

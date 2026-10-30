@@ -1096,6 +1096,7 @@ pub fn run() -> Result<(), tauri::Error> {
             security::approval_respond,
             #[cfg(debug_assertions)]
             security::submit_simulated_action,
+            security::undo_agent_action,
             agent_home::agent_home_status,
             agent_home::agent_home_init,
             agent_home::agent_home_open_folder,

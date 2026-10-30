@@ -226,3 +226,7 @@ Na inicialização, nome e apelido aprovados em `ODEKRAI.md` preenchem campos va
 A janela do pet salva a fração da posição dentro da área útil para cada monitor, junto com nome, origem, dimensões da área útil e escala DPI. Ao restaurar, usa o monitor salvo se ainda estiver disponível; se não estiver, usa o primário. Mudanças de DPI/monitor e a reexibição reposicionam e limitam a janela à área útil. Eventos de movimento persistem no máximo uma vez por segundo, com gravação imediata ao ocultar.
 
 A geometria tem testes unitários para escala alterada, monitor removido, origem negativa e resolução reduzida. A validação visual manual em múltiplos monitores e DPI permanece pendente; executar os itens 3, 4 e 9 do checklist nativo acima quando houver sessão Windows apropriada.
+
+## Desfazer (L3)
+
+Os testes de restauração de sistema devem usar `SystemAdapter` simulado e SQLite em memória; os testes de arquivo usam diretórios temporários isolados. Não execute esses testes sobre configurações reais do Windows nem sobre arquivos do usuário. Cobrem IDs de operação independentes, estado ausente, edição posterior do arquivo, confirmação e ausência de botão para ações irreversíveis. A suíte `cargo test` ainda deve ser executada no ambiente Rust; valide também a janela e o aviso no Windows.

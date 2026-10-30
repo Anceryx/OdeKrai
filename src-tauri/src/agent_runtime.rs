@@ -261,6 +261,7 @@ impl AgentBackend for RuntimeBackend<'_> {
                 duration_ms: None,
                 approval_expires_at: None,
                 untrusted_result,
+                undo_descriptor: None,
                 created_at: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
@@ -394,6 +395,7 @@ impl AgentBackend for RuntimeBackend<'_> {
                 }
             };
             let status = result.status.clone();
+            card.undo_descriptor = result.undo_descriptor.clone();
             if status == "completed" {
                 let artifact_path = match skill.id {
                     "files.write"
@@ -486,6 +488,9 @@ impl AgentBackend for RuntimeBackend<'_> {
                     field("location"),
                     field("path")
                 );
+            }
+            if status == "completed" && skill.id == "files.delete" {
+                card.result_summary = "Arquivo enviado à Lixeira do Windows; restaure pela Lixeira do Windows.".into();
             }
             crate::history::save_agent_action_card(&self.app, &conversation_id, &card)?;
             if skill.id == "code.delegate" && status == "completed" {
