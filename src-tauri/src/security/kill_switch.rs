@@ -402,6 +402,12 @@ pub(crate) fn consume_quick_focus_request(state: &SecurityState) -> bool {
     state.quick_focus_requested.swap(false, Ordering::SeqCst)
 }
 
+pub fn load_halted(app: &tauri::AppHandle) -> bool {
+    db_setting(app, "halted")
+        .map(|value| value == "true")
+        .unwrap_or(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -502,10 +508,4 @@ mod tests {
             ShortcutAction::KillSwitch
         );
     }
-}
-
-pub fn load_halted(app: &tauri::AppHandle) -> bool {
-    db_setting(app, "halted")
-        .map(|value| value == "true")
-        .unwrap_or(true)
 }
