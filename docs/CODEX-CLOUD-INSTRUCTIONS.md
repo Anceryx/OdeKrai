@@ -536,7 +536,7 @@ Não trate esta lista como ordem absoluta se o proprietário solicitar explicita
 Ao finalizar qualquer tarefa, apresente um relatório objetivo com:
 
 | ITEM | STATUS | EVIDÊNCIA | ARQUIVOS | COMMIT | PENDÊNCIA |
-|---|---|---|---|---|---|
+| ---- | ------ | --------- | -------- | ------ | --------- |
 
 Informe também:
 
