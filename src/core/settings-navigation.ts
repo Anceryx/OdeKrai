@@ -33,6 +33,12 @@ export const SETTINGS_INDEX: readonly SettingsIndexEntry[] = [
     anchor: 'settings-window',
   },
   {
+    title: 'Modo Desempenho',
+    keywords: ['automático', 'hardware', 'baixo consumo', 'movimento reduzido'],
+    section: 'geral',
+    anchor: 'settings-performance',
+  },
+  {
     title: 'Novidades de novas versões',
     keywords: ['atualizações', 'notas de versão', 'novidades'],
     section: 'geral',

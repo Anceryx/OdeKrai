@@ -37,6 +37,7 @@ import {
   type HomeEvent,
 } from '../core/home';
 import { loadFirstUseProgress, shouldAutoOpenFirstUse } from '../core/first-use';
+import { usePerformanceMode } from './usePerformanceMode';
 import { decideReleasePrompt, RELEASE_NOTES_LAST_SEEN_KEY } from '../core/release-notes';
 import { releaseNotesManifest } from '../core/release-notes-manifest';
 import {
@@ -290,6 +291,11 @@ function MainApp() {
     request,
     companionStateTimer,
   } = appState;
+  const performanceStatus = usePerformanceMode(settings.performanceMode);
+  const performanceStatusRef = useRef(performanceStatus);
+  useEffect(() => {
+    performanceStatusRef.current = performanceStatus;
+  }, [performanceStatus.enabled, performanceStatus.loading, performanceStatus.reason]);
   useEffect(() => {
     if (!isTauri()) return;
     const storage = typeof localStorage === 'undefined' ? undefined : localStorage;
@@ -669,6 +675,7 @@ function MainApp() {
     void Promise.all([
       listen('pet-window-ready', () => {
         void emit('pet-quick-suggestions', quickSuggestionsRef.current);
+        void emit('performance-mode-updated', performanceStatusRef.current).catch(() => undefined);
       }),
       listen<IslandQuickRequest>('island-quick-command', ({ payload }) => {
         quickRequestHandler.current(payload);
@@ -2012,6 +2019,7 @@ function MainApp() {
                   settings={settings}
                   update={setSettings}
                   onOpenPermissions={() => navigate('permissions')}
+                  performanceStatus={performanceStatus}
                 />
               )}
               {section === 'permissions' && <PermissionsScreen />}
@@ -2140,6 +2148,7 @@ function MainApp() {
         onSelectSection={selectSettingsSection}
         settings={settings}
         update={setSettings}
+        performanceStatus={performanceStatus}
         profile={profile}
         setProfile={setProfile}
         petVisible={petVisible}

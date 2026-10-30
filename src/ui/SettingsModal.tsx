@@ -11,6 +11,7 @@ import {
 import type { SettingsSection } from '../core/navigation';
 import type { ProfileData } from './Profile';
 import type { Section } from './screens/types';
+import type { PerformanceModeView } from './usePerformanceMode';
 import { Button } from './DesignSystem';
 import { Modal } from './Modal';
 import { ScreenErrorBoundary } from './ScreenErrorBoundary';
@@ -42,6 +43,7 @@ export function SettingsModal({
   onSelectSection,
   settings,
   update,
+  performanceStatus,
   profile,
   setProfile,
   petVisible,
@@ -64,6 +66,7 @@ export function SettingsModal({
   onSelectSection: (section: SettingsSection) => void;
   settings: AppSettings;
   update: (settings: AppSettings) => void;
+  performanceStatus: PerformanceModeView;
   profile: ProfileData;
   setProfile: (profile: ProfileData) => void;
   petVisible: boolean;
@@ -134,6 +137,7 @@ export function SettingsModal({
           <SettingsScreen
             settings={settings}
             update={update}
+            performanceStatus={performanceStatus}
             onOpenPermissions={() => chooseSection('privacidade')}
             embedded
           />

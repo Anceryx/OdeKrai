@@ -1,4 +1,5 @@
 import { normalizeSoundPreferences } from './sounds';
+import type { PerformanceMode } from './performance';
 import {
   AI_PROVIDERS,
   providerById,
@@ -23,6 +24,7 @@ export type AppSettings = {
   reduceMascot: boolean;
   useMascotAsAssistantAvatar: boolean;
   showReleaseNotes: boolean;
+  performanceMode: PerformanceMode;
   microphoneEnabled: boolean;
   readRepliesAutomatically: boolean;
   speechVoiceURI: string;
@@ -87,6 +89,7 @@ export const defaultSettings: AppSettings = {
   reduceMascot: false,
   useMascotAsAssistantAvatar: false,
   showReleaseNotes: true,
+  performanceMode: 'automatic',
   microphoneEnabled: false,
   readRepliesAutomatically: false,
   speechVoiceURI: '',
@@ -266,6 +269,9 @@ export function loadSettingsWithWarnings(): { settings: AppSettings; warnings: s
           typeof value.showReleaseNotes === 'boolean'
             ? value.showReleaseNotes
             : defaultSettings.showReleaseNotes,
+        performanceMode: ['automatic', 'enabled', 'disabled'].includes(value.performanceMode)
+          ? (value.performanceMode as PerformanceMode)
+          : defaultSettings.performanceMode,
         microphoneEnabled: value.microphoneEnabled === true,
         readRepliesAutomatically: value.readRepliesAutomatically === true,
         speechVoiceURI:

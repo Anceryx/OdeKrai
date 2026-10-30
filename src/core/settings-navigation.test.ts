@@ -45,6 +45,9 @@ describe('navegação das configurações', () => {
   });
 
   it('filtra opções e seções pelo mesmo índice', () => {
+    expect(filterSettingsIndex('desempenho').map((entry) => entry.anchor)).toContain(
+      'settings-performance',
+    );
     expect(filterSettingsIndex('novidades').map((entry) => entry.anchor)).toContain(
       'settings-updates',
     );

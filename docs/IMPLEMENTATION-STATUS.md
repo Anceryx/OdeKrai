@@ -1,5 +1,12 @@
 # Estado da implementação
 
+## L11 — modo Desempenho
+
+- A preferência é Automático, Ligado ou Desligado. Automático ativa com `prefers-reduced-motion` ou com até 8 GiB de RAM total ou no máximo 4 núcleos lógicos; falhas de consulta não presumem hardware fraco e a interface informa o motivo.
+- Ligado aplica `data-performance="on"` à janela principal e à janela do pet. Sombras, superfícies translúcidas, imagens de fundo/gradientes e animações do mascote são removidos; o modal não se move. Os recursos funcionais permanecem disponíveis.
+- Build de produção medido no Linux: 881.681 bytes (861,0 KiB) de JavaScript e CSS, sem fontes e imagens; Ligado e Desligado usam o mesmo bundle, pois a opção só altera CSS em tempo de execução (delta: 0 bytes).
+- A medição real de CPU em idle e contagem total de IPC durante 60 s depende de executar as janelas Tauri no Windows e permanece pendente. Automático faz uma consulta inicial do perfil de hardware; não há consulta periódica para o modo Desempenho.
+
 ## L10 — notas de versão no app
 
 - `scripts/generate-release-notes.mjs` valida `docs/releases/*.md` e gera o manifesto JSON que entra no bundle. A geração ocorre antes de dev, build e testes e exige versão atual com notas formatadas.

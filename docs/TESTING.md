@@ -1,5 +1,10 @@
 # Testes e validação
 
+## L11 — modo Desempenho
+
+- `performance.test.ts` cobre os modos fixos e Automático com perfis de hardware simulados, incluindo os limites de 8 GiB e 4 núcleos lógicos. `performance-mode.test.ts` verifica os efeitos CSS e a sincronização da janela do pet.
+- A medição de CPU em idle e das chamadas IPC por 60 s exige execução e instrumentação do aplicativo Tauri no Windows; permanece pendente neste ambiente.
+
 ## L10 — notas de versão no app
 
 - `scripts/generate-release-notes.test.mjs` verifica extração, ordenação, validação de Markdown e ausência da nota atual; `release-notes.test.ts` cobre nova versão, versão já vista, primeira instalação, opção desligada e notas ausentes.
@@ -126,6 +131,7 @@ detalhes sanitizados de stack ficam limitados ao painel local da interface.
 - A carga de CPU em idle não foi medida: este ambiente não executa o binário Windows. A implementação não usa polling contínuo; eventos Tauri/documento e CSS controlam a pausa.
 - `history.rs`: `pet_catalog_rejects_missing_json_and_unsafe_paths` valida o manifesto e bloqueia caminhos inseguros; `selected_pet_defaults_and_persists_in_sqlite` confere o padrão e persistência local.
 - `npm run build`, `npm test`, `npm run format:check`, `cargo fmt --check`, `cargo test --offline --lib` e `git diff --check` devem ser executados para validar o código.
+- L11: `performance.test.ts` exercita Automático com perfis simulados, inclusive os limites de 8 GiB e 4 núcleos. `performance-mode.test.ts` confere a aplicação em ambas as janelas e as regras CSS. Build medido em 2026-10-30: JavaScript+CSS somam 881.681 bytes (861,0 KiB); Desempenho é uma preferência de runtime, portanto Ligado/Desligado têm delta de bundle igual a 0 bytes. CPU em idle e total de IPC em 60 s ainda dependem de medição do executável no Windows.
 - Validação visual nativa pendente no Windows: cápsula expandida/recolhida, ajuste em monitores pequenos, transparência real sem borda/sombra, animações nos dois modos, avatar, foco, arrasto, topmost, escala/DPI e limites da área útil em vários monitores. Medição de CPU idle não disponível nesta sessão; não validar click-through, pois a janela recebe cliques normalmente.
 - Há SVGs locais em `assets-src/iconly/`, sem arquivo de licença e ainda não rastreados pelo Git; não são incorporados nesta fase.
 

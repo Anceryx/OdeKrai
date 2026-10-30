@@ -25,6 +25,7 @@ import {
   type IslandQuickRequest,
 } from '../core/island-quick';
 import type { HomeSuggestion } from '../core/home';
+import type { PerformanceModeStatus } from '../core/performance';
 
 type IslandQuickResult = {
   requestId: string;
@@ -112,6 +113,9 @@ export function IslandWindow() {
       }),
       listen<string>('selected-pet-updated', ({ payload }) => {
         if (PETS.some((pet) => pet.id === payload)) setSelectedPetId(payload);
+      }),
+      listen<PerformanceModeStatus>('performance-mode-updated', ({ payload }) => {
+        document.documentElement.dataset.performance = payload.enabled ? 'on' : 'off';
       }),
       listen<HomeSuggestion[]>('pet-quick-suggestions', ({ payload }) =>
         setQuickSuggestions(islandSuggestions(payload)),

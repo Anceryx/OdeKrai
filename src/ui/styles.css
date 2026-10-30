@@ -6519,7 +6519,7 @@ html[data-performance='on'] .ui-tooltip-content {
   }
 }
 
-/* Opt-in para hardware modesto: use no elemento html, sem alterar a preferência salva. */
+/* Aplicado pelo modo Desempenho persistido como preferência da interface. */
 html[data-performance='on'] *,
 html[data-performance='on'] *::before,
 html[data-performance='on'] *::after {
@@ -6540,6 +6540,30 @@ html[data-performance='on'] .agent-action-card {
 }
 html[data-performance='on'] [data-translucent] {
   background-color: var(--color-surface-raised) !important;
+  opacity: 1 !important;
+}
+html[data-performance='on'] .modal-backdrop {
+  background: var(--color-background) !important;
+}
+html[data-performance='on'] .settings-card,
+html[data-performance='on'] .permission-mode,
+html[data-performance='on'] .shortcut-editor input,
+html[data-performance='on'] .audit-entry,
+html[data-performance='on'] .audit-entry pre,
+html[data-performance='on'] .approval-facts > div {
+  background-color: var(--color-surface) !important;
+}
+html[data-performance='on'] .security-state {
+  background-color: var(--color-surface-raised) !important;
+}
+html[data-performance='on'] .permission-mode.selected,
+html[data-performance='on'] .security-state.halted,
+html[data-performance='on'] .security-state.total {
+  background-color: var(--color-surface-raised) !important;
+}
+html.island-window-html[data-performance='on'],
+html.island-window-html[data-performance='on'] body.island-window-body {
+  background: var(--color-background) !important;
 }
 html[data-performance='on'] .animated-gradient,
 html[data-performance='on'] [data-animated-gradient] {

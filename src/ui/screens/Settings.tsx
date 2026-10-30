@@ -6,6 +6,7 @@ import { moveFallbackProvider, setFallbackProviderIds } from '../../core/provide
 import { PageHeader, Toggle } from '../DesignSystem';
 import { CodeDelegationSettings } from '../CodeDelegationSettings';
 import { localBrazilianPortugueseVoices, type LocalSpeechVoice } from '../../core/speech';
+import type { PerformanceModeView } from '../usePerformanceMode';
 
 type ProviderUsage = {
   providerId: string;
@@ -26,11 +27,13 @@ export function SettingsScreen({
   settings,
   update,
   onOpenPermissions,
+  performanceStatus,
   embedded = false,
 }: {
   settings: AppSettings;
   update: (next: AppSettings) => void;
   onOpenPermissions: () => void;
+  performanceStatus: PerformanceModeView;
   embedded?: boolean;
 }) {
   const [usage, setUsage] = useState<ProviderUsage[]>([]);
@@ -150,6 +153,38 @@ export function SettingsScreen({
             <option value="exit">Encerrar</option>
           </select>
         </div>
+      </section>
+      <section id="settings-performance" className="settings-panel settings-section">
+        <h2>Desempenho</h2>
+        <div className="preference-row">
+          <div>
+            <strong>Modo Desempenho</strong>
+            <span>
+              Automático ativa com movimento reduzido do Windows, até 8 GiB de RAM ou no máximo 4
+              núcleos lógicos de CPU. Desligado desativa esta regra; o movimento reduzido do Windows
+              continua sendo respeitado.
+            </span>
+          </div>
+          <select
+            aria-label="Modo Desempenho"
+            value={settings.performanceMode}
+            onChange={(event) =>
+              update({
+                ...settings,
+                performanceMode: event.target.value as AppSettings['performanceMode'],
+              })
+            }
+          >
+            <option value="automatic">Automático</option>
+            <option value="enabled">Ligado</option>
+            <option value="disabled">Desligado</option>
+          </select>
+        </div>
+        <p className="settings-description" role="status" aria-live="polite">
+          {performanceStatus.loading
+            ? 'Verificando movimento reduzido e recursos do computador…'
+            : performanceStatus.reason}
+        </p>
       </section>
       <section id="settings-appearance" className="settings-panel settings-section">
         <h2>Aparência</h2>

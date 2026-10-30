@@ -109,6 +109,19 @@ describe('preferências persistidas', () => {
     expect(loadSettings().showReleaseNotes).toBe(false);
   });
 
+  it('inicia Desempenho em Automático e persiste a escolha manual', () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    });
+    const settings = loadSettings();
+    expect(settings.performanceMode).toBe('automatic');
+    settings.performanceMode = 'enabled';
+    expect(saveSettings(settings)).toBe(true);
+    expect(loadSettings().performanceMode).toBe('enabled');
+  });
+
   it('persiste a substituição de efeito sonoro selecionada', () => {
     const storage = new Map<string, string>();
     vi.stubGlobal('localStorage', {

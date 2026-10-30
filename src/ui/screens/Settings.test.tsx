@@ -11,6 +11,11 @@ describe('SettingsScreen', () => {
         settings={defaultSettings}
         update={() => undefined}
         onOpenPermissions={() => undefined}
+        performanceStatus={{
+          enabled: false,
+          reason: 'Automático desativado: perfil simulado acima do limite.',
+          loading: false,
+        }}
       />,
     );
     expect(markup).toContain('Provedores alternativos');
@@ -26,6 +31,8 @@ describe('SettingsScreen', () => {
     expect(markup).toContain('Reduzir mascote');
     expect(markup).toContain('A janela do pet continua seguindo Reduzir animações');
     expect(markup).toContain('Mostrar novidades de novas versões');
+    expect(markup).toContain('Modo Desempenho');
+    expect(markup).toContain('Automático desativado: perfil simulado acima do limite.');
   });
 
   it('exibe as informações de versão em um componente independente', () => {
