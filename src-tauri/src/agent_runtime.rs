@@ -304,7 +304,7 @@ impl AgentBackend for RuntimeBackend<'_> {
                 crate::policy::Risk::DestrutivoFinanceiro => "destrutivo ou financeiro",
                 crate::policy::Risk::ExecucaoDeCodigo => "execução de código (alto)",
             };
-            let summary = action_card_summary(skill, &call.args);
+            let summary = action_card_summary(&skill, &call.args);
             let untrusted_result = skill.id == "code.delegate"
                 || security::skills::result_is_untrusted(&self.app, skill.id, &call.args)?;
             let action_started = std::time::Instant::now();
