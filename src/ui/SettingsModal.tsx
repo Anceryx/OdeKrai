@@ -54,6 +54,7 @@ export function SettingsModal({
   onOpenActivityFullPage,
   onAgentStatus,
   sharedAudit,
+  requestedEntry,
 }: {
   open: boolean;
   section: SettingsSection;
@@ -78,10 +79,12 @@ export function SettingsModal({
     loading: boolean;
     unavailable?: boolean;
   };
+  requestedEntry?: { section: SettingsSection; anchor: string; requestId: number } | null;
 }) {
   const [query, setQuery] = useState('');
   const [pendingAnchor, setPendingAnchor] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const lastHandledPaletteRequest = useRef(0);
   const menu = useMemo(() => filterSettingsMenu(query), [query]);
   const results = useMemo(() => filterSettingsIndex(query), [query]);
   const activeTitle = SETTINGS_MENU.find((item) => item.id === section)?.title ?? 'Configurações';
@@ -103,6 +106,17 @@ export function SettingsModal({
     observer.observe(container, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, [pendingAnchor, section]);
+
+  useEffect(() => {
+    if (
+      open &&
+      requestedEntry?.section === section &&
+      requestedEntry.requestId > lastHandledPaletteRequest.current
+    ) {
+      lastHandledPaletteRequest.current = requestedEntry.requestId;
+      setPendingAnchor(requestedEntry.anchor);
+    }
+  }, [open, requestedEntry, section]);
 
   function chooseSection(next: SettingsSection, anchor?: string) {
     setPendingAnchor(anchor ?? null);

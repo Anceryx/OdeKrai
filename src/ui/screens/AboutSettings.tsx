@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { Kbd } from '../DesignSystem';
 
 type BuildInfo = {
   version: string;
@@ -85,6 +86,12 @@ export function AboutSettings() {
             <dd>MIT</dd>
           </div>
         </dl>
+        <section className="settings-subsection" aria-labelledby="about-shortcuts-heading">
+          <h3 id="about-shortcuts-heading">Atalhos de teclado</h3>
+          <p className="settings-description">
+            <Kbd>Ctrl+K</Kbd> Abrir a paleta de comandos
+          </p>
+        </section>
         <div className="about-actions">
           <button
             className="secondary-button small-button"

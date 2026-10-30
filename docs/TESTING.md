@@ -1,5 +1,12 @@
 # Testes e validação
 
+## Paleta de comandos
+
+`src/core/command-palette.test.ts` verifica busca aproximada, recência, destinos canônicos, despacho
+dos tipos de ação, navegação com setas, contrato ARIA do combobox/listbox e reutilização do comando
+Rust de modo de permissão com confirmação nativa. Os testes são locais; validação visual e de foco
+no executável Windows permanece pendente.
+
 ## Fase 4 — cobertura parcial do agente
 
 O loop de agente e o motor de políticas têm cobertura unitária, mas continuam pendentes cenários

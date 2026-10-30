@@ -115,6 +115,14 @@ import { SettingsModal } from './SettingsModal';
 import { resolveAgentReason, resolveConfigurationReason } from '../core/navigation';
 import { ScreenErrorBoundary } from './ScreenErrorBoundary';
 import { ResizeHandle } from './ResizeHandle';
+import { CommandPalette } from './CommandPalette';
+import {
+  buildPaletteItems,
+  dispatchPaletteAction,
+  updateRecentCommands,
+  type PaletteItem,
+} from '../core/command-palette';
+import type { SkillFamily } from '../core/skills-catalog';
 const screenLoading = (
   <div className="screen-loading" role="status">
     Carregando tela…
@@ -171,6 +179,19 @@ function MainApp() {
   const [agentErrorDetails, setAgentErrorDetails] = useState('');
   const [agentAwaitingApproval, setAgentAwaitingApproval] = useState(false);
   const [agentActionCards, setAgentActionCards] = useState<AgentActionCardData[]>([]);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [recentCommands, setRecentCommands] = useState<string[]>([]);
+  const [requestedSkillFamily, setRequestedSkillFamily] = useState<{
+    family: SkillFamily;
+    requestId: number;
+  } | null>(null);
+  const skillFamilyRequestId = useRef(0);
+  const [requestedSettingsEntry, setRequestedSettingsEntry] = useState<{
+    section: import('../core/navigation').SettingsSection;
+    anchor: string;
+    requestId: number;
+  } | null>(null);
+  const settingsEntryRequestId = useRef(0);
   const [undoToast, setUndoToast] = useState<{ cardId: string } | null>(null);
   useEffect(() => {
     if (!undoToast) return;
@@ -590,6 +611,10 @@ function MainApp() {
     };
   }, []);
 
+  useEffect(() => {
+    if (section !== 'skills') setRequestedSkillFamily(null);
+  }, [section]);
+
   async function choosePet(petId: string) {
     if (!PETS.some((pet) => pet.id === petId)) return;
     try {
@@ -633,6 +658,69 @@ function MainApp() {
     void playSound('notification', normalizeSoundPreferences(settings.companion.sounds));
   }, [diagnostics.length, settings.companion.sounds]);
   const currentNav = useMemo(() => navigationItems.find((item) => item.id === section), [section]);
+  const paletteItems = useMemo(
+    () => buildPaletteItems({ conversations, currentConversationId: conversationId, agentEnabled }),
+    [conversations, conversationId, agentEnabled],
+  );
+
+  useEffect(() => {
+    const onShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'k') return;
+      event.preventDefault();
+      setCommandPaletteOpen((open) => !open);
+    };
+    window.addEventListener('keydown', onShortcut);
+    return () => window.removeEventListener('keydown', onShortcut);
+  }, []);
+
+  async function executePaletteItem(item: PaletteItem) {
+    setRecentCommands((recent) => updateRecentCommands(recent, item.id));
+    setCommandPaletteOpen(false);
+    dispatchPaletteAction(item.action, {
+      page: (page) => {
+        navigate(page);
+        if (page === 'chat') setChatMode(true);
+      },
+      settings: (section, anchor) => {
+        if (anchor) {
+          settingsEntryRequestId.current += 1;
+          setRequestedSettingsEntry({ section, anchor, requestId: settingsEntryRequestId.current });
+        }
+        selectSettingsSection(section);
+      },
+      newConversation: startHomeConversation,
+      conversation: (id) => openConversation(id),
+      agentMode: (enabled) => void setConversationAgentMode(enabled),
+      skillFamily: (family) => {
+        skillFamilyRequestId.current += 1;
+        setRequestedSkillFamily({ family, requestId: skillFamilyRequestId.current });
+        navigate('skills');
+      },
+      pet: (id) => void choosePet(id),
+      permissionMode: (mode) => {
+        try {
+          // This is the same native-confirmation command used by SecurityCenter.
+          void invoke('set_permission_mode', { mode }).catch((cause: unknown) => {
+            setToast(typeof cause === 'string' ? cause : 'O modo não foi alterado.');
+          });
+        } catch (cause) {
+          setToast(typeof cause === 'string' ? cause : 'O modo não foi alterado.');
+        }
+      },
+      stopAll: () => void stopAll(),
+      mute: () => {
+        stopLocalSpeech();
+        setSettings((current) => ({
+          ...current,
+          companion: {
+            ...current.companion,
+            sounds: { ...current.companion.sounds, enabled: false },
+          },
+        }));
+        setToast('O pet foi silenciado.');
+      },
+    });
+  }
 
   function selectProvider(provider: AiProvider) {
     setSelectedProviderId(provider.id);
@@ -1590,6 +1678,8 @@ function MainApp() {
               {section === 'calendar' && <CalendarScreen />}
               {section === 'skills' && (
                 <SkillsScreen
+                  key={requestedSkillFamily?.requestId ?? 'all-families'}
+                  initialFamily={requestedSkillFamily?.family}
                   onOpenPrivacy={() => navigate('permissions')}
                   agentRuntime={{
                     modeEnabled: agentEnabled,
@@ -1739,6 +1829,14 @@ function MainApp() {
         onOpenActivityFullPage={() => openLegacyScreen('activity')}
         onAgentStatus={() => reportDiagnostic('agent_home_status', '')}
         sharedAudit={sharedAudit}
+        requestedEntry={requestedSettingsEntry}
+      />
+      <CommandPalette
+        open={commandPaletteOpen}
+        items={paletteItems}
+        recentIds={recentCommands}
+        onClose={() => setCommandPaletteOpen(false)}
+        onExecute={(item) => void executePaletteItem(item)}
       />
     </div>
   );

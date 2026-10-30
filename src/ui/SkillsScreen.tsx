@@ -638,9 +638,11 @@ function SkillFamilyDetails({
 export function SkillsScreen({
   onOpenPrivacy,
   agentRuntime,
+  initialFamily,
 }: {
   onOpenPrivacy: () => void;
   agentRuntime: NonNullable<SkillsCatalogViewProps['agentRuntime']>;
+  initialFamily?: SkillFamily;
 }) {
   const [skills, setSkills] = useState<CatalogSkill[]>([]);
   const [error, setError] = useState('');
@@ -725,6 +727,7 @@ export function SkillsScreen({
       }
       prerequisites={prerequisites}
       agentRuntime={agentRuntime}
+      initialFamily={initialFamily}
       onFamilyToggle={(family, enabled) =>
         void runCommand(() => setSkillGroupEnabledCommand(family, enabled, invoke))
       }
