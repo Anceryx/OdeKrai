@@ -733,6 +733,17 @@ async fn ensure_pet_window(app: &tauri::AppHandle) -> Result<WebviewWindow, Stri
     Ok(window)
 }
 
+async fn show_pet_quick_command(app: &tauri::AppHandle) -> Result<(), String> {
+    let window = ensure_pet_window(app).await?;
+    if !window.is_visible().unwrap_or(false) {
+        restore_pet_position(app, &window)?;
+        window.show().map_err(|_| "Não foi possível mostrar a ilha para o comando rápido.".to_string())?;
+        let _ = app.emit("pet-window-visibility", true);
+    }
+    let _ = app.emit("pet-quick-focus-request", ());
+    Ok(())
+}
+
 pub(crate) async fn toggle_pet_from_tray(app: &tauri::AppHandle) {
     match app.get_webview_window("pet") {
         Some(window) if window.is_visible().unwrap_or(false) => {
@@ -961,9 +972,9 @@ pub fn run() -> Result<(), tauri::Error> {
         }))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| {
+                .with_handler(|app, shortcut, event| {
                     if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        security::on_global_shortcut(app);
+                        security::handle_global_shortcut(app, shortcut.id());
                     }
                 })
                 .build(),
@@ -1103,6 +1114,9 @@ pub fn run() -> Result<(), tauri::Error> {
             security::skills::register_allowed_app,
             security::skills::remove_allowed_app,
             security::set_kill_shortcut,
+            security::get_island_quick_shortcut,
+            security::set_island_quick_shortcut,
+            security::take_pet_quick_focus_request,
             security::set_approval_ttl,
             security::halt_all,
             security::resume_all,

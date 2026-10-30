@@ -101,6 +101,8 @@ Pedidos `AskUser` entram numa fila Rust limitada e abrem a janela Tauri `approva
 
 O plugin Tauri `global-shortcut` registra o atalho no processo nativo. O kill switch persiste a parada, cancela tokens dos streams, nega a fila e bloqueia novos envios a provedores. Retomar só funciona depois de gravar a entrada de auditoria. As decisões no WebView servem somente para exibição e entrada do usuário.
 
+O atalho opcional do comando rápido é persistido em `permission_settings` e fica desligado por padrão. Seus comandos Tauri são assíncronos; o handler compara o ID registrado e apenas solicita que a janela única `pet` expanda e foque o campo. Não envia mensagens nem aprova ações. Em conflito, no Windows, a falha de `RegisterHotKey` (ERROR_HOTKEY_ALREADY_REGISTERED) é convertida em mensagem para escolher outra combinação; o contrato de conflito equivalente em Linux/macOS não foi verificado. Referência oficial: [plugin Tauri global-shortcut v2](https://github.com/tauri-apps/plugins-workspace/tree/v2/plugins/global-shortcut) e [implementação Windows de global-hotkey](https://github.com/tauri-apps/global-hotkey/blob/dev/src/platform_impl/windows/mod.rs).
+
 ## Limites conhecidos
 
 - Um ensaio anterior abriu o executável com o UDF WebView2 padrão. O erro `0x800700AA` também ocorreu em outra tentativa; a causa permanece inconclusiva. O plugin de instância única evita abrir uma segunda instância do aplicativo, mas seu efeito sobre esse erro precisa de teste nativo.
