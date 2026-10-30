@@ -1,5 +1,11 @@
 # Estado da implementação
 
+## L9 — assistente de primeiro uso
+
+- O Modal apresenta provedor, pasta, mascote e permissões reutilizando `ProvidersScreen`, `IdentityScreen`/`AgentHome`, `AssistantScreen` e `SecurityCenter`; as configurações continuam no estado compartilhado do app. A etapa de provedores começa na aba de planos gratuitos verificados, e a chave continua no Gerenciador de Credenciais do Windows e é apagada do campo após salvar. No modo do assistente, descoberta/listagem de modelos e teste rápido ficam indisponíveis; salvar valida apenas o formato/endereço localmente, sem enviar dados ao provedor. A conexão só é testada pela ação explícita “Testar conexão sem gerar resposta”.
+- Pular, avançar, voltar e escolher uma etapa são permitidos. Passo atual e conclusão real ficam em `localStorage` sem credenciais; o Modal abre sozinho uma vez e pode ser reaberto em Ajuda e suporte. O modo de permissões reaproveita `set_permission_mode`, incluindo a confirmação nativa para Controle total. O checklist do Início não foi alterado.
+- Testes cobrem persistência/retomada, pular e voltar, abertura única, conclusão que acompanha requisitos e rótulos ARIA das etapas. Validação visual no Windows permanece pendente.
+
 ## L8 — comando rápido na ilha
 
 - O modo expandido da janela `pet` inclui campo de uma linha e até três sugestões reais geradas pela mesma `createHomeSuggestions` usada no Início. Enviar encaminha o texto ao `sendMessage` existente no app principal, que persiste e executa a conversa no motor atual; a ilha mostra um resumo e oferece “Abrir no OdeKrai”.

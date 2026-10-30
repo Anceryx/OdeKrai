@@ -2994,6 +2994,98 @@ html[data-performance='on'] .modal-surface {
   overflow: hidden;
   padding: 0;
 }
+.first-use-wizard {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 14px;
+}
+.first-use-progress {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+}
+.first-use-progress strong {
+  color: var(--color-text);
+}
+.first-use-step-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+.first-use-step-list button {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  padding: 8px;
+  overflow: hidden;
+  text-align: left;
+}
+.first-use-step-list button.active {
+  border-color: var(--color-accent);
+}
+.first-use-step-list button span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.first-use-stage {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+}
+.first-use-stage > header h3 {
+  margin: 0 0 5px;
+}
+.first-use-stage > header p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+}
+.first-use-step-content {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.first-use-step-content > .page {
+  min-height: 0;
+  padding: 0;
+}
+.first-use-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: 12px;
+}
+.first-use-footer > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+@media (max-width: 680px) {
+  .first-use-step-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .first-use-progress,
+  .first-use-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .first-use-footer > div {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
 .settings-modal-content {
   display: grid;
   height: 100%;

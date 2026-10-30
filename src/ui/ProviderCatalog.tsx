@@ -38,6 +38,8 @@ type Props = {
   onSave: (provider: ProviderSettings) => void;
   onChat: () => void;
   onCredentialRemoved: (providerId: string) => void;
+  initialTab?: ProviderDirectoryTab;
+  onboardingMode?: boolean;
 };
 
 type LocalDiscovery = {
@@ -58,6 +60,8 @@ export function ProviderCatalog({
   onSave,
   onChat,
   onCredentialRemoved,
+  initialTab,
+  onboardingMode = false,
 }: Props) {
   const selected = AI_PROVIDERS.find((provider) => provider.id === selectedId) ?? AI_PROVIDERS[0];
   const catalogEntry = providerCatalogEntry(selected.id);
@@ -69,8 +73,10 @@ export function ProviderCatalog({
   const [secret, setSecret] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [search, setSearch] = useState('');
-  const [tab, setTab] = useState<ProviderDirectoryTab>(() =>
-    loadProviderDirectoryTab(typeof localStorage === 'undefined' ? undefined : localStorage),
+  const [tab, setTab] = useState<ProviderDirectoryTab>(
+    () =>
+      initialTab ??
+      loadProviderDirectoryTab(typeof localStorage === 'undefined' ? undefined : localStorage),
   );
   const [credentialSavedIds, setCredentialSavedIds] = useState<Set<string>>(new Set());
   const [localServiceOnline, setLocalServiceOnline] = useState(false);
@@ -130,10 +136,12 @@ export function ProviderCatalog({
         loadSavedCredentialProviderIds(providerIds, (providerId) =>
           invoke<boolean>('has_provider_credential', { providerId }),
         ),
-        invoke<LocalDiscovery>('discover_local_models').catch(() => ({
-          onlineEndpoints: [],
-          models: [],
-        })),
+        onboardingMode
+          ? Promise.resolve({ onlineEndpoints: [], models: [] } as LocalDiscovery)
+          : invoke<LocalDiscovery>('discover_local_models').catch(() => ({
+              onlineEndpoints: [],
+              models: [],
+            })),
       ]).then(([result, localModels]) => {
         if (!current) return;
         setCredentialSavedIds(result.credentialIds);
@@ -151,7 +159,7 @@ export function ProviderCatalog({
     return () => {
       current = false;
     };
-  }, []);
+  }, [onboardingMode]);
   useEffect(() => {
     let current = true;
     const baseCapabilities = catalogEntry?.capabilities ?? null;
@@ -650,7 +658,7 @@ export function ProviderCatalog({
                       ))}
                     </span>
                   </button>
-                  {provider.id === 'local' && (
+                  {provider.id === 'local' && !onboardingMode && (
                     <button
                       type="button"
                       className="provider-local-action"
@@ -778,10 +786,12 @@ export function ProviderCatalog({
                       : 'Nenhum provedor corresponde à busca.'}
             </p>
           )}
-          <p className="provider-compat-note">
-            A consulta sem enviar mensagem carrega os modelos da conta quando o provedor oferece
-            esse recurso. O teste de conexão é opcional e pode gerar cobrança.
-          </p>
+          {!onboardingMode && (
+            <p className="provider-compat-note">
+              A consulta sem enviar mensagem carrega os modelos da conta quando o provedor oferece
+              esse recurso. O teste de conexão é opcional e pode gerar cobrança.
+            </p>
+          )}
           {tab === 'connected' &&
             filtered.length === 0 &&
             credentialChecksComplete &&
@@ -852,7 +862,7 @@ export function ProviderCatalog({
                     {selected.freePlan.status === 'verified' ? 'verificado' : 'não verificado'}
                   </span>
                 )}
-                {selected.id === 'local' && (
+                {selected.id === 'local' && !onboardingMode && (
                   <span>
                     Serviço local{' '}
                     {localServiceOnline
@@ -864,7 +874,7 @@ export function ProviderCatalog({
                 )}
               </div>
             )}
-            {selected.id === 'local' && (
+            {selected.id === 'local' && !onboardingMode && (
               <p className="provider-key-note" role="status">
                 <strong>Serviço local:</strong>{' '}
                 {localServiceOnline
@@ -1018,7 +1028,18 @@ export function ProviderCatalog({
                   void configure(false);
                 }}
               >
-                {selected.id === 'local' && (
+                {selected.id === 'local' && onboardingMode && (
+                  <label className="field-label">
+                    Modelo local
+                    <input
+                      value={draft.model}
+                      onChange={(event) => updateDraft('model', event.target.value)}
+                      placeholder={selected.modelHint}
+                      spellCheck={false}
+                    />
+                  </label>
+                )}
+                {selected.id === 'local' && !onboardingMode && (
                   <p className="provider-key-note">
                     <strong>Local</strong> · A conversa não sai do seu computador.
                   </p>
@@ -1044,7 +1065,11 @@ export function ProviderCatalog({
                         .
                       </li>
                       <li>Baixe e carregue um modelo no servidor.</li>
-                      <li>Inicie o servidor e procure modelos disponíveis.</li>
+                      <li>
+                        {onboardingMode
+                          ? 'Inicie o servidor e informe o modelo no campo abaixo.'
+                          : 'Inicie o servidor e procure modelos disponíveis.'}
+                      </li>
                     </>
                   ) : (
                     <>
@@ -1071,7 +1096,11 @@ export function ProviderCatalog({
                         <span>Ela fica no Gerenciador de Credenciais do Windows.</span>
                       </li>
                       <li>
-                        <strong>4. Carregue e selecione um modelo</strong>
+                        <strong>
+                          {onboardingMode
+                            ? '4. Informe o identificador de um modelo'
+                            : '4. Carregue e selecione um modelo'}
+                        </strong>
                       </li>
                     </>
                   )}
@@ -1166,7 +1195,7 @@ export function ProviderCatalog({
                     Restaurar padrão do provedor
                   </button>
                 </details>
-                {catalogEntry?.modelListPath && (
+                {catalogEntry?.modelListPath && !onboardingMode && (
                   <button
                     className="text-button"
                     type="button"
@@ -1227,7 +1256,7 @@ export function ProviderCatalog({
                       ))}
                     </select>
                   </label>
-                ) : !catalogEntry?.modelListPath ? (
+                ) : onboardingMode || !catalogEntry?.modelListPath ? (
                   <label className="field-label">
                     {selected.id === 'azure-openai'
                       ? 'Nome do deployment'
@@ -1287,7 +1316,7 @@ export function ProviderCatalog({
                 >
                   Testar conexão sem gerar resposta
                 </button>
-                {selected.id !== 'perplexity' && selected.id !== 'local' && (
+                {!onboardingMode && selected.id !== 'perplexity' && selected.id !== 'local' && (
                   <button
                     className="text-button"
                     type="button"

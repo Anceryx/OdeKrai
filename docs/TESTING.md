@@ -90,6 +90,12 @@ detalhes sanitizados de stack ficam limitados ao painel local da interface.
 - Build, testes de frontend, codificação e ACL foram executados nesta sessão. A suíte completa tem três testes de publicação bloqueados pelo `spawnSync git EPERM` do sandbox; Rust não pôde ser compilado porque `cargo`/`rustfmt` não estão instalados no ambiente.
 - Validação visual e de foco no Windows pendente, incluindo monitores múltiplos e DPI misto. A confirmação documental Microsoft do comportamento de foco também está pendente por bloqueio HTTP 403 neste ambiente.
 
+### L9 — assistente de primeiro uso
+
+- `first-use.test.ts` usa armazenamento simulado para verificar abrir uma vez, persistir e retomar, pular, voltar e concluir apenas etapas atendidas. `FirstUseAssistant.test.tsx` verifica as etapas como botões com nome acessível e estado atual anunciado. `Modal.test.tsx` cobre foco por teclado e Escape no Modal reutilizado.
+- A grade de provedores, a pasta, a seleção de mascote e os modos de permissão reutilizam componentes/fluxos já testados; o modo do assistente suprime descoberta/listagem e teste rápido de modelos, e nenhum teste usa credenciais reais ou chama o provedor automaticamente.
+- Validação visual no Windows pendente, incluindo tamanho do Modal, foco e leitura das etapas em telas estreitas.
+
 ### L2 — Cartão de ação do agente
 
 - `AgentControls.test.tsx` cobre os estados apresentados, prévia como texto, timeline, parada, revisão pela janela nativa e controles de artefato sem botões de decisão.

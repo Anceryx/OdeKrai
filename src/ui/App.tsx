@@ -36,6 +36,7 @@ import {
   getTodayBounds,
   type HomeEvent,
 } from '../core/home';
+import { loadFirstUseProgress, shouldAutoOpenFirstUse } from '../core/first-use';
 import {
   islandReviewDestination,
   islandSuggestions,
@@ -97,7 +98,7 @@ const ActivityScreen = lazy(() =>
     default: withScreenBoundary(module.ActivityScreen),
   })),
 );
-import { ApprovalWindow, isApprovalWindow } from './SecurityCenter';
+import { ApprovalWindow, isApprovalWindow, SecurityCenter } from './SecurityCenter';
 import type { AuditEntry } from './SecurityCenter';
 import { SkillsScreen } from './SkillsScreen';
 import { PETS, petAnimationForAssistantActivity, type PetAnimationState } from '../core/pets';
@@ -112,13 +113,14 @@ import {
   setPrimaryProviderSettings,
   toggleProviderSettings,
 } from '../core/provider-directory';
-import { loadSettings } from '../core/settings';
+import { loadSettings, type ProviderSettings } from '../core/settings';
 import { useAppEffects } from './hooks/useAppEffects';
 import { externalLinkDomain, safeMarkdownUrl } from '../core/markdown';
 
 import { useAppState } from './hooks/useAppState';
 import { useNavigation } from './hooks/useNavigation';
 import { SettingsModal } from './SettingsModal';
+import { FirstUseAssistant, type FirstUseStepContent } from './FirstUseAssistant';
 import { resolveAgentReason, resolveConfigurationReason } from '../core/navigation';
 import { ScreenErrorBoundary } from './ScreenErrorBoundary';
 import { ResizeHandle } from './ResizeHandle';
@@ -206,6 +208,7 @@ function MainApp() {
   } | null>(null);
   const settingsEntryRequestId = useRef(0);
   const [undoToast, setUndoToast] = useState<{ cardId: string } | null>(null);
+  const [firstUseOpen, setFirstUseOpen] = useState(false);
   useEffect(() => {
     if (!undoToast) return;
     const timer = window.setTimeout(() => setUndoToast(null), 8000);
@@ -233,6 +236,8 @@ function MainApp() {
   const {
     settings,
     setSettings,
+    identityConfigured,
+    setIdentityConfigured,
     petVisible,
     setPetVisible,
     permissionIndicator,
@@ -269,6 +274,13 @@ function MainApp() {
     request,
     companionStateTimer,
   } = appState;
+  useEffect(() => {
+    if (!isTauri()) return;
+    const storage = typeof localStorage === 'undefined' ? undefined : localStorage;
+    const progress = loadFirstUseProgress(storage);
+    if (!shouldAutoOpenFirstUse(progress)) return;
+    setFirstUseOpen(true);
+  }, []);
   const emitCompanionState = (payload: { type: 'activity'; state: string; message: string }) => {
     setAssistantPetState(petAnimationForAssistantActivity(payload.state));
     void emit('companion-state', payload).catch(() =>
@@ -819,6 +831,19 @@ function MainApp() {
   function setProviderEnabled(providerId: string, enabled: boolean) {
     setSettings((current) => toggleProviderSettings(current, providerId, enabled));
     if (!enabled && settings.activeProviderId === providerId) setKeySavedForSession(false);
+  }
+
+  function saveProviderSettings(provider: ProviderSettings) {
+    setSettings((current) => ({
+      ...current,
+      providers: { ...current.providers, [provider.providerId]: provider },
+    }));
+    if (provider.providerId === settings.activeProviderId)
+      setKeySavedForSession(provider.providerId !== 'local');
+  }
+
+  function handleCredentialRemoved(providerId: string) {
+    if (settings.activeProviderId === providerId) setKeySavedForSession(false);
   }
 
   async function setConversationAgentMode(enabled: boolean) {
@@ -1461,6 +1486,94 @@ function MainApp() {
     }
   }
 
+  const firstUseSteps: FirstUseStepContent[] = [
+    {
+      id: 0,
+      title: 'Conecte um provedor',
+      description:
+        'Escolha um provedor, salve a chave no Gerenciador de Credenciais do Windows e teste a conexão quando quiser.',
+      complete:
+        (keySavedForSession || settings.activeProviderId === 'local') &&
+        settings.providers[settings.activeProviderId]?.lastTest?.status === 'passed',
+      content: (
+        <Suspense fallback={screenLoading}>
+          <ProvidersScreen
+            settings={settings}
+            selectedId={selectedProviderId}
+            onSelect={selectProvider}
+            onSetPrimary={setPrimaryProvider}
+            onToggleEnabled={setProviderEnabled}
+            onSave={saveProviderSettings}
+            onChat={beginChat}
+            onCredentialRemoved={handleCredentialRemoved}
+            initialTab="free"
+            onboardingMode
+          />
+        </Suspense>
+      ),
+    },
+    {
+      id: 1,
+      title: 'Escolha a pasta do OdeKrai',
+      description:
+        'Use o fluxo existente para criar uma pasta nova, localizar a atual ou escolher uma pasta existente.',
+      complete: identityConfigured === true,
+      content: (
+        <Suspense fallback={screenLoading}>
+          <IdentityScreen
+            initialName={profile.displayName}
+            initialNickname={profile.nickname}
+            profileValue={profile}
+            onProfileChange={setProfile}
+            onStatus={(status) => setIdentityConfigured(status.configured)}
+            embedded
+          />
+        </Suspense>
+      ),
+    },
+    {
+      id: 2,
+      title: 'Escolha seu mascote',
+      description:
+        'A grade mostra os mascotes disponíveis pelo nome. Você pode trocar a escolha depois.',
+      complete: PETS.some((pet) => pet.id === selectedPet),
+      content: (
+        <Suspense fallback={screenLoading}>
+          <AssistantScreen
+            settings={settings}
+            update={setSettings}
+            petVisible={petVisible}
+            onPetVisibilityChange={setPetVisible}
+            onError={setToast}
+            selectedPet={selectedPet}
+            onSelectPet={(petId) => void choosePet(petId)}
+            embedded
+          />
+        </Suspense>
+      ),
+    },
+    {
+      id: 3,
+      title: 'Revise as permissões',
+      description:
+        'O padrão é “Sempre perguntar”. “Controle total” mantém bloqueios fixos e só pode ser ativado após a confirmação nativa do Windows.',
+      complete: Boolean(
+        permissionIndicator &&
+        ['sempre_perguntar', 'aprovar_por_mim', 'controle_total'].includes(
+          permissionIndicator.mode,
+        ),
+      ),
+      content: (
+        <SecurityCenter
+          page="permissions"
+          embedded
+          appSettings={settings}
+          updateAppSettings={setSettings}
+        />
+      ),
+    },
+  ];
+
   const currentActivityAction =
     [...agentActionCards]
       .reverse()
@@ -1509,7 +1622,7 @@ function MainApp() {
           onMyProfile={() => navigate('agent')}
           onSettings={() => navigate('settings')}
           onPermissions={() => navigate('permissions')}
-          onHelp={() => void openResponseLink('https://github.com/Anceryx/OdeKrai/tree/main/docs')}
+          onHelp={() => setFirstUseOpen(true)}
           onAbout={() => selectSettingsSection('sobre')}
         />
       </aside>
@@ -1806,18 +1919,9 @@ function MainApp() {
                   onSelect={selectProvider}
                   onSetPrimary={setPrimaryProvider}
                   onToggleEnabled={setProviderEnabled}
-                  onSave={(provider) => {
-                    setSettings((current) => ({
-                      ...current,
-                      providers: { ...current.providers, [provider.providerId]: provider },
-                    }));
-                    if (provider.providerId === settings.activeProviderId)
-                      setKeySavedForSession(provider.providerId !== 'local');
-                  }}
+                  onSave={saveProviderSettings}
                   onChat={beginChat}
-                  onCredentialRemoved={(providerId) => {
-                    if (settings.activeProviderId === providerId) setKeySavedForSession(false);
-                  }}
+                  onCredentialRemoved={handleCredentialRemoved}
                 />
               )}
               {section === 'computer' && <ComputerScreen />}
@@ -1963,6 +2067,14 @@ function MainApp() {
           </button>
         </div>
       )}
+      <FirstUseAssistant
+        open={firstUseOpen}
+        steps={firstUseSteps}
+        onClose={() => setFirstUseOpen(false)}
+        onOpenDocumentation={() =>
+          void openResponseLink('https://github.com/Anceryx/OdeKrai/tree/main/docs')
+        }
+      />
       <SettingsModal
         open={settingsOpen}
         section={route.settingsSection ?? 'geral'}
