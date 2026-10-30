@@ -44,5 +44,24 @@ describe('AssistantScreen', () => {
     expect(markup).toContain('Aprovação necessária');
     expect(markup).toContain('Tocar prévia');
     expect(markup).toContain('Sem arquivo');
+    expect(markup).toContain('Atalho para o comando rápido');
+    expect(markup).toContain('aria-label="Atalho para o comando rápido"');
+    expect(markup).not.toContain('checked=""');
+  });
+
+  it('não mostra configuração do atalho dentro do assistente de primeiro uso', () => {
+    const markup = renderToStaticMarkup(
+      <AssistantScreen
+        settings={defaultSettings}
+        update={() => undefined}
+        petVisible={false}
+        onPetVisibilityChange={() => undefined}
+        onError={() => undefined}
+        selectedPet="character-female-a"
+        onSelectPet={() => undefined}
+        embedded
+      />,
+    );
+    expect(markup).not.toContain('Atalho para o comando rápido');
   });
 });

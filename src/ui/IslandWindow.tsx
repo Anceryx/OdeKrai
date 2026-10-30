@@ -273,6 +273,39 @@ export function IslandWindow() {
       setQuickError('Não foi possível devolver a ilha ao modo sem foco.');
     }
   };
+  useEffect(() => {
+    let disposed = false;
+    const focusIfRequested = async () => {
+      try {
+        const requested = await invoke<boolean>('take_pet_quick_focus_request');
+        if (!requested || disposed) return;
+        await send({ type: 'open' });
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => void requestQuickFocus());
+        });
+      } catch {
+        if (!disposed) setQuickError('Não foi possível abrir o campo de comando rápido.');
+      }
+    };
+    let stopFocus: (() => void) | undefined;
+    let stopError: (() => void) | undefined;
+    void listen('pet-quick-focus-request', () => void focusIfRequested())
+      .then((stop) => {
+        stopFocus = stop;
+        void focusIfRequested();
+      })
+      .catch(() => setQuickError('Não foi possível acompanhar o atalho do comando rápido.'));
+    void listen<string>('pet-quick-focus-error', ({ payload }) => setQuickError(payload))
+      .then((stop) => {
+        stopError = stop;
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+      stopFocus?.();
+      stopError?.();
+    };
+  }, []);
   const submitQuickCommand = async (event: FormEvent) => {
     event.preventDefault();
     if (!canSubmitIslandQuickCommand(quickDraft, quickBusy)) return;
