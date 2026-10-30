@@ -12,6 +12,12 @@ export type ActivityAuditSummary = {
   decision: string;
 };
 
+export type UpcomingReminder = {
+  title: string;
+  whenLocal: string;
+  status: 'pending' | 'notification_error' | string;
+};
+
 export function activityPanelTabIndex(
   key: string,
   shiftKey: boolean,
@@ -108,6 +114,9 @@ export function ActivitySidePanel({
   currentAction,
   events,
   reminderCount,
+  reminders,
+  remindersLoading,
+  upcomingReminderUnavailable,
   scheduleUnavailable,
   reminderUnavailable,
   actions,
@@ -131,6 +140,9 @@ export function ActivitySidePanel({
   currentAction: AgentActionCardData | null;
   events: HomeEvent[];
   reminderCount: number;
+  reminders: UpcomingReminder[];
+  remindersLoading: boolean;
+  upcomingReminderUnavailable: boolean;
   scheduleUnavailable: boolean;
   reminderUnavailable: boolean;
   actions: AgentActionCardData[];
@@ -307,14 +319,42 @@ export function ActivitySidePanel({
                   <p className="activity-panel-empty">
                     O resumo dos lembretes não está disponível ou a habilidade está desativada.
                   </p>
-                ) : reminderCount > 0 ? (
-                  <p className="activity-panel-reminders">
-                    {reminderCount}{' '}
-                    {reminderCount === 1 ? 'lembrete pendente' : 'lembretes pendentes'}; os horários
-                    não são fornecidos pelo resumo disponível. A contagem inclui todos os pendentes.
+                ) : upcomingReminderUnavailable ? (
+                  <p className="activity-panel-empty">
+                    Não foi possível carregar os próximos lembretes.
                   </p>
+                ) : remindersLoading ? (
+                  <p className="activity-panel-empty">Carregando lembretes…</p>
+                ) : reminders.length ? (
+                  <>
+                    <p className="activity-panel-reminders">
+                      {reminderCount}{' '}
+                      {reminderCount === 1 ? 'lembrete pendente' : 'lembretes pendentes'}
+                    </p>
+                    <ul className="activity-panel-list">
+                      {reminders.map((reminder, index) => (
+                        <li key={`${reminder.whenLocal}-${index}`}>
+                          <strong>{reminder.title}</strong>
+                          <time dateTime={reminder.whenLocal}>
+                            {formatWhen(reminder.whenLocal)}
+                          </time>
+                          {reminder.status === 'notification_error' && (
+                            <span>Notificação não exibida</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
                 ) : (
-                  <p className="activity-panel-empty">Nenhum lembrete pendente.</p>
+                  <>
+                    {reminderCount > 0 && (
+                      <p className="activity-panel-reminders">
+                        {reminderCount}{' '}
+                        {reminderCount === 1 ? 'lembrete pendente' : 'lembretes pendentes'}
+                      </p>
+                    )}
+                    <p className="activity-panel-empty">Nenhum lembrete nas próximas 24 horas.</p>
+                  </>
                 )}
               </>
             )}

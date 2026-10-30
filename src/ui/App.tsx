@@ -18,6 +18,7 @@ import {
   shouldLoadPanelAudit,
   toggleActivityPanel,
   type ActivityAuditSummary,
+  type UpcomingReminder,
 } from './ActivitySidePanel';
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
@@ -243,6 +244,9 @@ function MainApp() {
   const [todayEvents, setTodayEvents] = useState<HomeEvent[]>([]);
   const [scheduledEvents, setScheduledEvents] = useState<HomeEvent[]>([]);
   const [reminderCount, setReminderCount] = useState(0);
+  const [upcomingReminders, setUpcomingReminders] = useState<UpcomingReminder[]>([]);
+  const [upcomingRemindersLoading, setUpcomingRemindersLoading] = useState(false);
+  const [upcomingRemindersUnavailable, setUpcomingRemindersUnavailable] = useState(false);
   const [scheduleUnavailable, setScheduleUnavailable] = useState(false);
   const [reminderUnavailable, setReminderUnavailable] = useState(false);
   const homeContextLoadedAt = useRef(0);
@@ -551,6 +555,45 @@ function MainApp() {
       window.removeEventListener('focus', refreshOnFocus);
     };
   }, [section, activityPanelOpen]);
+
+  useEffect(() => {
+    if (!activityPanelOpen || !isTauri() || homeSkills === null) {
+      setUpcomingReminders([]);
+      setUpcomingRemindersLoading(false);
+      return;
+    }
+    const enabled = homeSkills.some(
+      (skill) =>
+        skill.id === 'reminder.list' &&
+        skill.family === 'agenda_lembretes' &&
+        skill.enabled &&
+        skill.status === 'installed',
+    );
+    if (!enabled) {
+      setUpcomingReminders([]);
+      setUpcomingRemindersUnavailable(true);
+      return;
+    }
+    let disposed = false;
+    setUpcomingRemindersLoading(true);
+    setUpcomingRemindersUnavailable(false);
+    void invoke<UpcomingReminder[]>('get_upcoming_reminders', { windowHours: 24 })
+      .then((items) => {
+        if (!disposed) setUpcomingReminders(items);
+      })
+      .catch(() => {
+        if (!disposed) {
+          setUpcomingReminders([]);
+          setUpcomingRemindersUnavailable(true);
+        }
+      })
+      .finally(() => {
+        if (!disposed) setUpcomingRemindersLoading(false);
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [activityPanelOpen, homeSkills]);
 
   useEffect(() => {
     if (
@@ -2046,6 +2089,9 @@ function MainApp() {
         currentAction={currentActivityAction}
         events={scheduledEvents}
         reminderCount={reminderCount}
+        reminders={upcomingReminders}
+        remindersLoading={upcomingRemindersLoading}
+        upcomingReminderUnavailable={upcomingRemindersUnavailable}
         scheduleUnavailable={scheduleUnavailable}
         reminderUnavailable={reminderUnavailable}
         actions={agentActionCards}

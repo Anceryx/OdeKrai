@@ -35,6 +35,11 @@ function panel(overrides: Partial<ComponentProps<typeof ActivitySidePanel>> = {}
       currentAction={action}
       events={[{ id: 'event-1', title: 'Reunião', start: '2026-10-31T15:00:00.000Z' }]}
       reminderCount={1}
+      reminders={[
+        { title: 'Ligar para Ana', whenLocal: '2026-10-30T15:30:00-03:00', status: 'pending' },
+      ]}
+      remindersLoading={false}
+      upcomingReminderUnavailable={false}
       scheduleUnavailable={false}
       reminderUnavailable={false}
       actions={[action]}
@@ -77,6 +82,8 @@ describe('painel lateral de atividade', () => {
     expect(markup).toContain('Execução: Local');
     expect(markup).toContain('Reunião');
     expect(markup).toContain('lembrete pendente');
+    expect(markup).toContain('Ligar para Ana');
+    expect(markup).toContain('15:30');
     expect(markup).toContain('Preparar arquivo');
     expect(markup).toContain('C:\\workspace\\relatorio.txt');
     expect(markup).not.toContain('programa.exe');
@@ -95,13 +102,15 @@ describe('painel lateral de atividade', () => {
       currentAction: null,
       events: [],
       reminderCount: 0,
+      reminders: [],
+      remindersLoading: false,
       actions: [],
       audit: [],
     });
     expect(markup).toContain('Nenhuma execução em andamento');
     expect(markup).toContain('Nenhuma aprovação pendente');
     expect(markup).toContain('Nenhum evento nas próximas 24 horas');
-    expect(markup).toContain('Nenhum lembrete pendente');
+    expect(markup).toContain('Nenhum lembrete nas próximas 24 horas');
     expect(markup).toContain('Nenhum arquivo recente nesta conversa');
     expect(markup).toContain('Nenhuma ação recente registrada');
     expect(markup).not.toMatch(/aprovar|negar/i);
