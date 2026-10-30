@@ -20,6 +20,7 @@ export type ProviderSettings = {
 export type AppSettings = {
   language: 'pt-BR' | 'en';
   reduceMotion: boolean;
+  reduceMascot: boolean;
   useMascotAsAssistantAvatar: boolean;
   microphoneEnabled: boolean;
   readRepliesAutomatically: boolean;
@@ -82,6 +83,7 @@ export function activeProviderSettings(settings: AppSettings): ProviderSettings 
 export const defaultSettings: AppSettings = {
   language: 'pt-BR',
   reduceMotion: false,
+  reduceMascot: false,
   useMascotAsAssistantAvatar: false,
   microphoneEnabled: false,
   readRepliesAutomatically: false,
@@ -253,6 +255,7 @@ export function loadSettingsWithWarnings(): { settings: AppSettings; warnings: s
       settings: {
         ...defaultSettings,
         ...migrated,
+        reduceMascot: value.reduceMascot === true,
         useMascotAsAssistantAvatar:
           typeof value.useMascotAsAssistantAvatar === 'boolean'
             ? value.useMascotAsAssistantAvatar

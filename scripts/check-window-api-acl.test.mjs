@@ -22,4 +22,19 @@ describe('verificação de ACL da API de janela', () => {
     ]);
     expect(findMissingWindowPermissions(['show'], ['core:window:allow-show'])).toEqual([]);
   });
+
+  it('reconhece visibilidade, minimização e foco da janela', () => {
+    expect(
+      findMissingWindowPermissions(
+        ['isVisible', 'isMinimized', 'isFocused', 'onFocusChanged', 'getAllWindows'],
+        [
+          'core:window:allow-is-visible',
+          'core:window:allow-is-minimized',
+          'core:window:allow-is-focused',
+          'core:event:allow-listen',
+          'core:window:allow-get-all-windows',
+        ],
+      ),
+    ).toEqual([]);
+  });
 });

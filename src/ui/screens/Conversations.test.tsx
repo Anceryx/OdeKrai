@@ -52,7 +52,7 @@ describe('ConversationsScreen', () => {
         onToggleConversationSidebar={() => undefined}
         onResizeConversationSidebar={() => undefined}
         onOpenLink={() => undefined}
-        assistantUsesMascot={false}
+        assistantUsesMascot
         onFixConfiguration={() => undefined}
         onRetry={() => undefined}
         canRetry={false}
@@ -81,6 +81,8 @@ describe('ConversationsScreen', () => {
     expect(markup).toContain('class="chat-composer-actions"');
     expect(markup).toContain('Gravação de áudio desativada em Configurações.');
     expect(markup).toContain('Lista de conversas');
+    expect(markup).toContain('empty-state-pet');
+    expect(markup).toContain('Avatar do OdeKrai: Nina');
     expect(markup).toContain('Recolher lista de conversas');
     expect(markup).toContain('Redimensionar lista de conversas');
     expect(markup).not.toContain('chat-model-chip');

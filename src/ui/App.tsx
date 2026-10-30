@@ -93,7 +93,7 @@ const ActivityScreen = lazy(() =>
 import { ApprovalWindow, isApprovalWindow } from './SecurityCenter';
 import type { AuditEntry } from './SecurityCenter';
 import { SkillsScreen } from './SkillsScreen';
-import { PETS } from '../core/pets';
+import { PETS, petAnimationForAssistantActivity, type PetAnimationState } from '../core/pets';
 import {
   navigationItems,
   SidebarNavigation,
@@ -179,6 +179,7 @@ function MainApp() {
   const [agentErrorDetails, setAgentErrorDetails] = useState('');
   const [agentAwaitingApproval, setAgentAwaitingApproval] = useState(false);
   const [agentActionCards, setAgentActionCards] = useState<AgentActionCardData[]>([]);
+  const [assistantPetState, setAssistantPetState] = useState<PetAnimationState>('idle');
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [recentCommands, setRecentCommands] = useState<string[]>([]);
   const [requestedSkillFamily, setRequestedSkillFamily] = useState<{
@@ -257,6 +258,7 @@ function MainApp() {
     companionStateTimer,
   } = appState;
   const emitCompanionState = (payload: { type: 'activity'; state: string; message: string }) => {
+    setAssistantPetState(petAnimationForAssistantActivity(payload.state));
     void emit('companion-state', payload).catch(() =>
       reportDiagnostic('companion-state', 'Não foi possível atualizar o estado visual do pet.'),
     );
@@ -614,6 +616,40 @@ function MainApp() {
   useEffect(() => {
     if (section !== 'skills') setRequestedSkillFamily(null);
   }, [section]);
+
+  useEffect(() => {
+    let unlistenHalted: (() => void) | undefined;
+    let unlistenResumed: (() => void) | undefined;
+    let disposed = false;
+    void Promise.all([
+      listen('security-halted', () => setAssistantPetState('paused')),
+      listen('security-resumed', () => setAssistantPetState('idle')),
+    ])
+      .then(([halted, resumed]) => {
+        if (disposed) {
+          halted();
+          resumed();
+        } else {
+          unlistenHalted = halted;
+          unlistenResumed = resumed;
+        }
+      })
+      .catch(() =>
+        reportDiagnostic(
+          'pet-security-state',
+          'Não foi possível acompanhar a parada de emergência do mascote.',
+        ),
+      );
+    return () => {
+      disposed = true;
+      unlistenHalted?.();
+      unlistenResumed?.();
+    };
+  }, [reportDiagnostic]);
+
+  useEffect(() => {
+    if (permissionIndicator?.halted) setAssistantPetState('paused');
+  }, [permissionIndicator?.halted]);
 
   async function choosePet(petId: string) {
     if (!PETS.some((pet) => pet.id === petId)) return;
@@ -1239,6 +1275,7 @@ function MainApp() {
   }
 
   async function stopAll() {
+    setAssistantPetState('paused');
     stopLocalSpeech();
     try {
       await invoke('halt_all');
@@ -1545,6 +1582,9 @@ function MainApp() {
               onOpenLink={(url) => void openResponseLink(url)}
               providerConfigured={keySavedForSession}
               assistantUsesMascot={settings.useMascotAsAssistantAvatar}
+              petState={assistantPetState}
+              reduceMotion={settings.reduceMotion}
+              reduceMascot={settings.reduceMascot}
               onFixConfiguration={() => {
                 navigate(resolveConfigurationReason(error));
                 setChatMode(false);
@@ -1638,6 +1678,9 @@ function MainApp() {
                   keyReady={keySavedForSession}
                   profile={profile}
                   selectedPet={selectedPet}
+                  petState={assistantPetState}
+                  reduceMotion={settings.reduceMotion}
+                  reduceMascot={settings.reduceMascot}
                   suggestions={homeSuggestions}
                   conversations={conversations.slice(0, 3)}
                   checklist={homeChecklist}
@@ -1675,7 +1718,14 @@ function MainApp() {
                 />
               )}
               {section === 'computer' && <ComputerScreen />}
-              {section === 'calendar' && <CalendarScreen />}
+              {section === 'calendar' && (
+                <CalendarScreen
+                  selectedPet={selectedPet}
+                  petState={assistantPetState}
+                  reduceMotion={settings.reduceMotion}
+                  reduceMascot={settings.reduceMascot}
+                />
+              )}
               {section === 'skills' && (
                 <SkillsScreen
                   key={requestedSkillFamily?.requestId ?? 'all-families'}

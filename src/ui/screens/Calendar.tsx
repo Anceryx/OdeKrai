@@ -2,6 +2,8 @@ import { Fragment, useCallback, useEffect, useMemo, useState, type FormEvent } f
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { open, save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { PageHeader } from '../DesignSystem';
+import { PetSprite } from '../PetSprite';
+import type { PetAnimationState } from '../../core/pets';
 
 type CalendarEvent = {
   id: string;
@@ -41,7 +43,17 @@ const range = (date: Date) => {
   return { from: from.toISOString(), to: to.toISOString() };
 };
 
-export function CalendarScreen() {
+export function CalendarScreen({
+  selectedPet = 'character-female-a',
+  petState = 'idle',
+  reduceMotion = false,
+  reduceMascot = false,
+}: {
+  selectedPet?: string;
+  petState?: PetAnimationState;
+  reduceMotion?: boolean;
+  reduceMascot?: boolean;
+}) {
   const [month, setMonth] = useState(() => new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -293,7 +305,16 @@ export function CalendarScreen() {
       </div>
       <h2>Eventos do mês</h2>
       {dayEvents.length === 0 ? (
-        <p>Nenhum evento neste mês.</p>
+        <div className="calendar-empty-results">
+          <PetSprite
+            estado={petState}
+            petId={selectedPet}
+            reduceMotion={reduceMotion}
+            staticImage={reduceMascot}
+            className="empty-state-pet"
+          />
+          <p>Nenhum evento neste mês.</p>
+        </div>
       ) : (
         <ul className="calendar-event-list">
           {dayEvents.map((event, index) => {

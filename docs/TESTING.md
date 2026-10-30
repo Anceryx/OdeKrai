@@ -101,9 +101,11 @@ detalhes sanitizados de stack ficam limitados ao painel local da interface.
 
 ### UI-3 — pet 2D
 
-- `src/core/pets.test.ts`: rejeita catálogo ausente e nomes de arquivo inválidos, verifica mapeamento da FSM, fallback para PNG ausente e preferência de movimento reduzido.
+- `src/core/pets.test.mjs`: rejeita catálogo ausente e nomes de arquivo inválidos, verifica mapeamento da FSM e do estado do agente, fallback para PNG ausente e preferência de movimento reduzido.
 - `src/core/pet-layout.test.ts`: verifica dimensões da janela compacta/expandida e escala do mascote no modo Livre; `pet_position.rs` verifica o ajuste do painel expandido à área útil.
-- A animação CSS do sprite pausa quando o documento fica oculto ou recebe o evento nativo de visibilidade da janela do pet. Isso cobre a regra de estado; a animação renderizada e o consumo em idle ainda dependem de observação no Windows.
+- A animação CSS do sprite pausa por visibilidade do documento e eventos Tauri de foco, minimização e visibilidade da janela do pet. O comportamento renderizado ainda precisa de observação no Windows.
+- `pet-motion.test.ts` cobre pausa por documento/janela oculta, minimização e foco perdido por 2,5 s, retomada ao focar, preferência de movimento reduzido e uso de `data-performance`. Testes de settings/Home/Agenda verificam persistência da opção de mascote estático e os respectivos estados vazios. A janela do pet observa a visibilidade própria e o foco da janela principal, pois é intencionalmente não focalizável.
+- A carga de CPU em idle não foi medida: este ambiente não executa o binário Windows. A implementação não usa polling contínuo; eventos Tauri/documento e CSS controlam a pausa.
 - `history.rs`: `pet_catalog_rejects_missing_json_and_unsafe_paths` valida o manifesto e bloqueia caminhos inseguros; `selected_pet_defaults_and_persists_in_sqlite` confere o padrão e persistência local.
 - `npm run build`, `npm test`, `npm run format:check`, `cargo fmt --check`, `cargo test --offline --lib` e `git diff --check` devem ser executados para validar o código.
 - Validação visual nativa pendente no Windows: cápsula expandida/recolhida, ajuste em monitores pequenos, transparência real sem borda/sombra, animações nos dois modos, avatar, foco, arrasto, topmost, escala/DPI e limites da área útil em vários monitores. Medição de CPU idle não disponível nesta sessão; não validar click-through, pois a janela recebe cliques normalmente.

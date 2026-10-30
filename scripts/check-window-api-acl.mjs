@@ -9,12 +9,18 @@ const permissionFor = {
   unminimize: 'core:window:allow-unminimize',
   close: 'core:window:allow-close',
   startDragging: 'core:window:allow-start-dragging',
+  isVisible: 'core:window:allow-is-visible',
+  isMinimized: 'core:window:allow-is-minimized',
+  isFocused: 'core:window:allow-is-focused',
+  onFocusChanged: 'core:event:allow-listen',
+  getAllWindows: 'core:window:allow-get-all-windows',
 };
 
 export function findWindowCalls(source) {
   const calls = [];
   const direct = /getCurrentWindow\s*\(\)\s*\.\s*([\w$]+)\s*\(/g;
   for (const match of source.matchAll(direct)) calls.push(match[1]);
+  for (const match of source.matchAll(/\bgetAllWindows\s*\(/g)) calls.push('getAllWindows');
   const aliases = [
     ...source.matchAll(/\b(?:const|let|var)\s+([\w$]+)\s*=\s*getCurrentWindow\s*\(\)/g),
   ].map((match) => match[1]);
@@ -61,7 +67,9 @@ for (const file of await sourceFiles(path.join(root, 'src'))) {
   const calls = findWindowCalls(source);
   if (!calls.length) continue;
   const window =
-    /getCurrentWindow\(\)\.label\s*===\s*['"](pet|approval)['"]/.exec(source)?.[1] ?? 'main';
+    /(?:getCurrentWindow\(\)|\bcurrentWindow)\.label\s*===\s*['"](pet|approval)['"]/.exec(
+      source,
+    )?.[1] ?? 'main';
   const permissions = capabilities
     .filter((capability) => capability.windows.includes(window))
     .flatMap((capability) => capability.permissions);

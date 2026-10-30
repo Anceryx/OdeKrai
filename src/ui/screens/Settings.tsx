@@ -152,6 +152,20 @@ export function SettingsScreen({
         </div>
         <div className="preference-row">
           <div>
+            <strong>Reduzir mascote</strong>
+            <span>
+              Usa uma imagem estática no Início e nos estados vazios. A janela do pet continua
+              seguindo Reduzir animações e a preferência do sistema.
+            </span>
+          </div>
+          <Toggle
+            checked={settings.reduceMascot}
+            label="Reduzir mascote"
+            onClick={() => update({ ...settings, reduceMascot: !settings.reduceMascot })}
+          />
+        </div>
+        <div className="preference-row">
+          <div>
             <strong>Usar meu mascote como avatar do OdeKrai</strong>
             <span>Substitui o ícone do aplicativo nas respostas.</span>
           </div>

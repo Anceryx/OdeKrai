@@ -5122,6 +5122,31 @@ html.island-window-html {
   border-radius: 12px;
   object-fit: contain;
 }
+.empty-state-pet {
+  width: 48px;
+  height: 48px;
+  flex: none;
+}
+.empty-chat-pet {
+  margin-bottom: 12px;
+}
+.conversation-list-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 14px 8px;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+.calendar-empty-results {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  padding-block: 12px;
+}
+.calendar-empty-results p {
+  margin: 0;
+}
 .empty-chat > p {
   font-size: 13px;
 }
@@ -6294,6 +6319,11 @@ html[data-performance='on'] .animated-gradient,
 html[data-performance='on'] [data-animated-gradient] {
   animation: none !important;
 }
+html[data-performance='on'] .pet-sheet,
+html[data-performance='on'] .pet-overlay,
+html[data-performance='on'] .pet-overlay * {
+  animation: none !important;
+}
 
 /* Pet 2D (renders Kenney de 512 px, com transparência). */
 .pet-sprite {
@@ -6471,6 +6501,34 @@ html[data-performance='on'] [data-animated-gradient] {
   height: 25px;
   overflow: hidden;
   border-radius: 7px;
+}
+.pet-avatar::after {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  z-index: 3;
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--color-surface);
+  border-radius: 50%;
+  background: var(--color-text-muted);
+  content: '';
+}
+.pet-avatar.pet-state-thinking::after,
+.pet-avatar.pet-state-working::after {
+  background: #fdba74;
+}
+.pet-avatar.pet-state-awaiting_approval::after {
+  background: #fb923c;
+}
+.pet-avatar.pet-state-success::after {
+  background: #86efac;
+}
+.pet-avatar.pet-state-error::after {
+  background: #ef4444;
+}
+.pet-avatar.pet-state-paused::after {
+  background: #a1a1aa;
 }
 .pet-avatar .pet-image {
   width: 50px;

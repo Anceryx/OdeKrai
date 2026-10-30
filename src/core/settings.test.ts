@@ -20,6 +20,7 @@ describe('preferências persistidas', () => {
       setItem: (key: string, value: string) => storage.set(key, value),
     });
     const migrated = loadSettings();
+    expect(migrated.reduceMascot).toBe(false);
     expect(migrated.companion).toMatchObject({
       enabled: false,
       position: 'bottom-right',
@@ -82,6 +83,18 @@ describe('preferências persistidas', () => {
     });
     expect(storage.get('odekrai.settings.v2')).not.toContain('apiKey');
     expect(storage.get('odekrai.settings.v2')).not.toContain('chave');
+  });
+
+  it('persiste a preferência independente para reduzir o mascote', () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    });
+    const settings = loadSettings();
+    settings.reduceMascot = true;
+    expect(saveSettings(settings)).toBe(true);
+    expect(loadSettings().reduceMascot).toBe(true);
   });
 
   it('persiste a substituição de efeito sonoro selecionada', () => {

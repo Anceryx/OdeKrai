@@ -14,6 +14,9 @@ function renderOverview(overrides: Partial<ComponentProps<typeof Overview>> = {}
       keyReady
       profile={{ displayName: 'Olívia', nickname: 'Oli', avatarDataUrl: null }}
       selectedPet="character-female-a"
+      petState="idle"
+      reduceMotion={false}
+      reduceMascot={false}
       suggestions={[]}
       conversations={[]}
       checklist={[]}
@@ -78,6 +81,15 @@ describe('Início', () => {
     expect(markup).toContain('Olá.');
     expect(markup).not.toContain('home-suggestions');
     expect(markup).toContain('As conversas recentes aparecerão aqui.');
+  });
+
+  it('mostra o estado atual do assistente e permite uma imagem estática no Início', () => {
+    const animated = renderOverview({ petState: 'thinking' });
+    expect(animated).toContain('pet-state-thinking');
+    expect(animated).toContain('Estado: Pensando');
+    const staticMascot = renderOverview({ reduceMascot: true, petState: 'working' });
+    expect(staticMascot).toContain('pet-image');
+    expect(staticMascot).not.toContain('pet-sheet');
   });
 
   it('preserva semântica de botão nas sugestões e destinos do checklist', () => {

@@ -9,6 +9,7 @@ import {
 import { MessageComposer } from '../MessageComposer';
 import type { ProfileData } from '../Profile';
 import { PetSprite } from '../PetSprite';
+import type { PetAnimationState } from '../../core/pets';
 
 export function Overview({
   draft,
@@ -17,6 +18,9 @@ export function Overview({
   keyReady,
   profile,
   selectedPet,
+  petState,
+  reduceMotion,
+  reduceMascot,
   suggestions,
   conversations,
   checklist,
@@ -33,6 +37,9 @@ export function Overview({
   keyReady: boolean;
   profile: ProfileData;
   selectedPet: string;
+  petState: PetAnimationState;
+  reduceMotion: boolean;
+  reduceMascot: boolean;
   suggestions: HomeSuggestion[];
   conversations: ConversationSummary[];
   checklist: HomeChecklistItem[];
@@ -75,7 +82,13 @@ export function Overview({
       )}
 
       <section className="home-focus" aria-labelledby="home-title">
-        <PetSprite estado="idle" petId={selectedPet} className="home-pet" />
+        <PetSprite
+          estado={petState}
+          petId={selectedPet}
+          reduceMotion={reduceMotion}
+          staticImage={reduceMascot}
+          className="home-pet"
+        />
         <h1 id="home-title">O que vamos fazer hoje?</h1>
         <p className="home-greeting">{name ? `Olá, ${name}.` : 'Olá.'}</p>
         <MessageComposer

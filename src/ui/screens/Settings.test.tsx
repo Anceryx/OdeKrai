@@ -23,6 +23,8 @@ describe('SettingsScreen', () => {
     expect(markup).toContain('Abrir Permissões');
     expect(markup).not.toContain('Links externos');
     expect(markup).toContain('Preferências deste dispositivo');
+    expect(markup).toContain('Reduzir mascote');
+    expect(markup).toContain('A janela do pet continua seguindo Reduzir animações');
   });
 
   it('exibe as informações de versão em um componente independente', () => {

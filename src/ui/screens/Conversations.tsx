@@ -16,6 +16,7 @@ import { ScreenCapture } from '../ScreenCapture';
 import { supportsTranscription, transcribeConfirmedRecording } from '../../core/transcription';
 import { getLocalSpeechReader, type SpeechState } from '../../core/speech';
 import { MessageComposer, shouldSubmitMessageOnEnter } from '../MessageComposer';
+import type { PetAnimationState } from '../../core/pets';
 
 export function shouldFollowChatScroll(
   scrollHeight: number,
@@ -58,6 +59,9 @@ export function ConversationsScreen({
   canRetry,
   profile,
   selectedPet,
+  petState = 'idle',
+  reduceMotion = false,
+  reduceMascot = false,
   agentEnabled,
   agentUnavailableReason,
   agentWorkspacePath,
@@ -107,6 +111,9 @@ export function ConversationsScreen({
   canRetry: boolean;
   profile: ProfileData;
   selectedPet: string;
+  petState?: PetAnimationState;
+  reduceMotion?: boolean;
+  reduceMascot?: boolean;
   agentEnabled: boolean;
   agentUnavailableReason: string | null;
   agentWorkspacePath: string | null;
@@ -555,9 +562,18 @@ export function ConversationsScreen({
             </div>
           ))}
           {filteredConversations.length === 0 && (
-            <p className="conversation-list-empty">
-              {search ? 'Nenhuma conversa encontrada.' : 'Suas conversas aparecerão aqui.'}
-            </p>
+            <div className="conversation-list-empty">
+              <PetSprite
+                estado={petState}
+                petId={selectedPet}
+                reduceMotion={reduceMotion}
+                staticImage={reduceMascot}
+                className="empty-state-pet"
+              />
+              <span>
+                {search ? 'Nenhuma conversa encontrada.' : 'Suas conversas aparecerão aqui.'}
+              </span>
+            </div>
           )}
         </div>
         {!conversationSidebarCollapsed && (
@@ -651,7 +667,13 @@ export function ConversationsScreen({
         >
           {messages.length === 0 && agentActionCards.length === 0 ? (
             <div className="empty-chat">
-              <img className="empty-chat-icon" src={appIcon} alt="" />
+              <PetSprite
+                estado={petState}
+                petId={selectedPet}
+                reduceMotion={reduceMotion}
+                staticImage={reduceMascot}
+                className="empty-state-pet empty-chat-pet"
+              />
               <strong>O que você gostaria de explorar?</strong>
               <p>Escreva uma pergunta, uma ideia ou algo que queira organizar.</p>
               <div className="prompt-chips">
@@ -676,7 +698,13 @@ export function ConversationsScreen({
                   {message.role === 'assistant' && (
                     <span className="message-avatar">
                       {assistantUsesMascot ? (
-                        <PetSprite estado="idle" petId={selectedPet} avatar />
+                        <PetSprite
+                          estado={petState}
+                          petId={selectedPet}
+                          reduceMotion={reduceMotion}
+                          staticImage={reduceMascot}
+                          avatar
+                        />
                       ) : (
                         <img src={appIcon} alt="" />
                       )}
