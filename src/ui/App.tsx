@@ -732,6 +732,8 @@ function MainApp() {
           id?: string;
           name?: string;
           auditId?: string | null;
+          preview?: string;
+          expiresAt?: number;
           isError?: boolean;
           content?: string;
           kind?: string;
@@ -751,6 +753,27 @@ function MainApp() {
             setAgentAwaitingApproval(event.card.status === 'Aguardando aprovação');
           } else if (event.type === 'awaitingApproval') {
             setAgentAwaitingApproval(true);
+            if (event.preview || event.expiresAt) {
+              setAgentActionCards((items) => {
+                let index = -1;
+                for (let cursor = items.length - 1; cursor >= 0; cursor -= 1) {
+                  if (items[cursor].status === 'Aguardando aprovação') {
+                    index = cursor;
+                    break;
+                  }
+                }
+                if (index < 0) return items;
+                return items.map((item, itemIndex) =>
+                  itemIndex === index
+                    ? {
+                        ...item,
+                        preview: item.preview || event.preview,
+                        approvalExpiresAt: item.approvalExpiresAt || event.expiresAt,
+                      }
+                    : item,
+                );
+              });
+            }
             void playSound('approval_needed', normalizeSoundPreferences(settings.companion.sounds));
             emitCompanionState({
               type: 'activity',
@@ -1318,6 +1341,25 @@ function MainApp() {
               agentRunning={agentRunning}
               agentAwaitingApproval={agentAwaitingApproval}
               agentActionCards={agentActionCards}
+              onReviewApproval={() =>
+                void invoke('show_pending_approval_window').catch(() =>
+                  setToast('Não foi possível abrir a janela de aprovação.'),
+                )
+              }
+              onOpenArtifact={(path) =>
+                void invoke('open_agent_artifact', { path }).catch((error) =>
+                  setToast(
+                    error instanceof Error ? error.message : 'Não foi possível abrir o arquivo.',
+                  ),
+                )
+              }
+              onRevealArtifact={(path) =>
+                void invoke('reveal_agent_artifact', { path }).catch((error) =>
+                  setToast(
+                    error instanceof Error ? error.message : 'Não foi possível mostrar o arquivo.',
+                  ),
+                )
+              }
               onAnalyzeCapture={(prompt, imageBase64) => sendMessage(prompt, false, imageBase64)}
               onToggleAgent={(enabled) => void setConversationAgentMode(enabled)}
               onStopAgent={cancelRequest}

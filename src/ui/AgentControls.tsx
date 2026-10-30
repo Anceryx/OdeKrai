@@ -1,6 +1,27 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState } from 'react';
+import {
+  CalendarDots,
+  FileText,
+  FolderOpen,
+  Globe,
+  Lightning,
+  Wrench,
+} from '@phosphor-icons/react';
 import { displayPath } from '../core/display-path';
+import {
+  formatRemainingApprovalTime,
+  getAgentCardState,
+  isSafeArtifactPath,
+} from '../core/agent-card';
 import { RiskBadge } from './RiskBadge';
+
+export type AgentArtifact = { path: string; kind: string };
+export type AgentTimelineEntry = {
+  label: string;
+  status: string;
+  durationMs?: number | null;
+  at: number;
+};
 
 export type AgentActionCardData = {
   id: string;
@@ -12,6 +33,13 @@ export type AgentActionCardData = {
   summary: string;
   resultSummary?: string;
   diff?: string;
+  preview?: string | null;
+  artifacts?: AgentArtifact[];
+  timeline?: AgentTimelineEntry[];
+  durationMs?: number | null;
+  approvalExpiresAt?: number | null;
+  untrustedResult?: boolean;
+  createdAt?: number;
 };
 
 export function AgentControls({
@@ -81,36 +109,150 @@ export function AgentControls({
 
 export function AgentActionCard({
   action,
-  children,
+  running = false,
+  onStop,
+  onReviewApproval,
+  onOpenArtifact,
+  onRevealArtifact,
 }: {
   action: AgentActionCardData;
-  children?: ReactNode;
+  running?: boolean;
+  onStop?: () => void;
+  onReviewApproval?: () => void;
+  onOpenArtifact?: (path: string) => void;
+  onRevealArtifact?: (path: string) => void;
 }) {
+  const state = getAgentCardState(action);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (state !== 'aguardando aprovação' || !action.approvalExpiresAt) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [state, action.approvalExpiresAt]);
+  const Icon = action.skillId.includes('calendar')
+    ? CalendarDots
+    : action.skillId.includes('file') ||
+        action.skillId.includes('document') ||
+        action.skillId.includes('sheet')
+      ? FileText
+      : action.skillId.includes('workspace')
+        ? FolderOpen
+        : action.skillId.includes('web') || action.skillId.includes('http')
+          ? Globe
+          : action.skillId.includes('agent') || action.skillId.includes('computer')
+            ? Lightning
+            : Wrench;
+  const preview = action.preview?.trim();
+  const previewExcerpt =
+    preview && preview.length > 640 ? `${preview.slice(0, 640).trimEnd()}…` : preview;
   return (
-    <article className="agent-action-card" aria-label={`Ação: ${action.title}`} aria-live="polite">
+    <article
+      role="region"
+      className="agent-action-card"
+      aria-labelledby={`agent-card-title-${action.id}`}
+    >
       <header>
-        <strong>{action.title}</strong>
+        <Icon aria-hidden="true" size={18} weight="duotone" />
+        <h3 id={`agent-card-title-${action.id}`}>{action.title}</h3>
         <RiskBadge risk={action.risk} className="agent-risk-chip" />
       </header>
       <p>{action.summary}</p>
-      {action.resultSummary && <p className="agent-action-result">{action.resultSummary}</p>}
-      <dl>
-        <div>
-          <dt>Decisão</dt>
-          <dd>{action.decision}</dd>
+      <p className="agent-card-state" role="status" aria-live="polite">
+        Estado: {state}
+      </p>
+      {state === 'aguardando aprovação' && (
+        <div className="agent-card-review">
+          <span role="status">
+            Aguardando revisão
+            {formatRemainingApprovalTime(action.approvalExpiresAt, now)
+              ? ` · ${formatRemainingApprovalTime(action.approvalExpiresAt, now)}`
+              : ''}
+          </span>
+          {onReviewApproval && (
+            <button type="button" onClick={onReviewApproval}>
+              Revisar na janela de aprovação
+            </button>
+          )}
         </div>
+      )}
+      {action.resultSummary && (
+        <p className="agent-action-result">
+          {action.untrustedResult && <strong>Resultado externo · dado não confiável. </strong>}
+          {action.resultSummary}
+        </p>
+      )}
+      <dl>
         <div>
           <dt>Status</dt>
           <dd>{action.status}</dd>
         </div>
+        {action.durationMs != null && (
+          <div>
+            <dt>Duração</dt>
+            <dd>{(action.durationMs / 1000).toFixed(1)} s</dd>
+          </div>
+        )}
       </dl>
+      {(action.timeline?.length ?? 0) > 0 && (
+        <ol className="agent-card-timeline" aria-label="Etapas da execução">
+          {action.timeline?.map((entry, index) => (
+            <li key={`${entry.at}-${index}`}>
+              <span>{entry.label}</span>
+              <small>
+                {entry.status}
+                {entry.durationMs != null ? ` · ${(entry.durationMs / 1000).toFixed(1)} s` : ''}
+              </small>
+            </li>
+          ))}
+        </ol>
+      )}
+      {running && onStop && (
+        <button className="agent-stop-button" type="button" onClick={onStop}>
+          Parar
+        </button>
+      )}
+      {preview && (
+        <details className="agent-card-preview">
+          <summary>Prévia em texto</summary>
+          {action.untrustedResult && (
+            <p className="agent-untrusted-label">A prévia contém dados não confiáveis.</p>
+          )}
+          <pre>{previewExcerpt}</pre>
+          {preview.length > 640 && (
+            <details>
+              <summary>Ver completo</summary>
+              <pre>{preview}</pre>
+            </details>
+          )}
+        </details>
+      )}
       {action.diff && (
         <details>
-          <summary>Ver diferenças</summary>
+          <summary>Ver detalhes</summary>
+          {action.untrustedResult && (
+            <p className="agent-untrusted-label">Conteúdo externo · dado não confiável.</p>
+          )}
           <pre>{action.diff}</pre>
         </details>
       )}
-      {children}
+      {(action.artifacts ?? [])
+        .filter((artifact) => isSafeArtifactPath(artifact.path))
+        .map((artifact) => (
+          <div className="agent-card-artifact" key={artifact.path}>
+            <small>{artifact.kind}</small>
+            <span title={artifact.path}>{displayPath(artifact.path)}</span>
+            {onOpenArtifact && (
+              <button type="button" onClick={() => onOpenArtifact(artifact.path)}>
+                Abrir
+              </button>
+            )}
+            {onRevealArtifact && (
+              <button type="button" onClick={() => onRevealArtifact(artifact.path)}>
+                Mostrar na pasta
+              </button>
+            )}
+          </div>
+        ))}
     </article>
   );
 }

@@ -64,6 +64,9 @@ describe('ConversationsScreen', () => {
         agentRunning={false}
         agentAwaitingApproval={false}
         agentActionCards={[]}
+        onReviewApproval={() => undefined}
+        onOpenArtifact={() => undefined}
+        onRevealArtifact={() => undefined}
         onToggleAgent={() => undefined}
         onStopAgent={() => undefined}
         onConfigureAgent={() => undefined}
@@ -140,6 +143,9 @@ describe('ConversationsScreen', () => {
         agentRunning={false}
         agentAwaitingApproval={false}
         agentActionCards={[]}
+        onReviewApproval={() => undefined}
+        onOpenArtifact={() => undefined}
+        onRevealArtifact={() => undefined}
         onToggleAgent={() => undefined}
         onStopAgent={() => undefined}
         onConfigureAgent={() => undefined}
@@ -193,6 +199,9 @@ describe('ConversationsScreen', () => {
         agentRunning={false}
         agentAwaitingApproval={false}
         agentActionCards={[]}
+        onReviewApproval={() => undefined}
+        onOpenArtifact={() => undefined}
+        onRevealArtifact={() => undefined}
         onToggleAgent={() => undefined}
         onStopAgent={() => undefined}
         onConfigureAgent={() => undefined}

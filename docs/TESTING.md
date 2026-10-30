@@ -77,6 +77,14 @@ detalhes sanitizados de stack ficam limitados ao painel local da interface.
 - `MessageComposer.test.tsx`, `Conversations.test.tsx` e `Overview.test.tsx` cobrem o campo compartilhado, Enter/Shift+Enter, estado de envio, envio inicial, retomar conversas e ausência de conteúdo fictício.
 - Validação visual no Windows pendente em 1000 × 600: conferir posição do mascote, sugestões, checklist, faixa de aprovação e acesso ao histórico sem cortes ou rolagem horizontal.
 
+### L2 — Cartão de ação do agente
+
+- `AgentControls.test.tsx` cobre os estados apresentados, prévia como texto, timeline, parada, revisão pela janela nativa e controles de artefato sem botões de decisão.
+- `agent-card.test.ts` cobre normalização de estado, prazo restante e rejeição de travessia/extensões executáveis.
+- Teste Rust em `history.rs` cobre migração aditiva de colunas e leitura retrocompatível de cartões antigos; requer `cargo test`.
+- Comandos para abrir/mostrar artefatos revalidam caminho existente, pasta de trabalho ou permitida e extensões bloqueadas no Rust.
+- **VALIDAÇÃO VISUAL NO WINDOWS PENDENTE** para foco da janela nativa, leitores de tela e interação com o Explorador.
+
 ### Links em respostas
 
 - `markdown.test.ts` cobre links Markdown e URLs soltas, esquemas proibidos, caracteres de controle e normalização de domínios; `MessageMarkdown.test.tsx` verifica o rótulo do domínio de destino.

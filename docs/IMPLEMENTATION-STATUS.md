@@ -91,6 +91,8 @@ Atualizado em 24/10/2026 após a verificação de fechamento da Fase 3. Requisit
 
 ## Limites e validação pendente
 
+- L2 do cartão do agente: a interface reúne estados, risco, prévia textual limitada, prazo de aprovação, timeline e artefatos; decisões de aprovação continuam exclusivamente na janela nativa. Campos aditivos no histórico preservam cartões antigos. Abertura e revelação de artefatos revalidam pasta permitida e extensões no Rust. A cobertura Rust/Windows ainda precisa ser executada no ambiente correspondente.
+
 - A janela do pet agora entra da borda mais próxima do monitor e sai pela mesma borda em 12 passos nativos (~208 ms); a posição salva é registrada antes da saída e transições não persistem posições intermediárias. O cálculo usa a área útil e escala do monitor. Testes de geometria passaram; inspeção visual em Windows, DPI misto e múltiplos monitores ainda está pendente.
 - A janela do pet usa `focusable(false)` para não ativar nem capturar o teclado ao entrar; os comandos que abrem o Hub continuam focando somente a janela principal. O contrato tem teste unitário, mas o foco e a digitação em janela externa ainda exigem validação visual no Windows.
 - A fila local do pet é mantida no Rust (máximo de 32 itens), prioriza aprovações fixadas, lembretes e eventos do agente e consolida atualizações de progresso. O renderer não toma decisões de prioridade. Aprovações são removidas após a resposta do broker; lembretes expiram visualmente após cinco segundos e resultados do agente após 2,4 segundos. A fila não usa rede. Testes automatizados da fila e do snapshot passaram; comportamento com a janela nativa fechada/reaberta e notificações reais permanece pendente.

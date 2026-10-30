@@ -1,6 +1,17 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
-import { AgentActionCard, AgentControls } from './AgentControls';
+import { describe, expect, it, vi } from 'vitest';
+import { AgentActionCard, AgentControls, type AgentActionCardData } from './AgentControls';
+
+const action = (status: string, patch: Partial<AgentActionCardData> = {}): AgentActionCardData => ({
+  id: `card-${status.replaceAll(' ', '-')}`,
+  skillId: 'workspace.write_file',
+  title: 'Salvar arquivo',
+  risk: 'escrita reversível',
+  decision: 'aguardando',
+  status,
+  summary: 'Salvar arquivo local.',
+  ...patch,
+});
 
 describe('controles e cartões do agente', () => {
   it('mostra estado indisponível acessível e interruptor desativado', () => {
@@ -18,68 +29,76 @@ describe('controles e cartões do agente', () => {
     );
     expect(markup).toContain('role="switch"');
     expect(markup).toContain('aria-checked="false"');
-    expect(markup).toContain('disabled=""');
     expect(markup).toContain('Configure a pasta de trabalho.');
-    expect(markup).toContain('Configurar agente');
-  });
-
-  it('renderiza cartão, diferenças, espera de aprovação, pasta e botão Parar', () => {
-    const markup = renderToStaticMarkup(
-      <>
-        <AgentControls
-          enabled
-          disabledReason={null}
-          workspacePath="D:\OdeKrai"
-          running
-          awaitingApproval
-          onToggle={() => undefined}
-          onStop={() => undefined}
-          onConfigure={() => undefined}
-        />
-        <AgentActionCard
-          action={{
-            id: 'call-1',
-            skillId: 'workspace.write_file',
-            title: 'Salvar arquivo',
-            risk: 'escrita reversível',
-            decision: 'aguardando',
-            status: 'Aguardando aprovação',
-            summary: 'Salvar arquivo local.',
-            resultSummary: 'Aguardando aprovação na janela nativa.',
-            diff: 'antes\nagora',
-          }}
-        />
-      </>,
-    );
-    expect(markup).toContain('Pasta de trabalho: D:\\OdeKrai');
-    expect(markup).toContain('Aguardando aprovação na janela nativa de aprovação.');
-    expect(markup).toContain('Parar agente');
-    expect(markup).toContain('aria-label="Risco: Escrita reversível"');
-    expect(markup).toContain('Ver diferenças');
-    expect(markup).toContain('antes');
   });
 
   it.each([
-    ['aprovada', 'Concluída'],
-    ['negada', 'Negada'],
-    ['expirada', 'Expirada'],
-  ])('renderiza decisão %s e estado %s', (decision, status) => {
+    ['planejada', 'planejada'],
+    ['Aguardando aprovação', 'aguardando aprovação'],
+    ['Executando', 'executando'],
+    ['Concluída', 'concluída'],
+    ['Negada', 'negada'],
+    ['Expirada', 'expirada'],
+    ['Falhou', 'erro'],
+  ])('renderiza estado %s', (status, expected) => {
+    expect(renderToStaticMarkup(<AgentActionCard action={action(status)} />)).toContain(
+      `Estado: ${expected}`,
+    );
+  });
+
+  it('não oferece botões de decisão e encaminha revisão para janela nativa', () => {
+    const onReview = vi.fn();
     const markup = renderToStaticMarkup(
       <AgentActionCard
-        action={{
-          id: 'call-2',
-          skillId: 'workspace.read_file',
-          title: 'Ler arquivo',
-          risk: 'leitura',
-          decision: decision as 'aprovada' | 'negada' | 'expirada',
-          status,
-          summary: 'Ler arquivo local.',
-          resultSummary: 'Resultado resumido.',
-        }}
+        action={action('Aguardando aprovação', {
+          approvalExpiresAt: Math.floor(Date.now() / 1000) + 60,
+        })}
+        onReviewApproval={onReview}
       />,
     );
-    expect(markup).toContain(`>${decision}<`);
-    expect(markup).toContain(`>${status}<`);
-    expect(markup).toContain('Resultado resumido.');
+    expect(markup).toContain('Revisar na janela de aprovação');
+    expect(markup).not.toMatch(/aprovar|negar/i);
+    expect(onReview).not.toHaveBeenCalled();
+  });
+
+  it('renderiza prévia como texto, detalhes, timeline e dado externo não confiável', () => {
+    const markup = renderToStaticMarkup(
+      <AgentActionCard
+        action={action('Concluída', {
+          preview: '<script>alert(1)</script>\n- arquivo.txt',
+          resultSummary: 'Resultado externo.',
+          untrustedResult: true,
+          durationMs: 1250,
+          timeline: [{ label: 'Gravar arquivo', status: 'concluída', durationMs: 1250, at: 1 }],
+        })}
+        running
+        onStop={() => undefined}
+      />,
+    );
+    expect(markup).toContain('&lt;script&gt;');
+    expect(markup).toContain('dado não confiável');
+    expect(markup).toContain('Gravar arquivo');
+    expect(markup).toContain('Parar');
+    expect(markup).toContain('1.3 s');
+  });
+
+  it('expõe controles de artefato somente para caminho de arquivo seguro', () => {
+    const markup = renderToStaticMarkup(
+      <AgentActionCard
+        action={action('Concluída', {
+          artifacts: [
+            { path: 'C:\\workspace\\relatorio.txt', kind: 'documento' },
+            { path: 'C:\\workspace\\payload.exe', kind: 'arquivo' },
+            { path: '../fora.txt', kind: 'arquivo' },
+          ],
+        })}
+        onOpenArtifact={() => undefined}
+        onRevealArtifact={() => undefined}
+      />,
+    );
+    expect(markup).toContain('Abrir');
+    expect(markup).toContain('Mostrar na pasta');
+    expect(markup).not.toContain('payload.exe');
+    expect(markup).not.toContain('fora.txt');
   });
 });

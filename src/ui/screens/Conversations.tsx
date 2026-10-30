@@ -64,6 +64,9 @@ export function ConversationsScreen({
   agentRunning,
   agentAwaitingApproval,
   agentActionCards,
+  onReviewApproval,
+  onOpenArtifact,
+  onRevealArtifact,
   onToggleAgent,
   onStopAgent,
   onConfigureAgent,
@@ -109,6 +112,9 @@ export function ConversationsScreen({
   agentRunning: boolean;
   agentAwaitingApproval: boolean;
   agentActionCards: AgentActionCardData[];
+  onReviewApproval: () => void;
+  onOpenArtifact: (path: string) => void;
+  onRevealArtifact: (path: string) => void;
   onToggleAgent: (enabled: boolean) => void;
   onStopAgent: () => void;
   onConfigureAgent: () => void;
@@ -763,7 +769,15 @@ export function ConversationsScreen({
                 </p>
               )}
               {agentActionCards.map((action) => (
-                <AgentActionCard action={action} key={action.id} />
+                <AgentActionCard
+                  action={action}
+                  key={action.id}
+                  running={agentRunning && !agentAwaitingApproval && action.status === 'Executando'}
+                  onStop={cancel}
+                  onReviewApproval={onReviewApproval}
+                  onOpenArtifact={onOpenArtifact}
+                  onRevealArtifact={onRevealArtifact}
+                />
               ))}
               {busy && !agentAwaitingApproval && (
                 <div className="thinking-row">

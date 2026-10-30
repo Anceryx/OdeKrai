@@ -378,7 +378,7 @@ impl AgentBackend for RuntimeBackend<'_> {
                         action_started.elapsed().as_millis().min(i64::MAX as u128) as i64,
                     );
                     card.timeline.push(crate::history::AgentTimelineEntry {
-                        label: format!("{} falhou", skill.name),
+                        label: format!("Resultado da ferramenta: {} falhou", skill.name),
                         status: "erro".into(),
                         duration_ms: card.duration_ms,
                         at: std::time::SystemTime::now()
@@ -457,7 +457,7 @@ impl AgentBackend for RuntimeBackend<'_> {
                 action_started.elapsed().as_millis().min(i64::MAX as u128) as i64,
             );
             card.timeline.push(crate::history::AgentTimelineEntry {
-                label: format!("{} {}", skill.name, card.status.to_lowercase()),
+                label: format!("Resultado da ferramenta: {}", card.status.to_lowercase()),
                 status: card.status.to_lowercase(),
                 duration_ms: card.duration_ms,
                 at: std::time::SystemTime::now()
