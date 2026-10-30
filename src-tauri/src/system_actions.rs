@@ -356,6 +356,52 @@ pub(crate) fn execute_managed_control(
     crate::system_controls::execute_managed(skill_id, params, &db, &roots, origin)
 }
 
+#[tauri::command]
+pub fn open_agent_artifact(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    path: String,
+) -> Result<(), String> {
+    crate::require_main(&caller)?;
+    let path = validate_agent_artifact_path(&app, &path)?;
+    app.opener()
+        .open_path(path.to_string_lossy(), None::<&str>)
+        .map_err(|_| "Não foi possível abrir o arquivo permitido.".to_string())
+}
+
+#[tauri::command]
+pub fn reveal_agent_artifact(
+    app: tauri::AppHandle,
+    caller: tauri::WebviewWindow,
+    path: String,
+) -> Result<(), String> {
+    crate::require_main(&caller)?;
+    let path = validate_agent_artifact_path(&app, &path)?;
+    app.opener()
+        .reveal_item_in_dir(path)
+        .map_err(|_| "Não foi possível mostrar o arquivo permitido.".to_string())
+}
+
+fn validate_agent_artifact_path(app: &tauri::AppHandle, raw: &str) -> Result<PathBuf, String> {
+    if raw.is_empty() || raw.len() > 32_767 || raw.chars().any(char::is_control) {
+        return Err("O caminho do arquivo não é válido.".into());
+    }
+    let db = crate::security::database(app)?;
+    let mut roots = vec![crate::agent_home::workspace_path(app)?];
+    let mut statement = db
+        .prepare("SELECT path FROM allowed_folders ORDER BY path")
+        .map_err(|_| "Não foi possível consultar as pastas permitidas.".to_string())?;
+    let folders = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|_| "Não foi possível consultar as pastas permitidas.".to_string())?;
+    roots.extend(folders.filter_map(Result::ok).map(PathBuf::from));
+    let params = serde_json::json!({"path": raw});
+    roots
+        .iter()
+        .find_map(|root| checked_path(&params, root).ok())
+        .ok_or_else(|| "O arquivo não existe em uma pasta permitida ou não é seguro para abrir.".into())
+}
+
 pub(crate) fn preview_managed_control(
     app: &tauri::AppHandle,
     skill_id: &str,
@@ -744,6 +790,22 @@ mod tests {
             Some("example.com".into())
         );
         assert!(domain_for_open_url(&json!({"url":"http://127.0.0.1"})).is_err());
+    }
+
+    #[test]
+    fn artifact_paths_must_exist_inside_the_selected_allowed_root_and_be_non_executable() {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("odekrai-artifact-{}-{stamp}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("result.txt"), "ok").unwrap();
+        std::fs::write(root.join("payload.exe"), "not executed").unwrap();
+        assert!(checked_path(&json!({"path":"result.txt"}), &root).is_ok());
+        assert!(checked_path(&json!({"path":"../outside.txt"}), &root).is_err());
+        assert!(checked_path(&json!({"path":"payload.exe"}), &root).is_err());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

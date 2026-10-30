@@ -234,16 +234,33 @@ impl AgentBackend for RuntimeBackend<'_> {
                 crate::policy::Risk::ExecucaoDeCodigo => "execução de código (alto)",
             };
             let summary = action_card_summary(skill, &call.args);
+            let untrusted_result = skill.id == "code.delegate"
+                || security::skills::result_is_untrusted(&self.app, skill.id, &call.args)?;
+            let action_started = std::time::Instant::now();
             let mut card = crate::history::AgentActionCard {
                 id: call.id.clone(),
                 skill_id: skill.id.into(),
                 title: skill.name.into(),
                 risk: risk.into(),
                 decision: "automática".into(),
-                status: "Executando".into(),
+                status: "Planejada".into(),
                 summary,
                 result_summary: String::new(),
                 diff: None,
+                preview: None,
+                artifacts: Vec::new(),
+                timeline: vec![crate::history::AgentTimelineEntry {
+                    label: "Etapa do agente".into(),
+                    status: "planejada".into(),
+                    duration_ms: None,
+                    at: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs() as i64,
+                }],
+                duration_ms: None,
+                approval_expires_at: None,
+                untrusted_result,
                 created_at: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
@@ -253,9 +270,19 @@ impl AgentBackend for RuntimeBackend<'_> {
             let _ = self
                 .events
                 .send(AgentEvent::ActionCard { card: card.clone() });
+            card.status = "Executando".into();
+            card.timeline.push(crate::history::AgentTimelineEntry {
+                label: format!("Chamada de ferramenta: {}", skill.name),
+                status: "executando".into(),
+                duration_ms: None,
+                at: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64,
+            });
+            crate::history::save_agent_action_card(&self.app, &conversation_id, &card)?;
+            let _ = self.events.send(AgentEvent::ActionCard { card: card.clone() });
             let approved_by_user = Arc::new(AtomicBool::new(false));
-            let untrusted_result =
-                security::skills::result_is_untrusted(&self.app, skill.id, &call.args)?;
             let approval_state = approved_by_user.clone();
             let channel = self.events.clone();
             let app = self.app.clone();
@@ -293,16 +320,37 @@ impl AgentBackend for RuntimeBackend<'_> {
                     card: stream_card.clone(),
                 });
             };
-            let mut on_approval = move |approval_id: String| {
+            let mut on_approval = move |approval_id: String, preview: String, expires_at: u64| {
                 approval_state.store(true, Ordering::SeqCst);
                 let mut waiting = approval_card.clone();
                 waiting.decision = "aguardando".into();
                 waiting.status = "Aguardando aprovação".into();
+                let mut bounded_preview = preview;
+                if bounded_preview.len() > 32_000 {
+                    let mut boundary = 32_000;
+                    while !bounded_preview.is_char_boundary(boundary) {
+                        boundary -= 1;
+                    }
+                    bounded_preview.truncate(boundary);
+                }
+                waiting.preview = Some(bounded_preview);
+                waiting.approval_expires_at = Some(expires_at.min(i64::MAX as u64) as i64);
+                waiting.timeline.push(crate::history::AgentTimelineEntry {
+                    label: "Aguardando aprovação na janela nativa".into(),
+                    status: "aguardando aprovação".into(),
+                    duration_ms: None,
+                    at: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs() as i64,
+                });
                 let _ = crate::history::save_agent_action_card(&app, &card_conversation, &waiting);
-                let _ = channel.send(AgentEvent::ActionCard { card: waiting });
+                let _ = channel.send(AgentEvent::ActionCard { card: waiting.clone() });
                 let _ = channel.send(AgentEvent::AwaitingApproval {
                     id: approval_id.clone(),
                     audit_id: approval_id,
+                    preview: waiting.preview.clone().unwrap_or_default(),
+                    expires_at,
                 });
             };
             let result = skill
@@ -326,6 +374,18 @@ impl AgentBackend for RuntimeBackend<'_> {
                         "automática".into()
                     };
                     card.status = "Falhou".into();
+                    card.duration_ms = Some(
+                        action_started.elapsed().as_millis().min(i64::MAX as u128) as i64,
+                    );
+                    card.timeline.push(crate::history::AgentTimelineEntry {
+                        label: format!("{} falhou", skill.name),
+                        status: "erro".into(),
+                        duration_ms: card.duration_ms,
+                        at: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs() as i64,
+                    });
                     card.result_summary =
                         "A ferramenta falhou; nenhum resultado foi confirmado.".into();
                     crate::history::save_agent_action_card(&self.app, &conversation_id, &card)?;
@@ -334,6 +394,44 @@ impl AgentBackend for RuntimeBackend<'_> {
                 }
             };
             let status = result.status.clone();
+            if status == "completed" {
+                let artifact_path = match skill.id {
+                    "files.write"
+                    | "files.append"
+                    | "doc.create_markdown"
+                    | "doc.create_text"
+                    | "sheet.create_csv"
+                    | "workspace.write_file" => call
+                        .args
+                        .get("path")
+                        .and_then(serde_json::Value::as_str),
+                    "calendar.create_event" => call
+                        .args
+                        .get("path")
+                        .and_then(serde_json::Value::as_str),
+                    "files.copy" | "files.move" | "files.rename" => call
+                        .args
+                        .get("destination")
+                        .and_then(serde_json::Value::as_str),
+                    _ => None,
+                };
+                if let Some(path) =
+                    artifact_path.filter(|path| !path.is_empty() && path.len() <= 32_767)
+                {
+                    card.artifacts = vec![crate::history::AgentArtifact {
+                        path: path.to_owned(),
+                        kind: if skill.id.starts_with("doc.") {
+                            "documento".into()
+                        } else if skill.id == "sheet.create_csv" {
+                            "planilha".into()
+                        } else if skill.id == "calendar.create_event" {
+                            "evento de calendário".into()
+                        } else {
+                            "arquivo".into()
+                        },
+                    }];
+                }
+            }
             card.decision = if approved_by_user.load(Ordering::SeqCst) {
                 if result.message.contains("expir") {
                     "expirada".into()
@@ -349,11 +447,24 @@ impl AgentBackend for RuntimeBackend<'_> {
             };
             card.status = match status.as_str() {
                 "completed" => "Concluída",
+                "denied" if result.message.contains("expir") => "Expirada",
                 "denied" => "Negada",
                 "failed" => "Falhou",
                 _ => "Interrompida",
             }
             .into();
+            card.duration_ms = Some(
+                action_started.elapsed().as_millis().min(i64::MAX as u128) as i64,
+            );
+            card.timeline.push(crate::history::AgentTimelineEntry {
+                label: format!("{} {}", skill.name, card.status.to_lowercase()),
+                status: card.status.to_lowercase(),
+                duration_ms: card.duration_ms,
+                at: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64,
+            });
             card.result_summary = match status.as_str() {
                 "completed" => "Ação concluída; o resultado segue na resposta do OdeKrai.".into(),
                 "denied" if result.message.contains("expir") => {
@@ -363,6 +474,19 @@ impl AgentBackend for RuntimeBackend<'_> {
                 "failed" => "A ação aprovada não pôde ser concluída.".into(),
                 _ => "A execução foi interrompida.".into(),
             };
+            if status == "completed" && skill.id == "calendar.create_event" {
+                let field = |name: &str| -> String {
+                    call.args.get(name).and_then(serde_json::Value::as_str).unwrap_or("Não informado")
+                        .chars().map(|character| if character.is_control() { ' ' } else { character }).take(100).collect()
+                };
+                card.result_summary = format!(
+                    "Evento: {}\nData: {}\nLocal: {}\nGravado em: {}",
+                    field("title"),
+                    field("start"),
+                    field("location"),
+                    field("path")
+                );
+            }
             crate::history::save_agent_action_card(&self.app, &conversation_id, &card)?;
             if skill.id == "code.delegate" && status == "completed" {
                 if let Some(result) = result.result.as_deref() {

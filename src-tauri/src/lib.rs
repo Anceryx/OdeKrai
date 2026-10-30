@@ -1090,6 +1090,8 @@ pub fn run() -> Result<(), tauri::Error> {
             security::get_pending_approval_count,
             security::show_pending_approval_window,
             security::get_pending_approval,
+            system_actions::open_agent_artifact,
+            system_actions::reveal_agent_artifact,
             security::get_full_approval_preview,
             security::approval_respond,
             #[cfg(debug_assertions)]

@@ -111,6 +111,10 @@ pub enum AgentEvent {
     AwaitingApproval {
         id: String,
         audit_id: String,
+        #[serde(default)]
+        preview: String,
+        #[serde(default)]
+        expires_at: u64,
     },
     ToolResult {
         id: String,
@@ -1305,11 +1309,29 @@ mod tests {
         let event = AgentEvent::AwaitingApproval {
             id: "approval-1".into(),
             audit_id: "audit-1".into(),
+            preview: "Prévia segura".into(),
+            expires_at: 123,
         };
         let value = serde_json::to_value(event).unwrap();
         assert_eq!(value["type"], "awaitingApproval");
+        assert_eq!(value["preview"], "Prévia segura");
+        assert_eq!(value["expiresAt"], 123);
         assert_eq!(value["id"], "approval-1");
         assert_eq!(value["auditId"], "audit-1");
+        let legacy: AgentEvent = serde_json::from_value(serde_json::json!({
+            "type": "awaitingApproval",
+            "id": "legacy",
+            "auditId": "legacy-audit"
+        }))
+        .unwrap();
+        assert!(matches!(
+            legacy,
+            AgentEvent::AwaitingApproval {
+                preview,
+                expires_at,
+                ..
+            } if preview.is_empty() && expires_at == 0
+        ));
         let error = serde_json::to_value(AgentEvent::FinalResponse {
             content: "pronto".into(),
         })

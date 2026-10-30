@@ -659,7 +659,7 @@ pub(super) async fn submit_simulated_action_inner(
     state: State<'_, SecurityState>,
     request: ActionRequest,
 ) -> Result<ActionResult, String> {
-    let mut on_approval = |_| {};
+    let mut on_approval = |_, _, _| {};
     let mut on_output = |_| {};
     let tool = tool_for(&request.action);
     submit_agent_action(
@@ -687,7 +687,7 @@ pub(super) async fn submit_agent_action(
     timeout: Duration,
     rate_limit_per_minute: usize,
     cancel: &tokio_util::sync::CancellationToken,
-    on_approval: &mut (dyn FnMut(String) + Send),
+    on_approval: &mut (dyn FnMut(String, String, u64) + Send),
     on_output: &mut (dyn FnMut(String) + Send),
 ) -> Result<ActionResult, String> {
     let domain_requires_approval = match &action {
@@ -880,6 +880,7 @@ pub(super) async fn submit_agent_action(
     let digest = ticket.hash.clone();
     let created_at = Instant::now();
     let expires_at = now_secs() + ttl;
+    let card_preview = preview.clone();
     let capacity = lock_pending(state).map(|mut pending| {
         if !queue_has_capacity(&pending) {
             false
@@ -969,7 +970,7 @@ pub(super) async fn submit_agent_action(
     let _ = app.emit("approval-updated", ());
     let _ = app.emit("companion-state", serde_json::json!({"type":"activity","state":"awaiting_approval","message":"Aguardando aprovação"}));
     let _ = crate::pet_alerts::enqueue_approval(app, &ticket_id);
-    on_approval(ticket_id.clone());
+    on_approval(ticket_id.clone(), card_preview, expires_at);
     let result = state.approval_broker.wait(ticket, cancel).await;
     let _ = crate::pet_alerts::resolve_approval(app, &ticket_id);
     if let Ok(mut pending) = lock_pending(state) {

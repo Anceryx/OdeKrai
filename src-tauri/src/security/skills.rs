@@ -122,7 +122,7 @@ impl Skill {
         origin: Origin,
         tainted: bool,
         cancel: &tokio_util::sync::CancellationToken,
-        on_approval: &mut (dyn FnMut(String) + Send),
+        on_approval: &mut (dyn FnMut(String, String, u64) + Send),
         on_output: &mut (dyn FnMut(String) + Send),
     ) -> Result<ActionResult, String> {
         if !skill_available(self.id) {
