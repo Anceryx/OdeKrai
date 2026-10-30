@@ -383,8 +383,8 @@ pub(crate) async fn update_quick_shortcut(
     };
     if let Some(state) = app.try_state::<SecurityState>() {
         if let Ok(mut id) = state.active_quick_shortcut_id.lock() {
-            if let Some(id) = registration {
-                *id = Some(id);
+            if let Some(registration_id) = registration {
+                *id = Some(registration_id);
             }
         }
     }

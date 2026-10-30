@@ -34,7 +34,7 @@ use approvals::{
 };
 use audit::verify_audit_path;
 use dispatch::*;
-pub use kill_switch::{handle_global_shortcut, init_shortcut, load_halted, on_global_shortcut};
+pub use kill_switch::{handle_global_shortcut, init_shortcut, load_halted};
 use workspace::*;
 
 #[cfg(debug_assertions)]
