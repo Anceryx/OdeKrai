@@ -4,11 +4,18 @@ import { CloudSettings } from './CloudSettings';
 
 describe('seção informativa de nuvem', () => {
   const markup = renderToStaticMarkup(<CloudSettings />);
+  const savedMarkup = renderToStaticMarkup(<CloudSettings initialTokenSaved />);
+  const connectedMarkup = renderToStaticMarkup(
+    <CloudSettings initialTokenSaved initialConnected />,
+  );
 
-  it('explica que não há execução nem conexão de conta nesta versão e informa os controles futuros', () => {
-    expect(markup).toContain('A execução na nuvem ainda não está disponível');
-    expect(markup).toContain('nenhuma conta de serviço em nuvem é conectada');
-    expect(markup).toContain('cada ação remota exigirá aprovação e terá limites de gasto');
+  it('explica que a integração ShardCloud é somente leitura e informa os controles futuros', () => {
+    expect(markup).toContain('A integração com a ShardCloud nesta versão é somente para leitura');
+    expect(markup).toContain('Nenhuma ação pode alterar suas VMs');
+    expect(markup).toContain('cada ação exigirá aprovação e terá limites de gasto');
+    expect(markup).toContain('Configuração necessária');
+    expect(savedMarkup).toContain('ShardCloud');
+    expect(savedMarkup).toContain('Token salvo');
   });
 
   it('apresenta as duas listas e marca todos os serviços apenas como planejados', () => {
@@ -25,6 +32,20 @@ describe('seção informativa de nuvem', () => {
     expect(markup).not.toMatch(/compatível|disponível como integração/i);
   });
 
+  it('não mostra de novo o token depois de salvo e oferece apenas teste e remoção', () => {
+    expect(markup).toContain('type="password"');
+    expect(savedMarkup).not.toContain('id="shardcloud-token"');
+    expect(savedMarkup).toContain('Testar conexão');
+    expect(savedMarkup).toContain('Remover');
+    expect(savedMarkup).not.toContain('Salvar token');
+    expect(connectedMarkup).toContain('Conectado (somente leitura)');
+  });
+
+  it('marca consultas externas como não confiáveis sem inserir respostas como HTML', () => {
+    expect(connectedMarkup).toContain('Dados externos da ShardCloud — não confiáveis');
+    expect(connectedMarkup).not.toContain('dangerouslySetInnerHTML');
+  });
+
   it('usa links oficiais sem parâmetros de rastreamento e não apresenta botão de conexão', () => {
     const hrefs = [...markup.matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
     expect(hrefs).toHaveLength(7);
@@ -35,7 +56,7 @@ describe('seção informativa de nuvem', () => {
       expect(url.hash).toBe('');
       expect(url.href).not.toContain('utm_source=');
     }
-    expect(markup).not.toContain('<button');
+    expect(markup).not.toMatch(/<button[^>]*>\s*(?:Conectar|Criar conta|Vincular)/i);
     expect(markup).not.toMatch(/Conectar|Criar conta|Vincular/i);
   });
 });

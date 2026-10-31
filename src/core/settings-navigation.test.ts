@@ -47,7 +47,7 @@ describe('navegação das configurações', () => {
     ]);
     expect(filterSettingsMenu('nuvem').map((section) => section.id)).toContain('nuvem');
     expect(filterSettingsIndex('nuvem')).toContainEqual(
-      expect.objectContaining({ section: 'nuvem', anchor: 'cloud-settings-heading' }),
+      expect.objectContaining({ section: 'nuvem', anchor: 'cloud-shardcloud-heading' }),
     );
   });
 

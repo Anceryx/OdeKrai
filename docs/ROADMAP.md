@@ -11,7 +11,8 @@ Cada fase depende de validação no Windows real antes de ser declarada pronta.
 
 ## Execução e hospedagem
 
-A execução hospedada em nuvem é planejada e não está disponível nesta versão. O aplicativo não
-conecta contas de nuvem nem executa habilidades remotamente. Uma implementação futura deverá pedir
-aprovação para cada ação remota e aplicar limites de gasto; provedores listados na interface são
-apenas referências planejadas, sem promessa de compatibilidade.
+A execução hospedada em nuvem continua planejada e não está disponível nesta versão. A integração
+ShardCloud permite somente consultar VMs, detalhes, métricas e distribuições; ela não executa
+habilidades remotamente nem altera recursos. Os outros provedores listados na interface continuam
+planejados. Uma futura execução remota deverá pedir aprovação para cada ação e aplicar limites de
+gasto.

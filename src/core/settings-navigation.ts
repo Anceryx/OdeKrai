@@ -184,10 +184,10 @@ export const SETTINGS_INDEX: readonly SettingsIndexEntry[] = [
     anchor: 'activity-log',
   },
   {
-    title: 'Execução na nuvem (planejada)',
-    keywords: ['nuvem', 'cloud', 'hospedagem', 'execução remota', 'provedores planejados'],
+    title: 'Execução na nuvem e ShardCloud',
+    keywords: ['nuvem', 'cloud', 'shardcloud', 'VM', 'hospedagem', 'execução remota'],
     section: 'nuvem',
-    anchor: 'cloud-settings-heading',
+    anchor: 'cloud-shardcloud-heading',
   },
   {
     title: 'Informações do aplicativo',
