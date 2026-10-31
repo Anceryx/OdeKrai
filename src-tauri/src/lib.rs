@@ -1041,6 +1041,8 @@ pub fn run() -> Result<(), tauri::Error> {
             shardcloud::save_shardcloud_token,
             shardcloud::has_shardcloud_token,
             shardcloud::remove_shardcloud_token,
+            shardcloud::get_shardcloud_monthly_budget,
+            shardcloud::set_shardcloud_monthly_budget,
             shardcloud::shardcloud_test_connection,
             shardcloud::shardcloud_list_vms,
             shardcloud::shardcloud_get_vm_details,

@@ -21,6 +21,8 @@ const EXEC_CWD: &str = "/";
 const MAX_TEXT_CHARS: usize = 512;
 const MAX_METRIC_POINTS: usize = 500;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
+const SHARDCLOUD_BUDGET_SETTING: &str = "shardcloud_monthly_budget_cents";
+const MAX_MONTHLY_BUDGET_CENTS: u64 = 100_000_000;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -281,6 +283,43 @@ pub fn remove_shardcloud_token(caller: tauri::WebviewWindow) -> Result<(), Strin
             "Não foi possível remover o token do Gerenciador de Credenciais do Windows.".into(),
         ),
     }
+}
+
+fn validate_monthly_budget_cents(cents: Option<u64>) -> Result<Option<u64>, String> {
+    match cents {
+        Some(value) if (100..=MAX_MONTHLY_BUDGET_CENTS).contains(&value) => Ok(Some(value)),
+        Some(_) => Err("O teto mensal deve ficar entre R$ 1,00 e R$ 1.000.000,00.".into()),
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+pub async fn get_shardcloud_monthly_budget(
+    caller: tauri::WebviewWindow,
+) -> Result<Option<u64>, String> {
+    crate::require_main(&caller)?;
+    let raw = crate::security::db_setting(caller.app_handle(), SHARDCLOUD_BUDGET_SETTING)?;
+    if raw.is_empty() {
+        return Ok(None);
+    }
+    let cents = raw.parse::<u64>().map_err(|_| {
+        "O teto mensal salvo está inválido; criação de VMs deve permanecer bloqueada.".to_string()
+    })?;
+    validate_monthly_budget_cents(Some(cents))
+}
+
+#[tauri::command]
+pub async fn set_shardcloud_monthly_budget(
+    caller: tauri::WebviewWindow,
+    cents: Option<u64>,
+) -> Result<(), String> {
+    crate::require_main(&caller)?;
+    let validated = validate_monthly_budget_cents(cents)?;
+    crate::security::set_db_setting(
+        caller.app_handle(),
+        SHARDCLOUD_BUDGET_SETTING,
+        &validated.map(|value| value.to_string()).unwrap_or_default(),
+    )
 }
 
 fn production_client() -> Result<Client, String> {
@@ -1065,6 +1104,19 @@ mod tests {
         let secret = "super-secret-token";
         let error = validate_token(&format!("{secret}\n")).unwrap_err();
         assert!(!error.contains(secret));
+    }
+
+    #[test]
+    fn monthly_budget_accepts_a_positive_brl_ceiling_and_allows_unset_state() {
+        assert_eq!(validate_monthly_budget_cents(None).unwrap(), None);
+        assert_eq!(validate_monthly_budget_cents(Some(100)).unwrap(), Some(100));
+        assert_eq!(
+            validate_monthly_budget_cents(Some(MAX_MONTHLY_BUDGET_CENTS)).unwrap(),
+            Some(MAX_MONTHLY_BUDGET_CENTS)
+        );
+        assert!(validate_monthly_budget_cents(Some(0)).is_err());
+        assert!(validate_monthly_budget_cents(Some(99)).is_err());
+        assert!(validate_monthly_budget_cents(Some(MAX_MONTHLY_BUDGET_CENTS + 1)).is_err());
     }
 
     #[test]
