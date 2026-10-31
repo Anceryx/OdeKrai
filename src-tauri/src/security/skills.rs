@@ -1131,8 +1131,7 @@ pub(crate) fn skill_turn_offer(app: &tauri::AppHandle) -> Result<SkillTurnOffer,
         let rows = statement
             .query_map([], |row| row.get::<_, String>(0))
             .map_err(|_| "Não foi possível ler as habilidades configuradas.".to_string())?;
-        rows
-            .collect::<Result<std::collections::HashSet<_>, _>>()
+        rows.collect::<Result<std::collections::HashSet<_>, _>>()
             .map_err(|_| "Não foi possível ler as habilidades configuradas.".to_string())?
     };
     let discord_configured = crate::discord::discord_is_configured(app)?;
