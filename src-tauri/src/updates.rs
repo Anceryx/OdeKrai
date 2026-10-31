@@ -323,9 +323,16 @@ mod tests {
         let address = listener.local_addr().unwrap();
         tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
-            let mut request = [0_u8; 4096];
-            let read = stream.read(&mut request).await.unwrap();
-            let request = String::from_utf8_lossy(&request[..read]).to_ascii_lowercase();
+            let mut request = Vec::with_capacity(4096);
+            let mut chunk = [0_u8; 1024];
+            while request.len() < 4096 && !request.windows(4).any(|part| part == b"\r\n\r\n") {
+                let read = stream.read(&mut chunk).await.unwrap();
+                if read == 0 {
+                    break;
+                }
+                request.extend_from_slice(&chunk[..read.min(4096 - request.len())]);
+            }
+            let request = String::from_utf8_lossy(&request).to_ascii_lowercase();
             assert!(request.starts_with("get /latest http/1.1"));
             assert!(request.contains("user-agent: odekrai/0.15.0"));
             assert!(request.contains("accept: application/vnd.github+json"));

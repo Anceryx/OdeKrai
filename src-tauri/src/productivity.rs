@@ -11,6 +11,31 @@ use tauri_plugin_opener::OpenerExt;
 const MAX_TEXT_BYTES: usize = 1_000_000;
 
 pub(crate) fn validate(skill_id: &str, params: &Value) -> Result<(), String> {
+    if skill_id == "screen.capture" {
+        let object = params.as_object().ok_or("Parâmetros inválidos.")?;
+        if object.len() != 2 {
+            return Err("Os parâmetros da captura de tela são inválidos.".into());
+        }
+        let path = string_field(object, "path", 120)?;
+        let capture_id = string_field(object, "_capture_id", 128)?;
+        if !path.ends_with(".jpg")
+            || path.starts_with('.')
+            || path.contains("..")
+            || !path
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+        {
+            return Err("Informe um nome simples para o arquivo de captura .jpg.".into());
+        }
+        if capture_id.is_empty()
+            || !capture_id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        {
+            return Err("Identificador interno da captura inválido.".into());
+        }
+        return Ok(());
+    }
     if skill_id.starts_with("reminder.") {
         return crate::reminders::validate_params(skill_id, params);
     }
