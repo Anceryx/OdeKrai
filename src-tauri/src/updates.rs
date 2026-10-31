@@ -223,7 +223,6 @@ async fn fetch_latest(
     let response = client
         .get(endpoint)
         .header(header::ACCEPT, "application/vnd.github+json")
-        .header(header::USER_AGENT, format!("OdeKrai/{current}"))
         .header("X-GitHub-Api-Version", "2026-03-10")
         .send()
         .await
@@ -319,9 +318,10 @@ mod tests {
         net::TcpListener,
     };
 
-    async fn mock_response(body: String) -> String {
+    async fn mock_response(body: String, current: &str) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
+        let expected_user_agent = format!("user-agent: odekrai/{current}");
         tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
             let mut request = Vec::with_capacity(4096);
@@ -336,7 +336,7 @@ mod tests {
             let request = String::from_utf8_lossy(&request).to_ascii_lowercase();
             assert!(request.starts_with("get /latest http/1.1"));
             assert!(
-                request.contains("user-agent: odekrai/0.15.0"),
+                request.contains(&expected_user_agent),
                 "cabeçalhos recebidos pelo mock: {request:?}"
             );
             assert!(request.contains("accept: application/vnd.github+json"));
@@ -362,9 +362,12 @@ mod tests {
         url: &str,
         current: &str,
     ) -> Result<UpdateCheckResult, String> {
-        let endpoint = mock_response(format!(
-            r###"{{"tag_name":"{tag}","html_url":"{url}","body":"## Novidades\n- Correções"}}"###
-        ))
+        let endpoint = mock_response(
+            format!(
+                r###"{{"tag_name":"{tag}","html_url":"{url}","body":"## Novidades\n- Correções"}}"###
+            ),
+            current,
+        )
         .await;
         fetch_latest(&make_client(current).unwrap(), &endpoint, current).await
     }
