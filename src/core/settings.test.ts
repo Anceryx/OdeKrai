@@ -1,8 +1,25 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defaultSettings, loadSettings, loadSettingsWithWarnings, saveSettings } from './settings';
+import { shouldAutomaticallyCheckForUpdates } from './update-check';
 
 describe('preferências persistidas', () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it('ativa a verificação automática por padrão e migra preferências antigas', () => {
+    expect(defaultSettings.checkForUpdatesAutomatically).toBe(true);
+    vi.stubGlobal('localStorage', {
+      getItem: () =>
+        JSON.stringify({ ...defaultSettings, checkForUpdatesAutomatically: undefined }),
+      setItem: () => undefined,
+    });
+    expect(loadSettings().checkForUpdatesAutomatically).toBe(true);
+  });
+
+  it('respeita a opção desligada e só automatiza no aplicativo nativo', () => {
+    expect(shouldAutomaticallyCheckForUpdates(false, true)).toBe(false);
+    expect(shouldAutomaticallyCheckForUpdates(true, false)).toBe(false);
+    expect(shouldAutomaticallyCheckForUpdates(true, true)).toBe(true);
+  });
 
   it('migra preferências antigas preenchendo valores padrão do Companion', () => {
     const storage = new Map<string, string>();

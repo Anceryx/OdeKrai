@@ -24,6 +24,7 @@ export type AppSettings = {
   reduceMascot: boolean;
   useMascotAsAssistantAvatar: boolean;
   showReleaseNotes: boolean;
+  checkForUpdatesAutomatically: boolean;
   performanceMode: PerformanceMode;
   microphoneEnabled: boolean;
   readRepliesAutomatically: boolean;
@@ -89,6 +90,7 @@ export const defaultSettings: AppSettings = {
   reduceMascot: false,
   useMascotAsAssistantAvatar: false,
   showReleaseNotes: true,
+  checkForUpdatesAutomatically: true,
   performanceMode: 'automatic',
   microphoneEnabled: false,
   readRepliesAutomatically: false,
@@ -269,6 +271,10 @@ export function loadSettingsWithWarnings(): { settings: AppSettings; warnings: s
           typeof value.showReleaseNotes === 'boolean'
             ? value.showReleaseNotes
             : defaultSettings.showReleaseNotes,
+        checkForUpdatesAutomatically:
+          typeof value.checkForUpdatesAutomatically === 'boolean'
+            ? value.checkForUpdatesAutomatically
+            : defaultSettings.checkForUpdatesAutomatically,
         performanceMode: ['automatic', 'enabled', 'disabled'].includes(value.performanceMode)
           ? (value.performanceMode as PerformanceMode)
           : defaultSettings.performanceMode,

@@ -40,6 +40,9 @@ describe('SettingsScreen', () => {
       <AboutSettings
         releaseNotesUrl="https://github.com/Anceryx/OdeKrai/blob/main/docs/releases/v0.15.0.md"
         onOpenReleaseNotes={() => undefined}
+        settings={defaultSettings}
+        update={() => undefined}
+        onUpdateFound={() => undefined}
       />,
     );
     expect(markup).toContain('id="settings-about"');
@@ -47,5 +50,7 @@ describe('SettingsScreen', () => {
     expect(markup).toContain('Licença');
     expect(markup).toContain('Abrir pasta de logs');
     expect(markup).toContain('Notas completas da versão');
+    expect(markup).toContain('Verificar atualizações automaticamente');
+    expect(markup).toContain('Verificar agora');
   });
 });

@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { Kbd } from '../DesignSystem';
+import type { AppSettings } from '../../core/settings';
+
+type UpdateInfo = {
+  current_version: string;
+  available_version: string | null;
+  release_url: string | null;
+  notes_summary: string | null;
+  check_succeeded: boolean;
+};
 
 type BuildInfo = {
   version: string;
@@ -13,12 +22,35 @@ type BuildInfo = {
 export function AboutSettings({
   releaseNotesUrl,
   onOpenReleaseNotes,
+  settings,
+  update,
+  onUpdateFound,
 }: {
   releaseNotesUrl: string;
   onOpenReleaseNotes: () => void;
+  settings: AppSettings;
+  update: (settings: AppSettings) => void;
+  onUpdateFound: (result: UpdateInfo) => void;
 }) {
   const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null);
   const [message, setMessage] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+
+  async function checkNow() {
+    if (!isTauri() || checking) return;
+    setChecking(true);
+    setMessage('');
+    try {
+      const result = await invoke<UpdateInfo>('check_for_update');
+      setUpdateInfo(result);
+      onUpdateFound(result);
+    } catch {
+      setMessage('Não foi possível verificar atualizações agora.');
+    } finally {
+      setChecking(false);
+    }
+  }
   const buildDate = buildInfo?.build_date ? new Date(buildInfo.build_date) : null;
   const shortCommit =
     buildInfo?.commit && buildInfo.commit !== 'local' ? buildInfo.commit.slice(0, 7) : 'local';
@@ -97,6 +129,37 @@ export function AboutSettings({
           <p className="settings-description">
             <Kbd>Ctrl+K</Kbd> Abrir a paleta de comandos
           </p>
+        </section>
+        <section className="settings-subsection" aria-labelledby="about-updates-heading">
+          <h3 id="about-updates-heading">Atualizações</h3>
+          <label className="settings-toggle-row">
+            <input
+              type="checkbox"
+              checked={settings.checkForUpdatesAutomatically}
+              onChange={(event) =>
+                update({
+                  ...settings,
+                  checkForUpdatesAutomatically: event.currentTarget.checked,
+                })
+              }
+            />
+            <span>Verificar atualizações automaticamente</span>
+          </label>
+          <button
+            className="secondary-button small-button"
+            type="button"
+            disabled={!isTauri() || checking}
+            onClick={() => void checkNow()}
+          >
+            {checking ? 'Verificando…' : 'Verificar agora'}
+          </button>
+          {updateInfo?.check_succeeded && (
+            <p className="settings-description" role="status">
+              {updateInfo.available_version
+                ? `Versão ${updateInfo.available_version} disponível.`
+                : 'Você já está usando a versão mais recente.'}
+            </p>
+          )}
         </section>
         <p className="settings-description">
           <a

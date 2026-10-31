@@ -148,6 +148,7 @@ mod spreadsheets;
 mod system_actions;
 mod system_controls;
 mod tray;
+mod updates;
 mod web_fetch;
 mod window_sizing;
 
@@ -1033,6 +1034,8 @@ pub fn run() -> Result<(), tauri::Error> {
             agent_runtime::set_agent_limits,
             get_build_info,
             external_links::open_external_link,
+            external_links::open_update_release,
+            updates::check_for_update,
             hardware::get_hardware_profile,
             local_models::download_local_model,
             local_models::cancel_local_model_download,

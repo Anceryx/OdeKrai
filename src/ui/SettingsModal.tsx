@@ -58,6 +58,7 @@ export function SettingsModal({
   onAgentStatus,
   releaseNotesUrl,
   onOpenReleaseNotes,
+  onUpdateFound,
   sharedAudit,
   requestedEntry,
 }: {
@@ -81,6 +82,13 @@ export function SettingsModal({
   onAgentStatus: () => void;
   releaseNotesUrl: string;
   onOpenReleaseNotes: () => void;
+  onUpdateFound: (result: {
+    current_version: string;
+    available_version: string | null;
+    release_url: string | null;
+    notes_summary: string | null;
+    check_succeeded: boolean;
+  }) => void;
   sharedAudit?: {
     entries: AuditEntry[];
     verified: boolean | null;
@@ -148,6 +156,9 @@ export function SettingsModal({
           <AboutSettings
             releaseNotesUrl={releaseNotesUrl}
             onOpenReleaseNotes={onOpenReleaseNotes}
+            settings={settings}
+            update={update}
+            onUpdateFound={onUpdateFound}
           />
         );
       case 'perfil-memoria':

@@ -8,6 +8,8 @@ Ao conversar, o texto enviado pelo usuário é encaminhado ao provedor seleciona
 
 A integração de credenciais depende do aplicativo nativo Windows. A prévia web não encaminha chamadas de IA.
 
+Quando “Verificar atualizações automaticamente” está ligado (padrão) ou o usuário escolhe “Verificar agora”, o app faz no máximo uma consulta a cada 24 horas com `GET https://api.github.com/repos/oliveiradev1/OdeKrai/releases/latest`, sem corpo. Os cabeçalhos definidos pelo app são `Accept: application/vnd.github+json`, `X-GitHub-Api-Version: 2026-03-10` e `User-Agent: OdeKrai/<versão>`. Não são enviados token, cookie, nome, apelido, configuração, arquivos, identificador do dispositivo ou outro dado pessoal. Como em qualquer conexão à internet, o GitHub vê o endereço IP de origem e os metadados normais de rede da requisição. O OdeKrai não baixa nem executa o instalador; o botão “Ver e baixar” apenas abre a página oficial da release no navegador padrão.
+
 Uma conversa pode ser apagada pelo menu da lista. Para apagar todo o histórico, abra Configurações → Dados e privacidade, avance pela primeira confirmação e digite `APAGAR` na segunda etapa. A exclusão remove os registros SQLite e executa `VACUUM`; cópias de segurança e conteúdo já enviado ao provedor permanecem fora do alcance dessa exclusão.
 
 As respostas usam o ícone do aplicativo como avatar por padrão. A opção “Usar meu mascote como avatar do OdeKrai” troca esse ícone pelo pet selecionado; a preferência fica no armazenamento local do WebView.

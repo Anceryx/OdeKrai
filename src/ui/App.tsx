@@ -121,10 +121,12 @@ import {
 import { loadSettings, saveSettings, type ProviderSettings } from '../core/settings';
 import { useAppEffects } from './hooks/useAppEffects';
 import { externalLinkDomain, safeMarkdownUrl } from '../core/markdown';
+import { shouldAutomaticallyCheckForUpdates } from '../core/update-check';
 
 import { useAppState } from './hooks/useAppState';
 import { useNavigation } from './hooks/useNavigation';
 import { SettingsModal } from './SettingsModal';
+import { UpdateAvailableBanner, type UpdateCheckResult } from './UpdateAvailableBanner';
 import { FirstUseAssistant, type FirstUseStepContent } from './FirstUseAssistant';
 import { ReleaseNotesModal } from './ReleaseNotesModal';
 import { resolveAgentReason, resolveConfigurationReason } from '../core/navigation';
@@ -228,6 +230,7 @@ function MainApp() {
   const [releaseNotesPending, setReleaseNotesPending] = useState(false);
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   const [showAllReleaseNotes, setShowAllReleaseNotes] = useState(false);
+  const [availableUpdate, setAvailableUpdate] = useState<UpdateCheckResult | null>(null);
   useEffect(() => {
     if (!undoToast) return;
     const timer = window.setTimeout(() => setUndoToast(null), 8000);
@@ -299,6 +302,17 @@ function MainApp() {
     companionStateTimer,
   } = appState;
   const performanceStatus = usePerformanceMode(settings.performanceMode);
+  useEffect(() => {
+    if (!shouldAutomaticallyCheckForUpdates(settings.checkForUpdatesAutomatically, isTauri()))
+      return;
+    void invoke<UpdateCheckResult>('check_for_update')
+      .then((result) => {
+        setAvailableUpdate(result.check_succeeded && result.available_version ? result : null);
+      })
+      .catch(() => {
+        // A consulta automática não deve interromper a experiência do app.
+      });
+  }, [settings.checkForUpdatesAutomatically]);
   const performanceStatusRef = useRef(performanceStatus);
   useEffect(() => {
     performanceStatusRef.current = performanceStatus;
@@ -1598,6 +1612,15 @@ function MainApp() {
     }
   }
 
+  async function openUpdateRelease() {
+    if (!availableUpdate?.release_url) return;
+    try {
+      await invoke('open_update_release', { url: availableUpdate.release_url });
+    } catch {
+      setToast('Não foi possível abrir a página oficial da release.');
+    }
+  }
+
   const firstUseSteps: FirstUseStepContent[] = [
     {
       id: 0,
@@ -1816,6 +1839,13 @@ function MainApp() {
             )}
           </div>
         </header>
+        {availableUpdate && (
+          <UpdateAvailableBanner
+            update={availableUpdate}
+            onOpen={() => void openUpdateRelease()}
+            onDismiss={() => setAvailableUpdate(null)}
+          />
+        )}
         {diagnostics.length > 0 && (
           <aside className="diagnostic-banner" aria-label="Diagnóstico" role="status">
             <div className="diagnostic-banner-heading">
@@ -2233,6 +2263,9 @@ function MainApp() {
         onAgentStatus={() => reportDiagnostic('agent_home_status', '')}
         releaseNotesUrl={currentReleaseNotesUrl}
         onOpenReleaseNotes={() => void openResponseLink(currentReleaseNotesUrl)}
+        onUpdateFound={(result) =>
+          setAvailableUpdate(result.check_succeeded && result.available_version ? result : null)
+        }
         sharedAudit={sharedAudit}
         requestedEntry={requestedSettingsEntry}
       />

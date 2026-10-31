@@ -94,9 +94,40 @@ pub fn open_external_link(
         .map_err(|_| "Não foi possível abrir o navegador padrão.".to_string())
 }
 
+#[tauri::command]
+pub fn open_update_release(
+    app: AppHandle,
+    caller: WebviewWindow,
+    url: String,
+) -> Result<(), String> {
+    crate::require_main(&caller)?;
+    let validated = validate_update_release_url(&url)?;
+    app.opener()
+        .open_url(validated, None::<&str>)
+        .map_err(|_| "Não foi possível abrir o navegador padrão.".to_string())
+}
+
+fn validate_update_release_url(value: &str) -> Result<String, String> {
+    let validated = validate_external_url(value).map_err(str::to_string)?;
+    let parsed = Url::parse(&validated).map_err(|_| "O endereço do link é inválido.")?;
+    let path_parts = parsed.path().split('/').collect::<Vec<_>>();
+    let valid_tag = path_parts.last().copied().unwrap_or("");
+    if parsed.scheme() != "https"
+        || parsed.host_str() != Some("github.com")
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+        || path_parts.len() != 6
+        || path_parts[..5] != ["", "oliveiradev1", "OdeKrai", "releases", "tag"]
+        || semver::Version::parse(valid_tag.strip_prefix('v').unwrap_or(valid_tag)).is_err()
+    {
+        return Err("Este link não é uma release oficial do OdeKrai.".into());
+    }
+    Ok(validated)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::validate_external_url;
+    use super::{validate_external_url, validate_update_release_url};
 
     #[test]
     fn accepts_only_http_https_and_mailto_links_without_credentials_or_controls() {
@@ -122,6 +153,24 @@ mod tests {
             "custom:payload",
         ] {
             assert!(validate_external_url(url).is_err(), "{url:?}");
+        }
+    }
+
+    #[test]
+    fn release_link_requires_the_fixed_github_repository() {
+        for url in [
+            "https://github.com/oliveiradev1/OdeKrai/releases/tag/v0.16.0",
+            "https://github.com/oliveiradev1/OdeKrai/releases/tag/v0.16.1",
+        ] {
+            assert!(validate_update_release_url(url).is_ok());
+        }
+        for url in [
+            "https://github.com/other/repo/releases/tag/v1",
+            "https://github.com/oliveiradev1/OdeKrai/releases/tag/v1?next=evil",
+            "https://github.com.evil/oliveiradev1/OdeKrai/releases/tag/v1",
+            "https://github.com/oliveiradev1/OdeKrai/releases/",
+        ] {
+            assert!(validate_update_release_url(url).is_err());
         }
     }
 }
