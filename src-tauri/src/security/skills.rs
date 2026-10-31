@@ -1128,9 +1128,10 @@ pub(crate) fn skill_turn_offer(app: &tauri::AppHandle) -> Result<SkillTurnOffer,
         let mut statement = db
             .prepare("SELECT skill_id FROM skill_settings WHERE enabled=1")
             .map_err(|_| "Não foi possível ler as habilidades configuradas.".to_string())?;
-        statement
+        let rows = statement
             .query_map([], |row| row.get::<_, String>(0))
-            .map_err(|_| "Não foi possível ler as habilidades configuradas.".to_string())?
+            .map_err(|_| "Não foi possível ler as habilidades configuradas.".to_string())?;
+        rows
             .collect::<Result<std::collections::HashSet<_>, _>>()
             .map_err(|_| "Não foi possível ler as habilidades configuradas.".to_string())?
     };
