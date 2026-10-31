@@ -157,7 +157,7 @@ pub fn agent_availability(
             workspace_path: Some(workspace.to_string_lossy().into_owned()),
         });
     }
-    if security::skills::skills_exposed_to_agent(&app)?.is_empty() {
+    if !security::skills::skill_turn_offer(&app)?.has_response_context() {
         return Ok(AgentAvailability {
             available: false,
             reason: Some(
@@ -767,12 +767,13 @@ async fn agent_run_inner(context: AgentRunContext<'_>) -> Result<String, String>
     }
     crate::history::save_agent_user_message(&app, &conversation_id, &message)?;
     let mut messages = crate::history::load_agent_context(&app, &conversation_id)?.4;
-    let active_skills = security::skills::skills_exposed_to_agent(&app)?;
-    if active_skills.is_empty() {
+    let skill_offer = security::skills::skill_turn_offer(&app)?;
+    if !skill_offer.has_response_context() {
         return Err(
             "Modo agente indisponível: ative uma habilidade disponível e conclua os requisitos da integração em Configurações → Habilidades.".into(),
         );
     }
+    let active_skills = skill_offer.offered_skills();
     if let Some(reason) =
         crate::providers::agent_provider_unavailable_reason(&app, &provider_id, &model)
     {
@@ -780,24 +781,20 @@ async fn agent_run_inner(context: AgentRunContext<'_>) -> Result<String, String>
     }
     let prompt = crate::agent_home::system_prompt(&app)?
         .ok_or("Configure a pasta e a identidade aprovada do agente.")?;
-    let skill_context = active_skills
-        .iter()
-        .map(|skill| format!("- {}: {}", skill.name, skill.model_description))
-        .collect::<Vec<_>>()
-        .join("\n");
     messages.insert(
         0,
         Message {
             role: "system".into(),
             blocks: vec![Block::Text {
                 text: format!(
-                    "{prompt}\n\nData e hora locais no momento da execução: {}. Use este relógio e o fuso do sistema para interpretar datas relativas. Nunca presuma duração de eventos: pergunte ao usuário se o fim não foi informado.\n\nHabilidades ativas para esta execução:\n{skill_context}",
-                    crate::calendar::current_local_time()
+                    "{prompt}\n\nData e hora locais no momento da execução: {}. Use este relógio e o fuso do sistema para interpretar datas relativas. Nunca presuma duração de eventos: pergunte ao usuário se o fim não foi informado.\n\n{}",
+                    crate::calendar::current_local_time(),
+                    skill_offer.system_context()
                 ),
             }],
         },
     );
-    let tools = security::skills::model_tools(&app)?;
+    let tools = skill_offer.model_tools();
     let token = CancellationToken::new();
     {
         let mut runs = state.agent_runs.lock().await;
