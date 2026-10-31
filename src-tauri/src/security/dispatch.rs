@@ -173,6 +173,22 @@ fn require_batch_approval(action: &SimulatedAction, decision: Decision) -> Decis
     }
 }
 
+fn discord_webhook_missing(action: &SimulatedAction, error: &str) -> bool {
+    matches!(
+        action,
+        SimulatedAction::Productivity { skill_id, .. }
+            if skill_id == "discord.send" && error == crate::discord::WEBHOOK_NOT_REGISTERED
+    )
+}
+
+fn configuration_missing_audit(
+    action: &SimulatedAction,
+    error: &str,
+) -> Option<(&'static str, &'static str)> {
+    discord_webhook_missing(action, error)
+        .then_some(("configuration", "discord_webhook_missing"))
+}
+
 fn undo_descriptor_for_action(
     action: &SimulatedAction,
     state_id: &str,
@@ -327,6 +343,51 @@ mod explicit_approval_tests {
         ));
         assert!(!summary(&action).contains(text));
         assert!(!audit_params(&action).contains(text));
+    }
+
+    #[test]
+    fn discord_webhook_absence_is_configuration_pending_not_a_denial() {
+        let action = SimulatedAction::Productivity {
+            skill_id: "discord.send".into(),
+            params: json!({"webhook_id":"discord-123456789012345678","text":"mensagem"}),
+        };
+        assert!(discord_webhook_missing(
+            &action,
+            crate::discord::WEBHOOK_NOT_REGISTERED
+        ));
+        assert_eq!(
+            configuration_missing_audit(&action, crate::discord::WEBHOOK_NOT_REGISTERED),
+            Some(("configuration", "discord_webhook_missing"))
+        );
+        assert!(!discord_webhook_missing(&action, "Ação bloqueada pela política."));
+    }
+
+    #[test]
+    fn discord_always_requires_approval_in_policy_and_dispatch_modes() {
+        let action = SimulatedAction::Productivity {
+            skill_id: "discord.send".into(),
+            params: json!({"webhook_id":"discord-123456789012345678","text":"mensagem"}),
+        };
+        let (tool, risk, inside, fixed) = action_metadata(&action);
+        for mode in [
+            Mode::SemprePerguntar,
+            Mode::AprovarPorMim,
+            Mode::ControleTotal,
+        ] {
+            let policy_decision = policy::decide(
+                mode,
+                risk,
+                &Origin::User,
+                inside,
+                fixed,
+                true,
+            );
+            assert!(matches!(&policy_decision, Decision::AskUser(_)), "{mode:?}");
+            assert!(matches!(
+                require_batch_approval(&action, policy_decision),
+                Decision::AskUser(_)
+            ), "{mode:?}, tool={tool}");
+        }
     }
 
     #[test]
@@ -788,6 +849,22 @@ pub(super) async fn submit_agent_action(
     let preview = match validate_action(&action).and_then(|_| preview_for(app, &action)) {
         Ok(preview) => preview,
         Err(error) => {
+            let config_missing = configuration_missing_audit(&action, &error);
+            let (decision, rule, status, message) = if config_missing.is_some() {
+                (
+                    "configuration",
+                    "discord_webhook_missing",
+                    "configuration_pending",
+                    "Falta cadastrar um webhook do Discord.".to_string(),
+                )
+            } else {
+                (
+                    "deny",
+                    "target_validation_failed",
+                    "denied",
+                    error.clone(),
+                )
+            };
             record(
                 app,
                 state,
@@ -795,18 +872,18 @@ pub(super) async fn submit_agent_action(
                 tool,
                 risk,
                 &origin,
-                "deny",
-                "target_validation_failed",
+                decision,
+                rule,
                 "not_required",
                 0,
                 params,
-                "denied",
+                status,
                 Some(error.clone()),
             )?;
             return Ok(ActionResult {
                 id,
-                status: "denied".into(),
-                message: error,
+                status: status.into(),
+                message,
                 result: None,
                 undo_descriptor: None,
                 confirmation_required: false,
@@ -900,6 +977,9 @@ pub(super) async fn submit_agent_action(
             execute_action_with_timeout(&action, app, timeout, &origin, cancel, &id, on_output)
                 .await;
         let error = result.as_ref().err().cloned();
+        let config_missing = error
+            .as_deref()
+            .and_then(|error| configuration_missing_audit(&action, error));
         let undo_descriptor = result
             .as_ref()
             .ok()
@@ -911,12 +991,18 @@ pub(super) async fn submit_agent_action(
             tool,
             risk,
             &origin,
-            "allow",
-            rule,
+            if config_missing.is_some() {
+                "configuration"
+            } else {
+                "allow"
+            },
+            config_missing.map_or(rule, |(_, rule)| rule),
             "not_required",
             0,
             params,
-            if error.is_some() {
+            if config_missing.is_some() {
+                "configuration_pending"
+            } else if error.is_some() {
                 "failed"
             } else {
                 "completed"
@@ -925,13 +1011,19 @@ pub(super) async fn submit_agent_action(
         )?;
         return Ok(ActionResult {
             id,
-            status: if error.is_some() {
+            status: if config_missing.is_some() {
+                "configuration_pending"
+            } else if error.is_some() {
                 "failed"
             } else {
                 "completed"
             }
             .into(),
-            message: error.unwrap_or_else(|| "Ação concluída.".into()),
+            message: if config_missing.is_some() {
+                "Falta cadastrar um webhook do Discord.".into()
+            } else {
+                error.unwrap_or_else(|| "Ação concluída.".into())
+            },
             result: result.ok(),
             undo_descriptor,
             confirmation_required: false,
@@ -1092,6 +1184,9 @@ pub(super) async fn submit_agent_action(
             )
             .await;
             let error = execution.as_ref().err().cloned();
+            let config_missing = error
+                .as_deref()
+                .and_then(|error| configuration_missing_audit(&action, error));
             let undo_descriptor = execution
                 .as_ref()
                 .ok()
@@ -1103,12 +1198,18 @@ pub(super) async fn submit_agent_action(
                 tool,
                 risk,
                 &origin,
-                "allow",
-                rule,
+                if config_missing.is_some() {
+                    "configuration"
+                } else {
+                    "allow"
+                },
+                config_missing.map_or(rule, |(_, rule)| rule),
                 "approved_once",
                 latency,
                 params,
-                if error.is_some() {
+                if config_missing.is_some() {
+                    "configuration_pending"
+                } else if error.is_some() {
                     "failed"
                 } else {
                     "completed"
@@ -1117,13 +1218,19 @@ pub(super) async fn submit_agent_action(
             )?;
             Ok(ActionResult {
                 id: ticket_id,
-                status: if error.is_some() {
+                status: if config_missing.is_some() {
+                    "configuration_pending"
+                } else if error.is_some() {
                     "failed"
                 } else {
                     "completed"
                 }
                 .into(),
-                message: error.unwrap_or_else(|| "Ação aprovada e concluída.".into()),
+                message: if config_missing.is_some() {
+                    "Falta cadastrar um webhook do Discord.".into()
+                } else {
+                    error.unwrap_or_else(|| "Ação aprovada e concluída.".into())
+                },
                 result: execution.ok(),
                 undo_descriptor,
                 confirmation_required: false,

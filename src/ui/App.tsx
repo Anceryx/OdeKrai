@@ -1931,6 +1931,15 @@ function MainApp() {
                   setToast('Não foi possível abrir a janela de aprovação.'),
                 )
               }
+              onConfigureDiscord={() => {
+                settingsEntryRequestId.current += 1;
+                setRequestedSettingsEntry({
+                  section: 'privacidade',
+                  anchor: 'discord-integration-heading',
+                  requestId: settingsEntryRequestId.current,
+                });
+                selectSettingsSection('privacidade');
+              }}
               onUndo={(action) => {
                 const descriptor = action.undoDescriptor;
                 if (!descriptor) return;

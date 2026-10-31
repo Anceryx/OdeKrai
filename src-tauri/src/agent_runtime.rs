@@ -530,7 +530,9 @@ impl AgentBackend for RuntimeBackend<'_> {
                     }];
                 }
             }
-            card.decision = if approved_by_user.load(Ordering::SeqCst) {
+            card.decision = if status == "configuration_pending" {
+                "automática".into()
+            } else if approved_by_user.load(Ordering::SeqCst) {
                 if result.message.contains("expir") {
                     "expirada".into()
                 } else if status == "completed" || status == "failed" {
@@ -545,6 +547,7 @@ impl AgentBackend for RuntimeBackend<'_> {
             };
             card.status = match status.as_str() {
                 "completed" => "Concluída",
+                "configuration_pending" => "Configuração pendente",
                 "denied" if result.message.contains("expir") => "Expirada",
                 "denied" => "Negada",
                 "failed" => "Falhou",
@@ -564,6 +567,7 @@ impl AgentBackend for RuntimeBackend<'_> {
             });
             card.result_summary = match status.as_str() {
                 "completed" => "Ação concluída; o resultado segue na resposta do OdeKrai.".into(),
+                "configuration_pending" => "Falta cadastrar um webhook do Discord.".into(),
                 "denied" if result.message.contains("expir") => {
                     "O prazo de aprovação terminou.".into()
                 }
@@ -638,7 +642,7 @@ impl AgentBackend for RuntimeBackend<'_> {
             Ok(ToolExecution {
                 content: result.result.unwrap_or(result.message),
                 audit_id: Some(result.id),
-                denied: status == "denied",
+                denied: status == "denied" || status == "configuration_pending",
                 external_communication: skill.id == "simulated.send_message",
                 untrusted: untrusted_result || status != "completed",
             })

@@ -36,6 +36,7 @@ describe('controles e cartões do agente', () => {
     ['planejada', 'planejada'],
     ['Aguardando aprovação', 'aguardando aprovação'],
     ['Executando', 'executando'],
+    ['Configuração pendente', 'configuração pendente'],
     ['Concluída', 'concluída'],
     ['Negada', 'negada'],
     ['Expirada', 'expirada'],
@@ -44,6 +45,23 @@ describe('controles e cartões do agente', () => {
     expect(renderToStaticMarkup(<AgentActionCard action={action(status)} />)).toContain(
       `Estado: ${expected}`,
     );
+  });
+
+  it('explica que falta cadastrar webhook e oferece configuração sem chamar de negação local', () => {
+    const markup = renderToStaticMarkup(
+      <AgentActionCard
+        action={action('Configuração pendente', {
+          skillId: 'discord.send',
+          summary: 'Falta cadastrar um webhook do Discord.',
+          resultSummary: 'Falta cadastrar um webhook do Discord.',
+        })}
+        onConfigureDiscord={() => undefined}
+      />,
+    );
+    expect(markup).toContain('Estado: configuração pendente');
+    expect(markup).toContain('Falta cadastrar um webhook do Discord.');
+    expect(markup).toContain('Cadastrar webhook');
+    expect(markup).not.toContain('bloqueada pelas regras locais');
   });
 
   it('não oferece botões de decisão e encaminha revisão para janela nativa', () => {

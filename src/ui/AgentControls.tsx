@@ -129,6 +129,7 @@ export function AgentActionCard({
   running = false,
   onStop,
   onReviewApproval,
+  onConfigureDiscord,
   onOpenArtifact,
   onRevealArtifact,
   onUndo,
@@ -137,6 +138,7 @@ export function AgentActionCard({
   running?: boolean;
   onStop?: () => void;
   onReviewApproval?: () => void;
+  onConfigureDiscord?: () => void;
   onOpenArtifact?: (path: string) => void;
   onRevealArtifact?: (path: string) => void;
   onUndo?: (descriptor: UndoDescriptor) => void;
@@ -190,6 +192,15 @@ export function AgentActionCard({
           {onReviewApproval && (
             <button type="button" onClick={onReviewApproval}>
               Revisar na janela de aprovação
+            </button>
+          )}
+        </div>
+      )}
+      {state === 'configuração pendente' && action.skillId === 'discord.send' && (
+        <div className="agent-card-configure">
+          {onConfigureDiscord && (
+            <button className="agent-configure-button" type="button" onClick={onConfigureDiscord}>
+              Cadastrar webhook
             </button>
           )}
         </div>

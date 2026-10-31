@@ -37,6 +37,10 @@ export type AuditEntry = {
   previousHash: string;
   hash: string;
 };
+
+export function auditRuleLabel(ruleId: string): string {
+  return ruleId.trim() || 'configuração ausente';
+}
 type Pending = {
   id: string;
   tool: string;
@@ -554,7 +558,7 @@ export function SecurityCenter({
                   </span>
                 </div>
                 <span className="audit-status">
-                  {entry.status} · {entry.decision} ({entry.ruleId})
+                  {entry.status} · {entry.decision} ({auditRuleLabel(entry.ruleId)})
                 </span>
                 <pre>{entry.paramsSummary}</pre>
                 {entry.error && <p>{entry.error}</p>}

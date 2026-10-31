@@ -5,6 +5,7 @@ use tauri::Emitter;
 
 const SERVICE: &str = "site.anceryx.odekrai.discord-webhook";
 const MIN_SEND_INTERVAL: u64 = 5;
+pub(crate) const WEBHOOK_NOT_REGISTERED: &str = "Webhook não cadastrado.";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -198,7 +199,7 @@ pub async fn discord_remove(
         )
         .map_err(|_| "Não foi possível localizar o webhook.".to_string())?;
     if !exists {
-        return Err("Webhook não cadastrado.".into());
+        return Err(WEBHOOK_NOT_REGISTERED.into());
     }
     drop(db);
     let raw = credential(&id)?
@@ -235,14 +236,20 @@ pub async fn discord_remove(
 
 pub fn preview(app: &tauri::AppHandle, id: &str, text: &str) -> Result<String, String> {
     mentions_disabled(text)?;
-    let name: String = crate::security::database(app)?
-        .query_row(
-            "SELECT name FROM discord_webhooks WHERE id=?1",
-            [id],
-            |row| row.get(0),
-        )
-        .map_err(|_| "Webhook não cadastrado.".to_string())?;
+    let name = webhook_name(&crate::security::database(app)?, id)?;
     Ok(render_preview(&name, text))
+}
+
+fn webhook_name(db: &rusqlite::Connection, id: &str) -> Result<String, String> {
+    db.query_row(
+        "SELECT name FROM discord_webhooks WHERE id=?1",
+        [id],
+        |row| row.get::<_, String>(0),
+    )
+    .map_err(|error| match error {
+        rusqlite::Error::QueryReturnedNoRows => WEBHOOK_NOT_REGISTERED.to_string(),
+        _ => "Não foi possível consultar o webhook do Discord.".to_string(),
+    })
 }
 
 fn render_preview(name: &str, text: &str) -> String {
@@ -266,7 +273,10 @@ pub async fn send(app: &tauri::AppHandle, id: &str, text: &str) -> Result<String
             [id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
-        .map_err(|_| "Webhook não cadastrado.".to_string())?;
+        .map_err(|error| match error {
+            rusqlite::Error::QueryReturnedNoRows => WEBHOOK_NOT_REGISTERED.to_string(),
+            _ => "Não foi possível consultar o webhook do Discord.".to_string(),
+        })?;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -331,6 +341,21 @@ mod tests {
         )
         .is_ok());
         for url in ["https://evil.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz", "https://discord.com.evil.test/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz", "https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz/extra", "http://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz"] { assert!(validate_webhook_url(url).is_err()); }
+    }
+
+    #[test]
+    fn missing_registered_webhook_is_configuration_error_without_network_access() {
+        let db = rusqlite::Connection::open_in_memory().unwrap();
+        db.execute(
+            "CREATE TABLE discord_webhooks (id TEXT PRIMARY KEY, name TEXT NOT NULL, last_sent INTEGER NOT NULL DEFAULT 0)",
+            [],
+        )
+        .unwrap();
+
+        assert_eq!(
+            webhook_name(&db, "discord-123"),
+            Err(WEBHOOK_NOT_REGISTERED.to_string())
+        );
     }
 
     #[test]

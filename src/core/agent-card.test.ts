@@ -5,6 +5,7 @@ describe('contrato visual do cartão do agente', () => {
   it.each([
     ['Planejada', 'planejada'],
     ['Aguardando aprovação', 'aguardando aprovação'],
+    ['Configuração pendente', 'configuração pendente'],
     ['Executando', 'executando'],
     ['Concluída', 'concluída'],
     ['Negada', 'negada'],

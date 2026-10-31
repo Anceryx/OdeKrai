@@ -2,6 +2,7 @@ export type AgentCardState =
   | 'planejada'
   | 'aguardando aprovação'
   | 'executando'
+  | 'configuração pendente'
   | 'concluída'
   | 'negada'
   | 'expirada'
@@ -9,6 +10,7 @@ export type AgentCardState =
 
 export function getAgentCardState(action: { status: string }): AgentCardState {
   const status = action.status.toLocaleLowerCase('pt-BR');
+  if (status.includes('configur') && status.includes('pend')) return 'configuração pendente';
   if (status.includes('aprova')) return 'aguardando aprovação';
   if (status.includes('execut')) return 'executando';
   if (status.includes('expir')) return 'expirada';
