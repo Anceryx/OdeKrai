@@ -1,0 +1,644 @@
+use keyring::Entry;
+use reqwest::{redirect::Policy, Client, StatusCode, Url};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::time::Duration;
+
+const API_BASE: &str = "https://shardcloud.app/api/";
+const CREDENTIAL_SERVICE: &str = "site.anceryx.odekrai.shardcloud";
+const CREDENTIAL_USER: &str = "api-token";
+const MAX_TOKEN_BYTES: usize = 4096;
+const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
+const MAX_TEXT_CHARS: usize = 512;
+const MAX_METRIC_POINTS: usize = 500;
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalData<T> {
+    pub source_label: &'static str,
+    pub untrusted: bool,
+    pub data: T,
+}
+
+#[derive(Clone, Debug, Deserialize, Default)]
+struct ApiVm {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    ram: u64,
+    #[serde(default)]
+    vcpu: u64,
+    #[serde(default)]
+    distro: String,
+    #[serde(default)]
+    ip: String,
+    #[serde(default)]
+    node: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    storage: u64,
+    #[serde(default)]
+    template: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Default)]
+struct ApiVmResponse {
+    #[serde(default)]
+    vm: ApiVm,
+    #[serde(default)]
+    status: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Default)]
+struct ApiProjectInfo {
+    #[serde(default)]
+    ram: Vec<f64>,
+    #[serde(default)]
+    vcpu: Vec<f64>,
+    #[serde(default)]
+    storage: u64,
+    #[serde(default)]
+    network_receive: Vec<f64>,
+    #[serde(default)]
+    network_send: Vec<f64>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShardVm {
+    pub id: String,
+    pub name: String,
+    pub status: String,
+    pub ip: String,
+    pub ram: u64,
+    pub vcpu: u64,
+    pub distro: String,
+    pub description: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShardVmDetails {
+    pub vm: ShardVm,
+    pub node: String,
+    pub storage: u64,
+    pub template: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShardVmMetrics {
+    pub ram: Vec<f64>,
+    pub vcpu: Vec<f64>,
+    pub storage: u64,
+    pub network_receive: Vec<f64>,
+    pub network_send: Vec<f64>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShardDistro {
+    pub distro: String,
+    pub version: String,
+    pub value: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct ApiDistro {
+    #[serde(default)]
+    distro: String,
+    #[serde(default)]
+    version: String,
+    #[serde(default)]
+    value: String,
+}
+
+fn keyring_entry() -> Result<Entry, String> {
+    Entry::new(CREDENTIAL_SERVICE, CREDENTIAL_USER)
+        .map_err(|_| "Não foi possível acessar o Gerenciador de Credenciais do Windows.".into())
+}
+
+fn validate_token(token: &str) -> Result<&str, String> {
+    let token = token.trim();
+    if token.is_empty()
+        || token.len() > MAX_TOKEN_BYTES
+        || token.chars().any(char::is_control)
+    {
+        return Err("Informe um token válido da ShardCloud (até 4.096 bytes).".into());
+    }
+    Ok(token)
+}
+
+#[tauri::command]
+pub fn save_shardcloud_token(caller: tauri::WebviewWindow, token: String) -> Result<(), String> {
+    crate::require_main(&caller)?;
+    let token = validate_token(&token)?;
+    keyring_entry()?
+        .set_password(token)
+        .map_err(|_| {
+            "Não foi possível salvar o token no Gerenciador de Credenciais do Windows.".into()
+        })
+}
+
+#[tauri::command]
+pub fn has_shardcloud_token(caller: tauri::WebviewWindow) -> Result<bool, String> {
+    crate::require_main(&caller)?;
+    match keyring_entry()?.get_password() {
+        Ok(_) => Ok(true),
+        Err(keyring::Error::NoEntry) => Ok(false),
+        Err(_) => Err(
+            "Não foi possível consultar o Gerenciador de Credenciais do Windows.".into(),
+        ),
+    }
+}
+
+#[tauri::command]
+pub fn remove_shardcloud_token(caller: tauri::WebviewWindow) -> Result<(), String> {
+    crate::require_main(&caller)?;
+    match keyring_entry()?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(_) => Err(
+            "Não foi possível remover o token do Gerenciador de Credenciais do Windows.".into(),
+        ),
+    }
+}
+
+fn production_client() -> Result<Client, String> {
+    Client::builder()
+        .https_only(true)
+        .redirect(Policy::none())
+        .no_proxy()
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(REQUEST_TIMEOUT)
+        .user_agent(concat!("OdeKrai/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|_| "Não foi possível preparar a conexão segura com a ShardCloud.".into())
+}
+
+fn api_endpoint(path: &str) -> Result<Url, String> {
+    if path.starts_with('/') || path.contains("..") || path.chars().any(char::is_control) {
+        return Err("O endereço interno da API ShardCloud é inválido.".into());
+    }
+    let base = Url::parse(API_BASE)
+        .map_err(|_| "Não foi possível preparar a conexão segura com a ShardCloud.")?;
+    let endpoint = base
+        .join(path)
+        .map_err(|_| "Não foi possível preparar a solicitação à ShardCloud.")?;
+    if endpoint.scheme() != "https"
+        || endpoint.host_str() != Some("shardcloud.app")
+        || endpoint.port_or_known_default() != Some(443)
+    {
+        return Err("O endereço da API ShardCloud foi recusado.".into());
+    }
+    Ok(endpoint)
+}
+
+fn validate_vm_id(vm_id: &str) -> Result<(), String> {
+    let bytes = vm_id.as_bytes();
+    if bytes.len() != 36
+        || !bytes.iter().enumerate().all(|(index, byte)| {
+            if [8, 13, 18, 23].contains(&index) {
+                *byte == b'-'
+            } else {
+                byte.is_ascii_hexdigit()
+            }
+        })
+    {
+        return Err("O identificador da VM é inválido.".into());
+    }
+    Ok(())
+}
+
+fn external_text(value: String) -> String {
+    let cleaned = value
+        .chars()
+        .filter(|character| !character.is_control() || matches!(character, '\n' | '\t'))
+        .take(MAX_TEXT_CHARS)
+        .collect::<String>();
+    if value.chars().count() > MAX_TEXT_CHARS {
+        format!("{cleaned}… [texto externo truncado]")
+    } else {
+        cleaned
+    }
+}
+
+fn sanitize_vm(response: ApiVmResponse) -> Result<ShardVm, String> {
+    validate_vm_id(&response.vm.id)
+        .map_err(|_| "A ShardCloud retornou uma VM com identificador inválido.".to_string())?;
+    Ok(ShardVm {
+        id: response.vm.id,
+        name: external_text(response.vm.name),
+        status: external_text(response.status),
+        ip: external_text(response.vm.ip),
+        ram: response.vm.ram,
+        vcpu: response.vm.vcpu,
+        distro: external_text(response.vm.distro),
+        description: external_text(response.vm.description),
+    })
+}
+
+async fn read_limited<T: DeserializeOwned>(response: reqwest::Response) -> Result<T, String> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
+    {
+        return Err("A resposta da ShardCloud excedeu o limite de 1 MiB.".into());
+    }
+    let mut response = response;
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| "Não foi possível ler a resposta da ShardCloud.".to_string())?
+    {
+        if body.len().saturating_add(chunk.len()) > MAX_RESPONSE_BYTES {
+            return Err("A resposta da ShardCloud excedeu o limite de 1 MiB.".into());
+        }
+        body.extend_from_slice(&chunk);
+    }
+    serde_json::from_slice(&body)
+        .map_err(|_| "A ShardCloud retornou uma resposta inválida.".into())
+}
+
+fn status_error(status: StatusCode, is_vm_detail: bool) -> String {
+    match status {
+        StatusCode::UNAUTHORIZED => "Token da ShardCloud inválido.".into(),
+        StatusCode::FORBIDDEN => {
+            "O token não tem uma assinatura válida para esta operação.".into()
+        }
+        StatusCode::NOT_FOUND if is_vm_detail => "VM não encontrada.".into(),
+        StatusCode::TOO_MANY_REQUESTS => {
+            "Limite de requisições da ShardCloud atingido. Tente novamente mais tarde.".into()
+        }
+        status if status.is_redirection() => {
+            "A ShardCloud tentou redirecionar a solicitação; o redirecionamento foi bloqueado."
+                .into()
+        }
+        _ => "A ShardCloud não conseguiu concluir a consulta.".into(),
+    }
+}
+
+async fn request_at<T: DeserializeOwned>(
+    client: &Client,
+    endpoint: Url,
+    token: Option<&str>,
+    is_vm_detail: bool,
+) -> Result<T, String> {
+    let token = token
+        .ok_or_else(|| "Salve o token da ShardCloud em Configurações > Nuvem.".to_string())?;
+    let token = validate_token(token)?;
+    let response = client
+        .get(endpoint)
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|error| {
+            if error.is_timeout() {
+                "A consulta à ShardCloud excedeu o tempo limite.".to_string()
+            } else {
+                "Falha de rede ao conectar à ShardCloud.".to_string()
+            }
+        })?;
+    if !response.status().is_success() {
+        return Err(status_error(response.status(), is_vm_detail));
+    }
+    read_limited(response).await
+}
+
+async fn request_json<T: DeserializeOwned>(
+    path: &str,
+    token: Option<&str>,
+    is_vm_detail: bool,
+) -> Result<T, String> {
+    let endpoint = api_endpoint(path)?;
+    let client = production_client()?;
+    request_at(&client, endpoint, token, is_vm_detail).await
+}
+
+fn token_from_keyring() -> Result<String, String> {
+    keyring_entry()?.get_password().map_err(|error| match error {
+        keyring::Error::NoEntry => "Salve o token da ShardCloud em Configurações > Nuvem.".into(),
+        _ => "Não foi possível ler o token no Gerenciador de Credenciais do Windows.".into(),
+    })
+}
+
+async fn list_vms_with_token(token: Option<&str>) -> Result<ExternalData<Vec<ShardVm>>, String> {
+    let response: Vec<ApiVmResponse> = request_json("vms", token, false).await?;
+    let data = response
+        .into_iter()
+        .map(sanitize_vm)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(ExternalData {
+        source_label: "Dados externos da ShardCloud — não confiáveis",
+        untrusted: true,
+        data,
+    })
+}
+
+#[tauri::command]
+pub async fn shardcloud_test_connection(
+    caller: tauri::WebviewWindow,
+) -> Result<ExternalData<Vec<ShardVm>>, String> {
+    crate::require_main(&caller)?;
+    let token = token_from_keyring()?;
+    list_vms_with_token(Some(&token)).await
+}
+
+#[tauri::command]
+pub async fn shardcloud_list_vms(
+    caller: tauri::WebviewWindow,
+) -> Result<ExternalData<Vec<ShardVm>>, String> {
+    crate::require_main(&caller)?;
+    let token = token_from_keyring()?;
+    list_vms_with_token(Some(&token)).await
+}
+
+#[tauri::command]
+pub async fn shardcloud_get_vm_details(
+    caller: tauri::WebviewWindow,
+    vm_id: String,
+) -> Result<ExternalData<ShardVmDetails>, String> {
+    crate::require_main(&caller)?;
+    validate_vm_id(&vm_id)?;
+    let token = token_from_keyring()?;
+    let response: ApiVmResponse =
+        request_json(&format!("vms/{vm_id}"), Some(&token), true).await?;
+    let vm = sanitize_vm(response.clone())?;
+    Ok(ExternalData {
+        source_label: "Dados externos da ShardCloud — não confiáveis",
+        untrusted: true,
+        data: ShardVmDetails {
+            vm,
+            node: external_text(response.vm.node),
+            storage: response.vm.storage,
+            template: external_text(response.vm.template),
+        },
+    })
+}
+
+#[tauri::command]
+pub async fn shardcloud_get_vm_metrics(
+    caller: tauri::WebviewWindow,
+    vm_id: String,
+) -> Result<ExternalData<ShardVmMetrics>, String> {
+    crate::require_main(&caller)?;
+    validate_vm_id(&vm_id)?;
+    let token = token_from_keyring()?;
+    let response: ApiProjectInfo =
+        request_json(&format!("vms/{vm_id}/timeseries"), Some(&token), true).await?;
+    let trim_points = |values: Vec<f64>| {
+        values
+            .into_iter()
+            .rev()
+            .take(MAX_METRIC_POINTS)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect()
+    };
+    Ok(ExternalData {
+        source_label: "Métricas externas da ShardCloud — não confiáveis",
+        untrusted: true,
+        data: ShardVmMetrics {
+            ram: trim_points(response.ram),
+            vcpu: trim_points(response.vcpu),
+            storage: response.storage,
+            network_receive: trim_points(response.network_receive),
+            network_send: trim_points(response.network_send),
+        },
+    })
+}
+
+#[tauri::command]
+pub async fn shardcloud_list_distros(
+    caller: tauri::WebviewWindow,
+) -> Result<ExternalData<Vec<ShardDistro>>, String> {
+    crate::require_main(&caller)?;
+    let token = token_from_keyring()?;
+    let response: Vec<ApiDistro> = request_json("vms/distros", Some(&token), false).await?;
+    Ok(ExternalData {
+        source_label: "Distribuições informadas pela ShardCloud — não confiáveis",
+        untrusted: true,
+        data: response
+            .into_iter()
+            .map(|distro| ShardDistro {
+                distro: external_text(distro.distro),
+                version: external_text(distro.version),
+                value: external_text(distro.value),
+            })
+            .collect(),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        thread,
+    };
+
+    fn response_server(
+        status: &str,
+        headers: &[(&str, &str)],
+        body: &[u8],
+    ) -> (Url, std::sync::mpsc::Receiver<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let (request_sender, request_receiver) = std::sync::mpsc::channel();
+        let status = status.to_string();
+        let headers = headers
+            .iter()
+            .map(|(key, value)| format!("{key}: {value}\r\n"))
+            .collect::<String>();
+        let body = body.to_vec();
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 4096];
+            let count = stream.read(&mut request).unwrap_or_default();
+            let _ = request_sender.send(String::from_utf8_lossy(&request[..count]).into_owned());
+            let header = format!(
+                "HTTP/1.1 {status}\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            let _ = stream.write_all(header.as_bytes());
+            let _ = stream.write_all(&body);
+        });
+        (
+            Url::parse(&format!("http://{address}/api/")).unwrap(),
+            request_receiver,
+        )
+    }
+
+    fn test_client() -> Client {
+        Client::builder()
+            .redirect(Policy::none())
+            .timeout(Duration::from_secs(2))
+            .build()
+            .unwrap()
+    }
+
+    #[test]
+    fn credential_key_uses_required_service_prefix_and_token_validation_never_echoes_value() {
+        assert_eq!(CREDENTIAL_SERVICE, "site.anceryx.odekrai.shardcloud");
+        assert!(validate_token("  ").is_err());
+        let secret = "super-secret-token";
+        let error = validate_token(&format!("{secret}\n")).unwrap_err();
+        assert!(!error.contains(secret));
+    }
+
+    #[test]
+    fn api_host_is_fixed_and_vm_ids_are_validated_before_path_construction() {
+        assert_eq!(api_endpoint("vms").unwrap().as_str(), "https://shardcloud.app/api/vms");
+        assert!(validate_vm_id("https://evil.example").is_err());
+        assert!(api_endpoint("../other-host").is_err());
+        assert!(api_endpoint("https://evil.example/vms").is_err());
+    }
+
+    #[test]
+    fn external_text_is_sanitized_and_truncated() {
+        let result = external_text(format!("{}\u{1b}", "a".repeat(MAX_TEXT_CHARS + 20)));
+        assert!(result.len() < MAX_TEXT_CHARS + 60);
+        assert!(result.contains("texto externo truncado"));
+        assert!(!result.contains('\u{1b}'));
+    }
+
+    #[tokio::test]
+    async fn missing_token_fails_without_sending_a_request() {
+        let endpoint = Url::parse("http://127.0.0.1:1/api/vms").unwrap();
+        let result: Result<serde_json::Value, _> = request_at(
+            &test_client(),
+            endpoint,
+            None,
+            false,
+        ).await;
+        assert!(result.unwrap_err().contains("Salve o token"));
+    }
+
+    #[tokio::test]
+    async fn maps_401_403_404_and_429_without_exposing_token_or_body() {
+        for (status, expected) in [
+            ("401 Unauthorized", "Token da ShardCloud inválido"),
+            ("403 Forbidden", "assinatura válida"),
+            ("404 Not Found", "VM não encontrada"),
+            ("429 Too Many Requests", "Limite de requisições"),
+        ] {
+            let token = "private-test-token";
+            let (base, _) = response_server(
+                status,
+                &[("Content-Type", "application/json")],
+                token.as_bytes(),
+            );
+            let endpoint = base.join("vms").unwrap();
+            let error: String = request_at(
+                &test_client(),
+                endpoint,
+                Some(token),
+                status.starts_with("404"),
+            )
+            .await
+            .unwrap_err();
+            assert!(error.contains(expected));
+            assert!(!error.contains(token));
+        }
+    }
+
+    #[tokio::test]
+    async fn rejects_oversized_response_without_parsing_or_echoing_it() {
+        let body = vec![b'x'; MAX_RESPONSE_BYTES + 1];
+        let (base, _) =
+            response_server("200 OK", &[("Content-Type", "application/json")], &body);
+        let endpoint = base.join("vms").unwrap();
+        let error: String =
+            request_at(&test_client(), endpoint, Some("private-test-token"), false)
+                .await
+                .unwrap_err();
+        assert!(error.contains("excedeu o limite"));
+        assert!(!error.contains("private-test-token"));
+    }
+
+    #[tokio::test]
+    async fn refuses_redirects_without_following_the_location() {
+        let (base, _) = response_server(
+            "302 Found",
+            &[("Location", "http://127.0.0.1:9/stolen")],
+            b"",
+        );
+        let endpoint = base.join("vms").unwrap();
+        let error: String =
+            request_at(&test_client(), endpoint, Some("private-test-token"), false)
+                .await
+                .unwrap_err();
+        assert!(error.contains("redirecionar"));
+        assert!(!error.contains("private-test-token"));
+    }
+
+    #[tokio::test]
+    async fn reads_vm_list_from_simulated_server_and_labels_result_as_untrusted() {
+        let body = serde_json::json!([{
+            "vm": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "name": "<b>servidor</b>",
+                "ram": 512,
+                "vcpu": 2,
+                "distro": "Ubuntu",
+                "ip": "203.0.113.8",
+                "description": "VM de teste"
+            },
+            "project_info": {
+                "ram": [1.0],
+                "vcpu": [0.5],
+                "storage": 12,
+                "network_receive": [10.0],
+                "network_send": [8.0]
+            },
+            "status": "running"
+        }])
+        .to_string()
+        .into_bytes();
+        let (base, request_receiver) = response_server(
+            "200 OK",
+            &[("Content-Type", "application/json")],
+            &body,
+        );
+        let endpoint = base.join("vms").unwrap();
+        let values: Vec<ApiVmResponse> = request_at(
+            &test_client(),
+            endpoint,
+            Some("private-test-token"),
+            false,
+        )
+        .await
+        .unwrap();
+        let vm = sanitize_vm(values.into_iter().next().unwrap()).unwrap();
+        assert_eq!(vm.name, "<b>servidor</b>");
+        assert_eq!(vm.status, "running");
+        let request = request_receiver.recv().unwrap().to_ascii_lowercase();
+        assert!(request.contains("authorization: bearer private-test-token"));
+        assert!(!request.contains("cookie:"));
+    }
+
+    #[test]
+    fn server_text_is_only_renderable_as_plain_strings_and_wrapper_marks_it_untrusted() {
+        let vm = sanitize_vm(ApiVmResponse {
+            vm: ApiVm {
+                id: "123e4567-e89b-12d3-a456-426614174000".into(),
+                name: "<script>alert(1)</script>".into(),
+                ..ApiVm::default()
+            },
+            ..ApiVmResponse::default()
+        }).unwrap();
+        let output = ExternalData {
+            source_label: "Dados externos da ShardCloud — não confiáveis",
+            untrusted: true,
+            data: vec![vm],
+        };
+        let serialized = serde_json::to_string(&output).unwrap();
+        assert!(serialized.contains("<script>"));
+        assert!(serialized.contains("\"untrusted\":true"));
+    }
+}

@@ -7,6 +7,21 @@ estão disponíveis. As habilidades e decisões permanecem no registro e no moto
 
 O catálogo de provedores em `src-tauri/resources/provider-catalog.json` alimenta os metadados do frontend e do Rust. O Rust valida host e caminho, acessa credenciais e implementa listagem documentada de modelos. As preferências guardam configurações por `providerId`; perfil e histórico usam SQLite local. Avatar é processado no Rust e servido como data URL apenas para a interface principal.
 
+## ShardCloud somente leitura
+
+`src-tauri/src/shardcloud.rs` mantém a base HTTPS fixa, usa `Authorization: Bearer`, não segue
+redirecionamentos e limita tempo e tamanho das respostas. O token usa o serviço do Gerenciador de
+Credenciais `site.anceryx.odekrai.shardcloud`; não passa por SQLite. Os comandos Tauri expõem apenas
+consultas GET de VMs, detalhes, séries temporais e distribuições. A UI recebe campos limitados e os
+identifica como dados externos não confiáveis.
+
+A referência oficial confirma o token Bearer, a base `https://shardcloud.app/api` e `GET /vms` na
+[introdução](https://docs.shardcloud.app/api-reference/introduction) e em [List your VMs](https://docs.shardcloud.app/api-reference/vms/list-your-vms).
+O índice oficial lista também as páginas para detalhes, métricas e distribuições, mas as páginas
+individuais não puderam ser abertas neste ambiente. Os caminhos `/vms/{id}`, `/vms/{id}/timeseries`
+e `/vms/distros` foram conferidos no [CLI oficial da ShardCloud](https://github.com/shard-cloud/cli/blob/main/internal/httpclient/api_vm.go);
+os respectivos detalhes dessas rotas na referência web ficam **NÃO VERIFICADOS**.
+
 `src/ui/design-tokens.css` centraliza as cores, a tipografia, o espaçamento, os raios e as sombras da interface. `src/ui/DesignSystem.tsx` oferece componentes compartilhados para botões, cartões, avisos, campos, seletores, alternâncias, opções selecionáveis e cabeçalhos. A interface aplica esses padrões nas telas principais; a conferência visual em tamanhos e escalas de Windows continua manual.
 
 ## Loop de agente Rust

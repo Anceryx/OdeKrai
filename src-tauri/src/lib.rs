@@ -143,6 +143,7 @@ mod profile;
 mod providers;
 mod reminders;
 mod screen_capture;
+mod shardcloud;
 mod security;
 mod spreadsheets;
 mod system_actions;
@@ -1036,6 +1037,14 @@ pub fn run() -> Result<(), tauri::Error> {
             external_links::open_external_link,
             external_links::open_update_release,
             updates::check_for_update,
+            shardcloud::save_shardcloud_token,
+            shardcloud::has_shardcloud_token,
+            shardcloud::remove_shardcloud_token,
+            shardcloud::shardcloud_test_connection,
+            shardcloud::shardcloud_list_vms,
+            shardcloud::shardcloud_get_vm_details,
+            shardcloud::shardcloud_get_vm_metrics,
+            shardcloud::shardcloud_list_distros,
             hardware::get_hardware_profile,
             local_models::download_local_model,
             local_models::cancel_local_model_download,
