@@ -834,6 +834,7 @@ select:focus-visible {
   padding: 35px 53px 25px;
 }
 .overview-page {
+  --home-content-max-width: 620px;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -870,7 +871,7 @@ select:focus-visible {
   display: grid;
   justify-items: center;
   gap: var(--space-2);
-  width: min(100%, 620px);
+  width: min(100%, var(--home-content-max-width));
   margin: auto;
   text-align: center;
 }
@@ -945,9 +946,10 @@ select:focus-visible {
 }
 .home-panels {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
-  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  width: min(100%, var(--home-content-max-width));
+  margin-inline: auto;
 }
 .home-checklist,
 .home-resume {
@@ -960,6 +962,9 @@ select:focus-visible {
   font-size: var(--font-size-14);
   font-weight: 600;
 }
+.home-resume h2 {
+  text-align: center;
+}
 .home-checklist ul,
 .home-resume ul {
   display: grid;
@@ -967,6 +972,9 @@ select:focus-visible {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+.home-resume-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
 }
 .home-checklist li,
 .home-resume li {

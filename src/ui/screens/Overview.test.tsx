@@ -1,9 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+import { readFileSync } from 'node:fs';
 import type { ComponentProps } from 'react';
 import { describe, expect, it } from 'vitest';
 import { Overview } from './Overview';
 
 const noop = () => undefined;
+const styles = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
 
 function renderOverview(overrides: Partial<ComponentProps<typeof Overview>> = {}) {
   return renderToStaticMarkup(
@@ -32,6 +34,27 @@ function renderOverview(overrides: Partial<ComponentProps<typeof Overview>> = {}
 }
 
 describe('Início', () => {
+  it.each([
+    ['1000×600', 1000, 600],
+    ['1250×700', 1250, 700],
+  ])(
+    'mantém o bloco central e Retomar dentro do limite do compositor em %s',
+    (_, width, height) => {
+      expect(width).toBeGreaterThan(620);
+      expect(height).toBeGreaterThanOrEqual(600);
+      expect(styles).toMatch(/\.overview-page\s*\{[^}]*--home-content-max-width:\s*620px/s);
+      expect(styles).toMatch(
+        /\.home-focus\s*\{[^}]*width:\s*min\(100%,\s*var\(--home-content-max-width\)\)/s,
+      );
+      expect(styles).toMatch(
+        /\.home-panels\s*\{[^}]*width:\s*min\(100%,\s*var\(--home-content-max-width\)\)[^}]*margin-inline:\s*auto/s,
+      );
+      expect(styles).toMatch(
+        /\.home-resume-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit/s,
+      );
+    },
+  );
+
   it('apresenta o mascote escolhido, saudação e campo de mensagem enxuto', () => {
     const markup = renderOverview();
     expect(markup).toContain('O que vamos fazer hoje?');
@@ -70,6 +93,8 @@ describe('Início', () => {
     expect(markup).toContain('Preparar: Consulta');
     expect(markup).toContain('Retomar');
     expect(markup).toContain('Retomar Viagem');
+    expect(markup).toContain('class="home-panels home-panels--centered"');
+    expect(markup).toContain('class="home-resume-grid"');
     expect(markup).toContain('Conectar um provedor de IA');
     expect(markup).toContain('1 aprovação pendente; abrir janela de aprovação');
   });

@@ -130,7 +130,7 @@ export function Overview({
         )}
       </section>
 
-      <div className="home-panels">
+      <div className="home-panels home-panels--centered">
         {checklist.length > 0 && (
           <section className="home-checklist" aria-labelledby="home-checklist-title">
             <h2 id="home-checklist-title">Para começar</h2>
@@ -152,7 +152,7 @@ export function Overview({
         <section className="home-resume" aria-labelledby="home-resume-title">
           <h2 id="home-resume-title">Retomar</h2>
           {recentConversations.length > 0 ? (
-            <ul>
+            <ul className="home-resume-grid">
               {recentConversations.map((conversation) => (
                 <li key={conversation.id}>
                   <button
