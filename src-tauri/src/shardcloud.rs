@@ -263,7 +263,7 @@ pub fn save_shardcloud_token(caller: tauri::WebviewWindow, token: String) -> Res
     crate::require_main(&caller)?;
     let token = validate_token(&token)?;
     keyring_entry()?.set_password(token).map_err(|_| {
-        "Não foi possível salvar o token no Gerenciador de Credenciais do Windows.".into()
+        String::from("Não foi possível salvar o token no Gerenciador de Credenciais do Windows.")
     })?;
     clear_vms(caller.app_handle());
     Ok(())
@@ -651,7 +651,7 @@ struct ApiExecEvent {
     error: String,
 }
 
-fn validate_exec_commands(commands: &[String]) -> Result<(), String> {
+pub(crate) fn validate_exec_commands(commands: &[String]) -> Result<(), String> {
     if commands.is_empty() || commands.len() > MAX_EXEC_COMMANDS {
         return Err("O lote precisa conter de 1 a 10 comandos.".into());
     }
@@ -1282,7 +1282,7 @@ mod tests {
                 token.as_bytes(),
             );
             let endpoint = base.join("vms").unwrap();
-            let error: String = request_at(
+            let error: String = request_at::<serde_json::Value>(
                 &test_client(),
                 endpoint,
                 Some(token),
@@ -1300,9 +1300,14 @@ mod tests {
         let body = vec![b'x'; MAX_RESPONSE_BYTES + 1];
         let (base, _) = response_server("200 OK", &[("Content-Type", "application/json")], &body);
         let endpoint = base.join("vms").unwrap();
-        let error: String = request_at(&test_client(), endpoint, Some("private-test-token"), false)
-            .await
-            .unwrap_err();
+        let error: String = request_at::<serde_json::Value>(
+            &test_client(),
+            endpoint,
+            Some("private-test-token"),
+            false,
+        )
+        .await
+        .unwrap_err();
         assert!(error.contains("excedeu o limite"));
         assert!(!error.contains("private-test-token"));
     }
@@ -1315,9 +1320,14 @@ mod tests {
             b"",
         );
         let endpoint = base.join("vms").unwrap();
-        let error: String = request_at(&test_client(), endpoint, Some("private-test-token"), false)
-            .await
-            .unwrap_err();
+        let error: String = request_at::<serde_json::Value>(
+            &test_client(),
+            endpoint,
+            Some("private-test-token"),
+            false,
+        )
+        .await
+        .unwrap_err();
         assert!(error.contains("redirecionar"));
         assert!(!error.contains("private-test-token"));
     }
