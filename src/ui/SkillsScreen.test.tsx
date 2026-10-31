@@ -376,6 +376,7 @@ describe('catálogo de habilidades', () => {
       name: 'Pagamento bloqueado',
       risk: 'destrutivo_financeiro',
       status: 'unavailable',
+      statusReason: 'Habilidade indisponível nesta versão.',
       fixedBlocked: true,
       enabled: false,
       examples: ['Não solicite pagamentos.'],
@@ -390,6 +391,7 @@ describe('catálogo de habilidades', () => {
       />,
     );
     expect(blockedMarkup).toContain('Bloqueio fixo: esta habilidade não pode ser liberada');
+    expect(blockedMarkup).toContain('Motivo: Habilidade indisponível nesta versão.');
     expect(blockedMarkup).not.toContain('skills-override-settings');
 
     const appSkill: CatalogSkill = {

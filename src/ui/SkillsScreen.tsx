@@ -573,6 +573,11 @@ function SkillFamilyDetails({
                 )}
               </div>
               <p>{skill.description}</p>
+              {skill.status === 'unavailable' && skill.statusReason && (
+                <p className="skills-tool-exposure" role="status">
+                  Motivo: {skill.statusReason}
+                </p>
+              )}
               {skill.id === 'discord.send' && (
                 <p className="skills-tool-exposure" role="status">
                   <strong>Disponibilidade no agente:</strong>{' '}

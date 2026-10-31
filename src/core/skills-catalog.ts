@@ -39,6 +39,7 @@ export type CatalogSkill = {
   fixedBlocked: boolean;
   category: SkillCategory;
   status: SkillStatus;
+  statusReason?: string | null;
   configurationRequired: boolean;
   family: SkillFamily;
   icon: string;

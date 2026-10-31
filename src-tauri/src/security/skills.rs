@@ -165,7 +165,11 @@ fn skill_metadata(
         "screen.capture" => (SkillFamily::Computador, "desktop"),
         _ => (SkillFamily::Computador, "desktop"),
     };
-    (family, icon, vec![model_description], SkillOrigin::Builtin)
+    let examples = match id {
+        "screen.capture" => vec!["Tire uma captura da tela atual."],
+        _ => vec![model_description],
+    };
+    (family, icon, examples, SkillOrigin::Builtin)
 }
 
 impl Skill {
@@ -1067,6 +1071,8 @@ pub struct SkillView {
     pub fixed_blocked: bool,
     pub category: String,
     pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status_reason: Option<String>,
     pub configuration_required: bool,
     pub family: SkillFamily,
     pub icon: String,
@@ -1246,65 +1252,87 @@ pub fn get_skills(
         }
     };
     let (skills, discord_configured) = catalog_registry(db.as_ref());
-    skills
-        .into_iter()
-        .map(|skill| {
-            let example = action_example(skill.id);
-            let params = if let SimulatedAction::Productivity { params, .. } = &example {
-                params.clone()
-            } else {
-                let mut params = serde_json::to_value(&example).map_err(|_| {
-                    "Não foi possível preparar o catálogo de habilidades.".to_string()
-                })?;
-                if let Some(object) = params.as_object_mut() {
-                    object.remove("tool");
-                }
-                params
-            };
+    Ok(build_skill_views(
+        skills,
+        discord_configured,
+        catalog_risk,
+        |skill_id| {
             let stored_enabled = db
                 .as_ref()
                 .and_then(|db| {
                     db.query_row(
                         "SELECT enabled FROM skill_settings WHERE skill_id=?1",
-                        [skill.id],
+                        [skill_id],
                         |row| row.get::<_, i64>(0),
                     )
                     .optional()
                     .map(|value| value.unwrap_or(0) != 0)
                     .map_err(|error| {
-                        log::warn!("Não foi possível ler o estado da habilidade {} no catálogo; tratada como desativada: {error}", skill.id);
+                        log::warn!("Não foi possível ler o estado da habilidade {} no catálogo; tratada como desativada: {error}", skill_id);
                     })
                     .ok()
                 })
                 .unwrap_or(false);
-            let enabled = skill_exposed_to_agent(skill.id, stored_enabled, discord_configured);
-            let more_permissive = db
+            skill_exposed_to_agent(skill_id, stored_enabled, discord_configured)
+        },
+        |skill_id| {
+            db
                 .as_ref()
                 .and_then(|db| {
                     db.query_row(
                         "SELECT more_permissive FROM tool_overrides WHERE tool=?1",
-                        [skill.id],
+                        [skill_id],
                         |row| row.get::<_, i64>(0),
                     )
                     .optional()
                     .map(|value| value.unwrap_or(0) != 0)
                     .map_err(|error| {
-                        log::warn!("Não foi possível ler a exceção da habilidade {} no catálogo; tratada como desativada: {error}", skill.id);
+                        log::warn!("Não foi possível ler a exceção da habilidade {} no catálogo; tratada como desativada: {error}", skill_id);
                     })
                     .ok()
                 })
-                .unwrap_or(false);
-            Ok(SkillView {
+                .unwrap_or(false)
+        },
+    ))
+}
+
+fn build_skill_views<R, E, O>(
+    skills: Vec<Skill>,
+    discord_configured: bool,
+    mut risk_for: R,
+    mut enabled_for: E,
+    mut override_for: O,
+) -> Vec<SkillView>
+where
+    R: FnMut(&Skill) -> Result<Risk, String>,
+    E: FnMut(&str) -> bool,
+    O: FnMut(&str) -> bool,
+{
+    skills
+        .into_iter()
+        .map(|skill| {
+            let risk = risk_for(&skill);
+            let (risk, build_error) = match risk {
+                Ok(risk) => (risk, None),
+                Err(error) => {
+                    log::warn!("Habilidade {} indisponível no catálogo: {error}", skill.id);
+                    (Risk::CapturaSensivel, Some(short_catalog_reason(&error)))
+                }
+            };
+            let enabled = build_error.is_none()
+                && skill_exposed_to_agent(skill.id, enabled_for(skill.id), discord_configured);
+            let unavailable = build_error.is_some() || !skill_available(skill.id);
+            SkillView {
                 id: skill.id.into(),
                 name: skill.name.into(),
                 description: skill.description.into(),
-                risk: skill.risk(&params)?,
+                risk,
                 result_trust: skill.result_trust,
                 enabled,
-                more_permissive,
+                more_permissive: override_for(skill.id),
                 fixed_blocked: matches!(skill.id, "simulated.payment" | "discord.send"),
                 category: skill_category(skill.id).into(),
-                status: if !skill_available(skill.id) {
+                status: if unavailable {
                     "unavailable"
                 } else if skill.id == "discord.send" {
                     if !discord_configured {
@@ -1320,6 +1348,10 @@ pub fn get_skills(
                     "available"
                 }
                 .into(),
+                status_reason: build_error.or_else(|| {
+                    (!skill_available(skill.id))
+                        .then(|| "Habilidade indisponível nesta versão.".into())
+                }),
                 configuration_required: skill.id == "discord.send" && !discord_configured,
                 family: skill.family,
                 icon: skill.icon.into(),
@@ -1329,9 +1361,25 @@ pub fn get_skills(
                     .map(|example| (*example).into())
                     .collect(),
                 origin: skill.origin,
-            })
+            }
         })
         .collect()
+}
+
+fn short_catalog_reason(error: &str) -> String {
+    error
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(120)
+        .collect()
+}
+
+fn catalog_risk(skill: &Skill) -> Result<Risk, String> {
+    let action = action_example(skill.id);
+    if action_id(&action) != skill.id {
+        return Err("Metadados incompatíveis com a habilidade registrada.".into());
+    }
+    Ok(tool_for(&action).risk(&action))
 }
 
 fn catalog_registry(db: Option<&rusqlite::Connection>) -> (Vec<Skill>, bool) {
@@ -1684,6 +1732,74 @@ mod tests {
     }
 
     #[test]
+    fn catalog_keeps_all_skills_and_treats_examples_as_static_text() {
+        let mut skills = registry();
+        let expected_count = skills.len();
+        let capture = skills
+            .iter_mut()
+            .find(|skill| skill.id == "screen.capture")
+            .expect("captura precisa constar no registro");
+        capture.examples = vec!["../fora.jpg"];
+
+        let views = build_skill_views(skills, false, catalog_risk, |_| false, |_| false);
+
+        assert_eq!(views.len(), expected_count);
+        let capture = views
+            .iter()
+            .find(|skill| skill.id == "screen.capture")
+            .unwrap();
+        assert_eq!(capture.status, "available");
+        assert_eq!(capture.examples, ["../fora.jpg"]);
+        assert_eq!(capture.risk, Risk::CapturaSensivel);
+    }
+
+    #[test]
+    fn catalog_marks_only_a_broken_item_unavailable_and_keeps_the_cause() {
+        let skills = registry();
+        let expected_count = skills.len();
+        let views = build_skill_views(
+            skills,
+            false,
+            |skill| {
+                if skill.id == "screen.capture" {
+                    Err("Parâmetros da captura inválidos.".into())
+                } else {
+                    Ok(Risk::Leitura)
+                }
+            },
+            |_| false,
+            |_| false,
+        );
+
+        assert_eq!(views.len(), expected_count);
+        let failed = views
+            .iter()
+            .find(|skill| skill.id == "screen.capture")
+            .unwrap();
+        assert_eq!(failed.status, "unavailable");
+        assert_eq!(
+            failed.status_reason.as_deref(),
+            Some("Parâmetros da captura inválidos.")
+        );
+        assert_eq!(
+            serde_json::to_value(failed).unwrap()["statusReason"],
+            "Parâmetros da captura inválidos."
+        );
+        assert!(!failed.enabled);
+        assert!(views
+            .iter()
+            .any(|skill| skill.id == "plan.propose" && skill.status == "available"));
+    }
+
+    #[test]
+    fn catalog_builder_has_no_app_or_execution_dependency() {
+        let views = build_skill_views(registry(), false, catalog_risk, |_| false, |_| false);
+
+        assert!(!views.is_empty());
+        assert!(views.iter().any(|skill| skill.id == "screen.capture"));
+    }
+
+    #[test]
     fn registered_skills_have_catalog_metadata_and_each_family_is_populated() {
         let skills = registry();
         assert!(!skills.is_empty());
@@ -1785,6 +1901,7 @@ mod tests {
             fixed_blocked: false,
             category: "local".into(),
             status: "available".into(),
+            status_reason: None,
             configuration_required: false,
             family: SkillFamily::Arquivos,
             icon: "folder".into(),
@@ -1827,6 +1944,7 @@ mod tests {
             fixed_blocked: false,
             category: "local".into(),
             status: "available".into(),
+            status_reason: None,
             configuration_required,
             family,
             icon: "calendar".into(),
