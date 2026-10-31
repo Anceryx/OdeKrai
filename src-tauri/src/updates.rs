@@ -340,7 +340,7 @@ mod tests {
         current: &str,
     ) -> Result<UpdateCheckResult, String> {
         let endpoint = mock_response(format!(
-            r#"{{"tag_name":"{tag}","html_url":"{url}","body":"## Novidades\n- Correções"}}"#
+            r###"{{"tag_name":"{tag}","html_url":"{url}","body":"## Novidades\n- Correções"}}"###
         ))
         .await;
         fetch_latest(&make_client(current).unwrap(), &endpoint, current).await
