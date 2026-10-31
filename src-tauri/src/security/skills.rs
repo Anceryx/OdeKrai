@@ -1057,11 +1057,8 @@ impl SkillTurnOffer {
         let entries = skills
             .into_iter()
             .map(|skill| {
-                let state = skill_offer_state(
-                    skill.id,
-                    enabled.contains(skill.id),
-                    discord_configured,
-                );
+                let state =
+                    skill_offer_state(skill.id, enabled.contains(skill.id), discord_configured);
                 (skill, state)
             })
             .collect();
@@ -1115,13 +1112,9 @@ impl SkillTurnOffer {
             "Habilidades ativas para esta execução:\n{}",
             offered.join("\n")
         );
-        if self
-            .entries
-            .iter()
-            .any(|(skill, state)| {
-                skill.id == "discord.send" && *state == SkillOfferState::ConfigurationPending
-            })
-        {
+        if self.entries.iter().any(|(skill, state)| {
+            skill.id == "discord.send" && *state == SkillOfferState::ConfigurationPending
+        }) {
             context.push_str(DISCORD_CONFIGURATION_NOTICE);
             context.push_str(DISCORD_CONFIGURATION_GUIDANCE);
         }
@@ -2212,8 +2205,13 @@ mod tests {
             before.state_for("discord.send"),
             Some(SkillOfferState::ConfigurationPending)
         );
-        assert!(!before.model_tools().iter().any(|tool| tool.name == "discord.send"));
-        assert!(before.system_context().contains(DISCORD_CONFIGURATION_GUIDANCE));
+        assert!(!before
+            .model_tools()
+            .iter()
+            .any(|tool| tool.name == "discord.send"));
+        assert!(before
+            .system_context()
+            .contains(DISCORD_CONFIGURATION_GUIDANCE));
         assert_eq!(pending_view.status, "configuration_required");
         assert!(pending_view.configuration_required);
         assert!(!pending_view.enabled);
@@ -2227,8 +2225,13 @@ mod tests {
             after.state_for("discord.send"),
             Some(SkillOfferState::Offered)
         );
-        assert!(after.model_tools().iter().any(|tool| tool.name == "discord.send"));
-        assert!(!after.system_context().contains(DISCORD_CONFIGURATION_GUIDANCE));
+        assert!(after
+            .model_tools()
+            .iter()
+            .any(|tool| tool.name == "discord.send"));
+        assert!(!after
+            .system_context()
+            .contains(DISCORD_CONFIGURATION_GUIDANCE));
         assert_eq!(ready_view.status, "installed");
         assert!(ready_view.enabled);
         assert!(!ready_view.configuration_required);
