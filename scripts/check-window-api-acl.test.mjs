@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { findMissingWindowPermissions, findWindowCalls } from './check-window-api-acl.mjs';
+import {
+  findDialogCalls,
+  findMissingDialogPermissions,
+  findMissingWindowPermissions,
+  findWindowCalls,
+} from './check-window-api-acl.mjs';
 
 describe('verificação de ACL da API de janela', () => {
   it('identifica métodos de janela e ignora comandos Rust', () => {
@@ -35,6 +40,27 @@ describe('verificação de ACL da API de janela', () => {
           'core:window:allow-get-all-windows',
         ],
       ),
+    ).toEqual([]);
+  });
+});
+
+describe('verificação de ACL do plugin de diálogo', () => {
+  it('localiza message, ask e confirm importados, com alias ou namespace', () => {
+    expect(
+      findDialogCalls(`
+        import { message, ask as askUser } from '@tauri-apps/plugin-dialog';
+        import * as dialog from '@tauri-apps/plugin-dialog';
+        message('aviso'); askUser('pergunta'); dialog.confirm('confirmar');
+      `),
+    ).toEqual(['message', 'ask', 'confirm']);
+  });
+
+  it('reprova chamadas sem permissão e aceita somente a permissão correspondente', () => {
+    expect(findMissingDialogPermissions(['message', 'ask', 'confirm'], [])).toEqual([
+      'dialog:allow-message',
+    ]);
+    expect(
+      findMissingDialogPermissions(['message', 'ask', 'confirm'], ['dialog:allow-message']),
     ).toEqual([]);
   });
 });

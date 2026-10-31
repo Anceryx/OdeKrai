@@ -1,5 +1,6 @@
 use keyring::Entry;
 use serde::Serialize;
+use std::future::Future;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 
@@ -191,17 +192,18 @@ pub async fn discord_remove(
         webhook_id.strip_prefix("discord-").unwrap_or(&webhook_id)
     );
     let db = crate::security::database(&app)?;
-    let exists: bool = db
+    let name: String = db
         .query_row(
-            "SELECT EXISTS(SELECT 1 FROM discord_webhooks WHERE id=?1)",
+            "SELECT name FROM discord_webhooks WHERE id=?1",
             [&id],
             |row| row.get(0),
         )
-        .map_err(|_| "Não foi possível localizar o webhook.".to_string())?;
-    if !exists {
-        return Err(WEBHOOK_NOT_REGISTERED.into());
-    }
+        .map_err(|error| match error {
+            rusqlite::Error::QueryReturnedNoRows => WEBHOOK_NOT_REGISTERED.to_string(),
+            _ => "Não foi possível localizar o webhook.".to_string(),
+        })?;
     drop(db);
+    require_discord_revocation_confirmation(name, crate::security::confirm_native).await?;
     let raw = credential(&id)?
         .get_password()
         .map_err(|_| "A credencial do webhook não está disponível para revogação.".to_string())?;
@@ -232,6 +234,24 @@ pub async fn discord_remove(
     }
     let _ = app.emit("skills-updated", ());
     Ok(())
+}
+
+async fn require_discord_revocation_confirmation<F, Fut>(
+    name: String,
+    confirm: F,
+) -> Result<(), String>
+where
+    F: FnOnce(String) -> Fut,
+    Fut: Future<Output = bool>,
+{
+    let prompt = format!(
+        "Remover o destino “{name}” do Discord? A conexão será apagada e não poderá ser reutilizada."
+    );
+    if confirm(prompt).await {
+        Ok(())
+    } else {
+        Err("A remoção do destino do Discord foi cancelada.".into())
+    }
 }
 
 pub fn preview(app: &tauri::AppHandle, id: &str, text: &str) -> Result<String, String> {
@@ -355,6 +375,26 @@ mod tests {
         assert_eq!(
             webhook_name(&db, "discord-123"),
             Err(WEBHOOK_NOT_REGISTERED.to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn webhook_removal_requires_native_confirmation_before_side_effects() {
+        let prompt_name = "Alertas".to_string();
+        let prompt = require_discord_revocation_confirmation(prompt_name, |text| async move {
+            assert!(text.contains("Alertas"));
+            false
+        })
+        .await;
+        assert_eq!(
+            prompt.unwrap_err(),
+            "A remoção do destino do Discord foi cancelada."
+        );
+
+        assert!(
+            require_discord_revocation_confirmation("Alertas".into(), |_| async { true })
+                .await
+                .is_ok()
         );
     }
 

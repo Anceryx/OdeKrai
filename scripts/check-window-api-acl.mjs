@@ -44,6 +44,58 @@ export function findMissingWindowPermissions(calls, permissions) {
   ];
 }
 
+const dialogPermissionFor = {
+  message: 'dialog:allow-message',
+  ask: 'dialog:allow-message',
+  confirm: 'dialog:allow-message',
+};
+
+/** Retorna chamadas ao plugin, incluindo imports nomeados, aliases e namespace. */
+export function findDialogCalls(source) {
+  const calls = [];
+  const moduleName = '@tauri-apps/plugin-dialog';
+  const namedImport = new RegExp(`import\\s*\\{([^}]+)\\}\\s*from\\s*['"]${moduleName}['"]`, 'g');
+  for (const match of source.matchAll(namedImport)) {
+    for (const specifier of match[1].split(',')) {
+      const [importedNameRaw, localNameRaw] = specifier.trim().split(/\s+as\s+/);
+      const importedName = importedNameRaw.trim();
+      const localName = (localNameRaw ?? importedNameRaw).trim();
+      if (!Object.hasOwn(dialogPermissionFor, importedName)) continue;
+      const callPattern = new RegExp(`\\b${localName}\\s*\\(`, 'g');
+      for (const _ of source.matchAll(callPattern)) calls.push(importedName);
+    }
+  }
+
+  const namespaces = [
+    ...source.matchAll(
+      new RegExp(`import\\s+\\*\\s+as\\s+([\\w$]+)\\s+from\\s+['"]${moduleName}['"]`, 'g'),
+    ),
+  ].map((match) => match[1]);
+  for (const namespace of namespaces) {
+    for (const method of Object.keys(dialogPermissionFor)) {
+      const callPattern = new RegExp(`\\b${namespace}\\s*\\.\\s*${method}\\s*\\(`, 'g');
+      for (const _ of source.matchAll(callPattern)) calls.push(method);
+    }
+  }
+
+  const globalPattern = /window\.__TAURI__\.dialog\.(message|ask|confirm)\s*\(/g;
+  for (const match of source.matchAll(globalPattern)) calls.push(match[1]);
+  return calls;
+}
+
+export function findMissingDialogPermissions(calls, permissions) {
+  const allowed = new Set(permissions);
+  return [
+    ...new Set(
+      calls
+        .map((call) => dialogPermissionFor[call] ?? `dialog-api:unknown:${call}`)
+        .filter(
+          (permission) => permission.startsWith('dialog-api:unknown:') || !allowed.has(permission),
+        ),
+    ),
+  ];
+}
+
 async function sourceFiles(directory) {
   const files = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -65,7 +117,8 @@ let failed = false;
 for (const file of await sourceFiles(path.join(root, 'src'))) {
   const source = await readFile(file, 'utf8');
   const calls = findWindowCalls(source);
-  if (!calls.length) continue;
+  const dialogCalls = findDialogCalls(source);
+  if (!calls.length && !dialogCalls.length) continue;
   const window =
     /(?:getCurrentWindow\(\)|\bcurrentWindow)\.label\s*===\s*['"](pet|approval)['"]/.exec(
       source,
@@ -79,6 +132,12 @@ for (const file of await sourceFiles(path.join(root, 'src'))) {
       `${path.relative(root, file)} (${window}): chamada exige ${permission} em uma capability dessa janela.`,
     );
   }
+  for (const permission of findMissingDialogPermissions(dialogCalls, permissions)) {
+    failed = true;
+    console.error(
+      `${path.relative(root, file)} (${window}): chamada ao plugin de diálogo exige ${permission} em uma capability dessa janela.`,
+    );
+  }
 }
 if (failed) process.exitCode = 1;
-else console.log('Chamadas diretas da API de janela cobertas pelas capabilities correspondentes.');
+else console.log('Chamadas de janela e de diálogo cobertas pelas capabilities correspondentes.');

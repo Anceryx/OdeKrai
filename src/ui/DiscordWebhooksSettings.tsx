@@ -69,13 +69,9 @@ export function DiscordWebhooksSettings({ onChanged }: { onChanged?: () => Promi
   }
 
   async function remove(webhook: DiscordWebhook) {
-    const confirmed = window.confirm(
-      `Remover o destino “${webhook.name}” do Discord? A conexão será apagada e não poderá ser reutilizada.`,
-    );
-    if (!confirmed) return;
     setBusy(true);
     try {
-      await revokeDiscordIntegration(webhook.id, confirmed, invoke);
+      await revokeDiscordIntegration(webhook.id, invoke);
       setNotice('Destino removido do Discord e acesso local apagado.');
       await refresh();
       await onChanged?.();
