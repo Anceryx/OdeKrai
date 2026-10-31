@@ -40,6 +40,8 @@ struct ReleaseResponse {
     body: Option<String>,
 }
 
+type CachedUpdateState = (Option<String>, Option<String>, Option<String>, bool);
+
 fn open_database(path: &Path) -> Result<Connection, String> {
     let connection = Connection::open(path)
         .map_err(|_| "Não foi possível acessar o histórico de atualizações.".to_string())?;
@@ -117,7 +119,7 @@ fn cached_result(
     connection: &Connection,
     current_version: &str,
 ) -> Result<UpdateCheckResult, String> {
-    let cached: Option<(Option<String>, Option<String>, Option<String>, bool)> = connection
+    let cached: Option<CachedUpdateState> = connection
         .query_row(
             "SELECT available_version, release_url, notes_summary, last_check_succeeded
              FROM update_check_state WHERE id = 1",
