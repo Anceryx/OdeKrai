@@ -117,7 +117,7 @@ import {
   setPrimaryProviderSettings,
   toggleProviderSettings,
 } from '../core/provider-directory';
-import { loadSettings, type ProviderSettings } from '../core/settings';
+import { loadSettings, saveSettings, type ProviderSettings } from '../core/settings';
 import { useAppEffects } from './hooks/useAppEffects';
 import { externalLinkDomain, safeMarkdownUrl } from '../core/markdown';
 
@@ -1880,6 +1880,18 @@ function MainApp() {
               providerModel={shownProviderModel}
               providerId={shownProviderId}
               microphoneEnabled={settings.microphoneEnabled}
+              onMicrophonePreferenceChange={async (enabled) => {
+                const nextSettings = { ...settings, microphoneEnabled: enabled };
+                if (!saveSettings(nextSettings))
+                  throw new Error('Não foi possível salvar a preferência.');
+                try {
+                  if (isTauri()) await invoke('set_microphone_opt_in', { enabled });
+                } catch (error) {
+                  saveSettings(settings);
+                  throw error;
+                }
+                setSettings(nextSettings);
+              }}
               readRepliesAutomatically={settings.readRepliesAutomatically}
               speechVoiceURI={settings.speechVoiceURI}
               speechRate={settings.speechRate}

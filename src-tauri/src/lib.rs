@@ -22,6 +22,18 @@ fn microphone_permission_allowed(window_label: &str, enabled: bool, is_microphon
     window_label == "main" && enabled && is_microphone
 }
 
+fn microphone_permission_response(
+    window_label: &str,
+    enabled: bool,
+    is_microphone: bool,
+) -> tauri::webview::PermissionResponse {
+    if microphone_permission_allowed(window_label, enabled, is_microphone) {
+        tauri::webview::PermissionResponse::Default
+    } else {
+        tauri::webview::PermissionResponse::Deny
+    }
+}
+
 #[tauri::command]
 fn set_microphone_opt_in(
     caller: tauri::WebviewWindow,
@@ -950,20 +962,16 @@ pub fn run() -> Result<(), tauri::Error> {
     tauri::Builder::default()
         .manage(MicrophoneOptIn::default())
         .on_permission_request(|webview, kind| {
-            use tauri::webview::{PermissionKind, PermissionResponse};
+            use tauri::webview::PermissionKind;
             let enabled = webview
                 .app_handle()
                 .try_state::<MicrophoneOptIn>()
                 .is_some_and(|state| state.0.load(Ordering::SeqCst));
-            if microphone_permission_allowed(
+            microphone_permission_response(
                 webview.label(),
                 enabled,
                 kind == PermissionKind::Microphone,
-            ) {
-                PermissionResponse::Allow
-            } else {
-                PermissionResponse::Deny
-            }
+            )
         })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -1151,7 +1159,8 @@ pub fn run() -> Result<(), tauri::Error> {
 
 #[cfg(test)]
 mod microphone_permission_tests {
-    use super::microphone_permission_allowed;
+    use super::{microphone_permission_allowed, microphone_permission_response};
+    use tauri::webview::PermissionResponse;
 
     #[test]
     fn microphone_requires_opt_in_main_window_and_audio_kind() {
@@ -1159,5 +1168,25 @@ mod microphone_permission_tests {
         assert!(!microphone_permission_allowed("main", false, true));
         assert!(!microphone_permission_allowed("approval", true, true));
         assert!(!microphone_permission_allowed("main", true, false));
+    }
+
+    #[test]
+    fn opted_in_main_microphone_continues_the_webview_permission_flow() {
+        assert_eq!(
+            microphone_permission_response("main", true, true),
+            PermissionResponse::Default
+        );
+        assert_eq!(
+            microphone_permission_response("main", false, true),
+            PermissionResponse::Deny
+        );
+        assert_eq!(
+            microphone_permission_response("pet", true, true),
+            PermissionResponse::Deny
+        );
+        assert_eq!(
+            microphone_permission_response("main", true, false),
+            PermissionResponse::Deny
+        );
     }
 }

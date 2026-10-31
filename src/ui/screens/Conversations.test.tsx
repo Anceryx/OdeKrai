@@ -2,11 +2,38 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
   ConversationsScreen,
+  MicrophoneActivationDialogContent,
   shouldFollowChatScroll,
   shouldSubmitChatOnEnter,
 } from './Conversations';
+import { ModalFrame } from '../Modal';
 
 describe('ConversationsScreen', () => {
+  it('renderiza o diálogo acessível de ativação com informação e confirmação explícita', () => {
+    const markup = renderToStaticMarkup(
+      <ModalFrame
+        title="Ativar microfone?"
+        titleId="microphone-title"
+        close={() => undefined}
+        closeOnBackdrop={false}
+        dialogRef={() => undefined}
+      >
+        <MicrophoneActivationDialogContent
+          busy={false}
+          onCancel={() => undefined}
+          onActivate={() => undefined}
+        />
+      </ModalFrame>,
+    );
+
+    expect(markup).toContain('role="dialog"');
+    expect(markup).toContain('aria-labelledby="microphone-title"');
+    expect(markup).toContain('Ativar microfone?');
+    expect(markup).toContain('apenas na memória do aplicativo');
+    expect(markup).toContain('Nada será enviado sem você confirmar');
+    expect(markup).toContain('>Ativar</button>');
+  });
+
   it('mantém a rolagem no fim apenas quando o usuário já está perto do fim', () => {
     expect(shouldFollowChatScroll(1000, 850, 100)).toBe(true);
     expect(shouldFollowChatScroll(1000, 500, 100)).toBe(false);
@@ -42,6 +69,7 @@ describe('ConversationsScreen', () => {
         providerModel=""
         providerId="openai"
         microphoneEnabled={false}
+        onMicrophonePreferenceChange={() => undefined}
         readRepliesAutomatically={false}
         speechVoiceURI=""
         speechRate={1}
@@ -79,7 +107,9 @@ describe('ConversationsScreen', () => {
     expect(markup).toContain('class="messages-area"');
     expect(markup).toContain('class="composer"');
     expect(markup).toContain('class="chat-composer-actions"');
-    expect(markup).toContain('Gravação de áudio desativada em Configurações.');
+    expect(markup).toContain('aria-label="Gravar áudio"');
+    expect(markup).not.toContain('disabled="" aria-label="Gravar áudio"');
+    expect(markup).toContain('svg');
     expect(markup).toContain('Lista de conversas');
     expect(markup).toContain('empty-state-pet');
     expect(markup).toContain('Avatar do OdeKrai: Nina');
@@ -124,6 +154,7 @@ describe('ConversationsScreen', () => {
         providerModel="gpt-test"
         providerId="openai"
         microphoneEnabled={false}
+        onMicrophonePreferenceChange={() => undefined}
         readRepliesAutomatically={false}
         speechVoiceURI=""
         speechRate={1}
@@ -181,6 +212,7 @@ describe('ConversationsScreen', () => {
         providerModel=""
         providerId="openai"
         microphoneEnabled={false}
+        onMicrophonePreferenceChange={() => undefined}
         readRepliesAutomatically={false}
         speechVoiceURI=""
         speechRate={1}
