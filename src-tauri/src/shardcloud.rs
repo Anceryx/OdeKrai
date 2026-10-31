@@ -1223,7 +1223,7 @@ mod tests {
         assert_eq!(CREDENTIAL_SERVICE, "site.anceryx.odekrai.shardcloud");
         assert!(validate_token("  ").is_err());
         let secret = "super-secret-token";
-        let error = validate_token(&format!("{secret}\n")).unwrap_err();
+        let error = validate_token(&format!("{secret}\ninvalid")).unwrap_err();
         assert!(!error.contains(secret));
     }
 
@@ -1457,7 +1457,7 @@ mod tests {
         assert!(error.contains("não conseguiu concluir"));
         assert!(!error.contains(secret));
         let request = request_receiver.recv().unwrap().to_ascii_lowercase();
-        assert!(request.starts_with("post /vms/"));
+        assert!(request.starts_with("post /api/vms/"));
         assert!(request.contains(&format!("authorization: bearer {secret}")));
     }
 
