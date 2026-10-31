@@ -6927,6 +6927,37 @@ html[data-performance='on'] .free-mode .pet-shadow {
   cursor: pointer;
 }
 
+.diagnostic-item-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.diagnostic-item-heading p {
+  flex: 1;
+  min-width: 0;
+}
+
+.diagnostic-item-heading button {
+  flex: 0 0 auto;
+  min-width: 28px;
+  min-height: 28px;
+  margin-top: 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 1.125rem;
+  cursor: pointer;
+}
+
+.diagnostic-banner-heading button:focus-visible,
+.diagnostic-item-heading button:focus-visible {
+  outline: 2px solid var(--color-accent, #f97316);
+  outline-offset: 2px;
+}
+
 .diagnostic-item details {
   margin: 6px 0;
 }

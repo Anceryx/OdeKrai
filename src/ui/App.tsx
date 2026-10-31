@@ -294,6 +294,7 @@ function MainApp() {
     toast,
     setToast,
     diagnostics,
+    dismissDiagnostic,
     dismissDiagnostics,
     reportDiagnostic,
     chatMode,
@@ -1855,14 +1856,23 @@ function MainApp() {
               </button>
             </div>
             {diagnostics.map((item) => (
-              <div className="diagnostic-item" key={`${item.command}-${item.message}`}>
-                <p>
-                  <code>{item.command}</code>: {item.message}
-                  {item.count > 1 ? ` (${item.count} ocorrências)` : ''}
-                </p>
+              <div className="diagnostic-item" key={item.key}>
+                <div className="diagnostic-item-heading">
+                  <p>
+                    {item.message}
+                    {item.count > 1 ? ` x${item.count}` : ''}
+                  </p>
+                  <button
+                    type="button"
+                    aria-label={`Fechar aviso: ${item.message}`}
+                    onClick={() => dismissDiagnostic(item.key)}
+                  >
+                    ×
+                  </button>
+                </div>
                 {item.details && (
                   <details>
-                    <summary>Detalhes</summary>
+                    <summary>Detalhes técnicos</summary>
                     <code>{item.details}</code>
                   </details>
                 )}

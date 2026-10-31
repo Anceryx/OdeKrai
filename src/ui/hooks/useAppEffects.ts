@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { emit, listen } from '@tauri-apps/api/event';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { AI_PROVIDERS } from '../../core/providers';
+import { sanitizeDiagnosticDetails } from '../../core/diagnostics';
 import { loadSettings } from '../../core/settings';
 import { stopLocalSpeech } from '../../core/speech';
 import { normalizeSoundPreferences, playSound } from '../../core/sounds';
@@ -10,6 +11,8 @@ import { mergeApprovedProfile } from '../../core/identity';
 import type { useAppState } from './useAppState';
 import type { Conversation } from '../screens/types';
 import type { ProfileData } from '../Profile';
+
+export { sanitizeDiagnosticDetails } from '../../core/diagnostics';
 
 const STARTUP_TIMEOUT_MS = 5000;
 
@@ -90,18 +93,6 @@ export async function startupInvoke<T>(
       console.warn('[OdeKrai diagnóstico] Não foi possível persistir um evento local.'),
     );
   }
-}
-
-export function sanitizeDiagnosticDetails(error: unknown): string {
-  const text =
-    error instanceof Error ? (error.stack ?? `${error.name}: ${error.message}`) : String(error);
-  return text
-    .replace(/(?:\\\\\?\\)?[A-Z]:\\(?:[^\\\s]+\\)*[^\\\s]*/gi, '[caminho local]')
-    .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, '[e-mail]')
-    .replace(/(?:Bearer\s+|sk-[A-Za-z0-9_-]{8,})\S+/gi, '[credencial]')
-    .replace(/(?:api[_-]?key|token|secret|password)\s*[:=]\s*\S+/gi, '[credencial]')
-    .replace(/[\r\n\t]+/g, ' ')
-    .slice(0, 1200);
 }
 
 export function useAppEffects(state: ReturnType<typeof useAppState>) {
@@ -331,10 +322,11 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
       );
     const onError = (event: ErrorEvent) => {
       const id = correlationId();
+      const details = sanitizeDiagnosticDetails(event.error ?? event.message);
       reportDiagnostic(
         'frontend.window.onerror',
-        'Ocorreu um erro não tratado no frontend.',
-        sanitizeDiagnosticDetails(event.error ?? event.message),
+        'A interface encontrou um erro.',
+        `Referência ${id}: ${details || 'O WebView não informou o motivo do erro.'}`,
       );
       void invoke('record_diagnostic_event', {
         event: 'frontend_window_error',
@@ -353,8 +345,8 @@ export function useAppEffects(state: ReturnType<typeof useAppState>) {
       const id = correlationId();
       reportDiagnostic(
         'frontend.unhandledrejection',
-        `Uma promessa do frontend foi rejeitada (referência ${id}).`,
-        detail || 'O WebView não informou o motivo da rejeição.',
+        'Uma ação falhou.',
+        `Referência ${id}: ${detail || 'O WebView não informou o motivo da rejeição.'}`,
       );
       void invoke('record_diagnostic_event', {
         event: 'frontend_unhandled_rejection',
