@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { CloudSettings } from './CloudSettings';
+import { CloudSettings, parseBudgetCents } from './CloudSettings';
 
 describe('seção informativa de nuvem', () => {
   const markup = renderToStaticMarkup(<CloudSettings />);
@@ -58,5 +58,26 @@ describe('seção informativa de nuvem', () => {
     }
     expect(markup).not.toMatch(/<button[^>]*>\s*(?:Conectar|Criar conta|Vincular)/i);
     expect(markup).not.toMatch(/Conectar|Criar conta|Vincular/i);
+  });
+});
+
+describe('teto local da ShardCloud', () => {
+  it('exibe entrada do teto, estado sem configuração e o aviso de preço não verificado', () => {
+    const markup = renderToStaticMarkup(<CloudSettings />);
+    expect(markup).toContain('Teto mensal para VMs');
+    expect(markup).toContain('id="shardcloud-monthly-budget"');
+    expect(markup).toContain('Sem teto salvo, a criação de VMs deve permanecer bloqueada.');
+    expect(markup).toContain('O preço real por VM não foi conferido.');
+    expect(markup).toContain('a ShardCloud não recebe nem aplica esse teto');
+  });
+
+  it('converte valores brasileiros para centavos e recusa limites inválidos', () => {
+    expect(parseBudgetCents('1,00')).toBe(100);
+    expect(parseBudgetCents('125,5')).toBe(12_550);
+    expect(parseBudgetCents('1000000')).toBe(100_000_000);
+    expect(parseBudgetCents('0,99')).toBeNull();
+    expect(parseBudgetCents('1000001')).toBeNull();
+    expect(parseBudgetCents('abc')).toBeNull();
+    expect(parseBudgetCents('1,999')).toBeNull();
   });
 });

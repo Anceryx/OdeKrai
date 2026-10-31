@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 
 const CLOUD_SERVICES = {
@@ -49,10 +49,28 @@ type ShardVmMetrics = {
 
 type ShardDistro = { distro: string; version: string; value: string };
 
+export function parseBudgetCents(input: string): number | null {
+  const normalized = input.trim().replace(',', '.');
+  if (!/^\d{1,7}(?:\.\d{1,2})?$/.test(normalized)) return null;
+  const [reais, cents = ''] = normalized.split('.');
+  const value = Number(reais) * 100 + Number(cents.padEnd(2, '0'));
+  return Number.isSafeInteger(value) && value >= 100 && value <= 100_000_000 ? value : null;
+}
+
+function formatBudget(cents: number | null): string {
+  if (cents === null) return '';
+  return (cents / 100).toFixed(2).replace('.', ',');
+}
+
 export function CloudSettings({
   initialTokenSaved = false,
   initialConnected = false,
-}: { initialTokenSaved?: boolean; initialConnected?: boolean } = {}) {
+  initialBudgetCents = null,
+}: {
+  initialTokenSaved?: boolean;
+  initialConnected?: boolean;
+  initialBudgetCents?: number | null;
+} = {}) {
   const [token, setToken] = useState('');
   const [tokenSaved, setTokenSaved] = useState(initialTokenSaved);
   const [credentialLoaded, setCredentialLoaded] = useState(() => !isTauri());
@@ -64,6 +82,8 @@ export function CloudSettings({
   const [details, setDetails] = useState<ShardVmDetails | null>(null);
   const [metrics, setMetrics] = useState<ShardVmMetrics | null>(null);
   const [distros, setDistros] = useState<ShardDistro[] | null>(null);
+  const [budgetCents, setBudgetCents] = useState<number | null>(initialBudgetCents);
+  const [budgetInput, setBudgetInput] = useState(formatBudget(initialBudgetCents));
 
   useEffect(() => {
     if (!isTauri()) {
@@ -81,10 +101,41 @@ export function CloudSettings({
       .finally(() => {
         if (active) setCredentialLoaded(true);
       });
+    void invoke<number | null>('get_shardcloud_monthly_budget')
+      .then((cents) => {
+        if (active) {
+          setBudgetCents(cents);
+          setBudgetInput(formatBudget(cents));
+        }
+      })
+      .catch(() => {
+        if (active) setError('Não foi possível carregar o teto mensal da ShardCloud.');
+      });
     return () => {
       active = false;
     };
   }, []);
+
+  async function saveBudget(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!isTauri()) return;
+    const cents = budgetInput.trim() ? parseBudgetCents(budgetInput) : null;
+    if (budgetInput.trim() && cents === null) {
+      setError('Informe um teto entre R$ 1,00 e R$ 1.000.000,00, com até duas casas decimais.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await invoke('set_shardcloud_monthly_budget', { cents });
+      setBudgetCents(cents);
+      setBudgetInput(formatBudget(cents));
+    } catch (reason) {
+      setError(safeUiError(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function saveToken() {
     if (!isTauri()) return;
@@ -219,6 +270,51 @@ export function CloudSettings({
         Nenhuma consulta de rede ocorre ao salvar o token. Ele fica no Gerenciador de Credenciais do
         Windows e não é exibido novamente depois de salvo.
       </p>
+
+      <section className="cloud-budget" aria-labelledby="cloud-budget-heading">
+        <h3 id="cloud-budget-heading">Teto mensal para VMs</h3>
+        <form onSubmit={(event) => void saveBudget(event)}>
+          <label htmlFor="shardcloud-monthly-budget">Valor em reais por mês</label>
+          <div className="cloud-actions">
+            <input
+              id="shardcloud-monthly-budget"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              value={budgetInput}
+              onChange={(event) => setBudgetInput(event.target.value)}
+              placeholder="Ex.: 100,00"
+              aria-describedby="shardcloud-budget-note"
+            />
+            <button type="submit" disabled={busy}>
+              Salvar teto
+            </button>
+            {budgetCents !== null && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setBudgetInput('');
+                  void invoke('set_shardcloud_monthly_budget', { cents: null })
+                    .then(() => setBudgetCents(null))
+                    .catch((reason) => setError(safeUiError(reason)));
+                }}
+              >
+                Remover teto
+              </button>
+            )}
+          </div>
+        </form>
+        <p id="shardcloud-budget-note" className="cloud-settings-notice">
+          {budgetCents === null
+            ? 'Sem teto salvo, a criação de VMs deve permanecer bloqueada.'
+            : `Teto salvo: R$ ${formatBudget(budgetCents)} por mês.`}
+        </p>
+        <p className="cloud-settings-notice">
+          O preço real por VM não foi conferido. Este valor é uma referência local; a ShardCloud não
+          recebe nem aplica esse teto. Custos podem variar conforme o plano e os recursos.
+        </p>
+      </section>
 
       <section className="cloud-shardcloud" aria-labelledby="cloud-shardcloud-heading">
         <div className="cloud-shardcloud-title">
