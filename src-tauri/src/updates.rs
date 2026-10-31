@@ -335,7 +335,10 @@ mod tests {
             }
             let request = String::from_utf8_lossy(&request).to_ascii_lowercase();
             assert!(request.starts_with("get /latest http/1.1"));
-            assert!(request.contains("user-agent: odekrai/0.15.0"));
+            assert!(
+                request.contains("user-agent: odekrai/0.15.0"),
+                "cabeçalhos recebidos pelo mock: {request:?}"
+            );
             assert!(request.contains("accept: application/vnd.github+json"));
             assert!(request.contains("x-github-api-version: 2026-03-10"));
             assert!(!request.contains("cookie:"));
