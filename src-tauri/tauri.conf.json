@@ -28,9 +28,20 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": false,
     "icon": ["icons/icon.png", "icons/icon.ico"],
     "category": "Productivity",
     "shortDescription": "OdeKrai",
-    "longDescription": "OdeKrai para Windows."
+    "longDescription": "OdeKrai para Windows.",
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": null,
+      "nsis": {
+        "installMode": "currentUser"
+      },
+      "signCommand": null,
+      "timestampUrl": null,
+      "tsp": false
+    }
   }
 }

@@ -31,3 +31,8 @@ O instalador não é assinado. O Windows SmartScreen exibirá um aviso ao usuár
 atualização automática; novas versões serão obtidas pelas releases públicas. O workflow **Build
 Windows diagnostic** permanece inalterado e continua gerando somente `odekrai.exe` para validação,
 sem instalador e sem anexá-lo à release.
+
+O workflow **Build Windows NSIS installer artifact** é acionado por tags `v*` ou manualmente e
+somente gera um artefato da execução do Actions; não cria uma release do GitHub. O instalador usa
+`currentUser` no NSIS para instalar no perfil atual sem exigir privilégios de administrador. A
+assinatura de código e a geração de artefatos assinados do updater ficam desativadas.
