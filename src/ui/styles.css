@@ -4954,6 +4954,11 @@ html.island-window-html {
 .agent-action-result {
   white-space: pre-line;
 }
+.agent-action-undo-error {
+  margin: 8px 0 0;
+  color: var(--color-danger, #ff8b7b);
+  font-size: var(--font-size-12);
+}
 .agent-action-card dl {
   justify-content: flex-start;
   flex-wrap: wrap;

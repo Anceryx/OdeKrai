@@ -101,6 +101,22 @@ describe('controles e cartões do agente', () => {
     expect(irreversible).not.toContain('Desfazer');
   });
 
+  it('mantém falhas ao desfazer dentro do cartão que originou a ação', () => {
+    const markup = renderToStaticMarkup(
+      <AgentActionCard
+        action={action('Concluída', {
+          undoError: 'Parâmetros inválidos para restaurar o arquivo.',
+        })}
+      />,
+    );
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain(
+      'Não foi possível desfazer: Parâmetros inválidos para restaurar o arquivo.',
+    );
+    expect(markup).not.toContain('diagnostic-banner');
+    expect(markup).not.toContain('class="toast"');
+  });
+
   it('renderiza prévia como texto, detalhes, timeline e dado externo não confiável', () => {
     const markup = renderToStaticMarkup(
       <AgentActionCard

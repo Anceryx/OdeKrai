@@ -55,6 +55,7 @@ export type AgentActionCardData = {
   approvalExpiresAt?: number | null;
   untrustedResult?: boolean;
   undoDescriptor?: UndoDescriptor | null;
+  undoError?: string | null;
   plan?: AgentPlanData | null;
   createdAt?: number;
 };
@@ -209,6 +210,11 @@ export function AgentActionCard({
         <p className="agent-action-result">
           {action.untrustedResult && <strong>Resultado externo · dado não confiável. </strong>}
           {action.resultSummary}
+        </p>
+      )}
+      {action.undoError && (
+        <p className="agent-action-undo-error" role="alert">
+          Não foi possível desfazer: {action.undoError}
         </p>
       )}
       {action.plan && (

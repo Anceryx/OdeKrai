@@ -10,6 +10,7 @@ import {
   type FormEvent,
 } from 'react';
 import { resolveConversationSelection } from '../core/chat';
+import { setActionCardUndoError } from '../core/agent-card';
 import type { ChatMessage } from '../core/provider-messages';
 import type { AgentActionCardData } from './AgentControls';
 import {
@@ -1022,6 +1023,17 @@ function MainApp() {
     });
   }
 
+  function reportUndoFailure(actionId: string, error: unknown) {
+    const message =
+      typeof error === 'string'
+        ? error
+        : error instanceof Error
+          ? error.message
+          : 'Não foi possível desfazer a ação.';
+    setAgentActionCards((items) => setActionCardUndoError(items, actionId, message));
+    setUndoToast(null);
+  }
+
   async function sendMessage(
     rawText: string,
     reuseLastUserMessage = false,
@@ -1965,6 +1977,7 @@ function MainApp() {
                             ? {
                                 ...item,
                                 undoDescriptor: null,
+                                undoError: null,
                                 resultSummary: `${item.resultSummary ?? ''}\n${result.message}`,
                               }
                             : item,
@@ -1973,13 +1986,7 @@ function MainApp() {
                       setUndoToast(null);
                       setToast(result.message);
                     })
-                    .catch((error) =>
-                      setToast(
-                        error instanceof Error
-                          ? error.message
-                          : 'Não foi possível desfazer a ação.',
-                      ),
-                    );
+                    .catch((error) => reportUndoFailure(action.id, error));
                 void requestUndo(false);
               }}
               onOpenArtifact={(path) =>
@@ -2173,6 +2180,7 @@ function MainApp() {
                           ? {
                               ...item,
                               undoDescriptor: null,
+                              undoError: null,
                               resultSummary: `${item.resultSummary ?? ''}\n${result.message}`,
                             }
                           : item,
@@ -2181,11 +2189,7 @@ function MainApp() {
                     setUndoToast(null);
                     setToast(result.message);
                   })
-                  .catch((error) =>
-                    setToast(
-                      error instanceof Error ? error.message : 'Não foi possível desfazer a ação.',
-                    ),
-                  );
+                  .catch((error) => reportUndoFailure(action.id, error));
               void requestUndo(false);
             }}
           >

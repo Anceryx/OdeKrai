@@ -21,6 +21,14 @@ export function getAgentCardState(action: { status: string }): AgentCardState {
   return 'planejada';
 }
 
+export function setActionCardUndoError<T extends { id: string }>(
+  cards: readonly T[],
+  cardId: string,
+  message: string,
+): Array<T & { undoError?: string | null }> {
+  return cards.map((card) => (card.id === cardId ? { ...card, undoError: message } : card));
+}
+
 const BLOCKED_ARTIFACT_EXTENSIONS = new Set([
   'exe',
   'com',
