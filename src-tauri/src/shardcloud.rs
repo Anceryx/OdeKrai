@@ -2,6 +2,12 @@ use keyring::Entry;
 use reqwest::{redirect::Policy, Client, StatusCode, Url};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::time::Duration;
+use tauri::Manager;
+
+#[derive(Default)]
+pub(crate) struct ShardCloudState {
+    approved_vms: std::sync::Mutex<Vec<ShardVm>>,
+}
 
 const API_BASE: &str = "https://shardcloud.app/api/";
 const CREDENTIAL_SERVICE: &str = "site.anceryx.odekrai.shardcloud";
@@ -79,6 +85,93 @@ pub struct ShardVm {
     pub description: String,
 }
 
+fn resolve_approved_vm(vms: &[ShardVm], name: &str) -> Result<ShardVm, String> {
+    let matches = vms.iter().filter(|vm| vm.name == name).collect::<Vec<_>>();
+    match matches.as_slice() {
+        [vm] => Ok((*vm).clone()),
+        [] => Err("A VM precisa aparecer na lista ShardCloud consultada por você.".into()),
+        _ => Err("Há mais de uma VM com esse nome; use a lista para escolher um nome único.".into()),
+    }
+}
+
+fn state(app: &tauri::AppHandle) -> Result<tauri::State<'_, ShardCloudState>, String> {
+    app.try_state::<ShardCloudState>()
+        .ok_or_else(|| "O catálogo local de VMs não está disponível.".into())
+}
+
+fn remember_vms(app: &tauri::AppHandle, vms: &[ShardVm]) -> Result<(), String> {
+    *state(app)?
+        .approved_vms
+        .lock()
+        .map_err(|_| "Não foi possível atualizar a lista local de VMs.".to_string())? =
+        vms.to_vec();
+    Ok(())
+}
+
+fn approved_vm(app: &tauri::AppHandle, name: &str) -> Result<ShardVm, String> {
+    let state = state(app)?;
+    let guard = state
+        .approved_vms
+        .lock()
+        .map_err(|_| "Não foi possível consultar a lista local de VMs.".to_string())?;
+    resolve_approved_vm(&guard, name)
+}
+
+pub(crate) fn prepare_skill_params(
+    app: &tauri::AppHandle,
+    skill_id: &str,
+    mut params: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    if matches!(skill_id, "shardcloud.vm_list") {
+        return Ok(params);
+    }
+    if matches!(skill_id, "shardcloud.vm_details" | "shardcloud.vm_start" | "shardcloud.vm_stop") {
+        let object = params
+            .as_object_mut()
+            .ok_or("Os parâmetros da habilidade são inválidos.")?;
+        if object.len() != 1 || object.contains_key("vm_id") {
+            return Err("Informe somente o nome de uma VM presente na lista consultada.".into());
+        }
+        let name = object
+            .get("vm_name")
+            .and_then(serde_json::Value::as_str)
+            .ok_or("Informe o nome da VM da lista consultada.")?;
+        let vm = approved_vm(app, name)?;
+        object.insert("vm_id".into(), serde_json::Value::String(vm.id));
+        return Ok(params);
+    }
+    Ok(params)
+}
+
+pub(crate) fn validate_action_against_catalog(
+    app: &tauri::AppHandle,
+    action: &crate::security::SimulatedAction,
+) -> Result<(), String> {
+    let crate::security::SimulatedAction::Productivity { skill_id, params } = action else {
+        return Ok(());
+    };
+    if !matches!(skill_id.as_str(), "shardcloud.vm_details" | "shardcloud.vm_start" | "shardcloud.vm_stop") {
+        return Ok(());
+    }
+    let name = params.get("vm_name").and_then(serde_json::Value::as_str)
+        .ok_or("Informe o nome da VM da lista consultada.")?;
+    let id = params.get("vm_id").and_then(serde_json::Value::as_str)
+        .ok_or("A VM não foi confirmada pela lista consultada.")?;
+    let vm = approved_vm(app, name)?;
+    if vm.id != id {
+        return Err("O identificador não corresponde à VM da lista consultada.".into());
+    }
+    Ok(())
+}
+
+fn clear_vms(app: &tauri::AppHandle) {
+    if let Some(state) = app.try_state::<ShardCloudState>() {
+        if let Ok(mut vms) = state.approved_vms.lock() {
+            vms.clear();
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShardVmDetails {
@@ -140,7 +233,9 @@ pub fn save_shardcloud_token(caller: tauri::WebviewWindow, token: String) -> Res
         .set_password(token)
         .map_err(|_| {
             "Não foi possível salvar o token no Gerenciador de Credenciais do Windows.".into()
-        })
+        })?;
+    clear_vms(caller.app_handle());
+    Ok(())
 }
 
 #[tauri::command]
@@ -159,7 +254,10 @@ pub fn has_shardcloud_token(caller: tauri::WebviewWindow) -> Result<bool, String
 pub fn remove_shardcloud_token(caller: tauri::WebviewWindow) -> Result<(), String> {
     crate::require_main(&caller)?;
     match keyring_entry()?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Ok(()) | Err(keyring::Error::NoEntry) => {
+            clear_vms(caller.app_handle());
+            Ok(())
+        }
         Err(_) => Err(
             "Não foi possível remover o token do Gerenciador de Credenciais do Windows.".into(),
         ),
@@ -223,6 +321,18 @@ fn external_text(value: String) -> String {
     } else {
         cleaned
     }
+}
+
+fn display_vm_name(name: &str) -> String {
+    name.chars()
+        .map(|character| if character.is_control() { ' ' } else { character })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(MAX_TEXT_CHARS)
+        .collect()
 }
 
 fn sanitize_vm(response: ApiVmResponse) -> Result<ShardVm, String> {
@@ -338,22 +448,177 @@ async fn list_vms_with_token(token: Option<&str>) -> Result<ExternalData<Vec<Sha
     })
 }
 
+async fn list_vms_for_skill(app: &tauri::AppHandle) -> Result<ExternalData<Vec<ShardVm>>, String> {
+    clear_vms(app);
+    let token = token_from_keyring()?;
+    let result = list_vms_with_token(Some(&token)).await?;
+    remember_vms(app, &result.data)?;
+    Ok(result)
+}
+
+async fn details_for_skill(
+    name: &str,
+    id: &str,
+    token: &str,
+) -> Result<ExternalData<ShardVmDetails>, String> {
+    validate_vm_id(id)?;
+    let response: ApiVmResponse = request_json(&format!("vms/{id}"), Some(token), true).await?;
+    let vm = sanitize_vm(response.clone())?;
+    if vm.id != id || vm.name != name {
+        return Err("A VM retornada não corresponde à lista consultada.".into());
+    }
+    Ok(ExternalData {
+        source_label: "Dados externos da ShardCloud — não confiáveis",
+        untrusted: true,
+        data: ShardVmDetails {
+            vm,
+            node: external_text(response.vm.node),
+            storage: response.vm.storage,
+            template: external_text(response.vm.template),
+        },
+    })
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum VmPowerAction {
+    Start,
+    Stop,
+}
+
+impl VmPowerAction {
+    fn path(self) -> &'static str {
+        match self {
+            Self::Start => "start",
+            Self::Stop => "stop",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Start => "iniciar",
+            Self::Stop => "parar",
+        }
+    }
+}
+
+async fn post_vm_power_at(
+    client: &Client,
+    endpoint: Url,
+    token: &str,
+) -> Result<(), String> {
+    let token = validate_token(token)?;
+    let response = client
+        .post(endpoint)
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|error| {
+            if error.is_timeout() {
+                "A consulta à ShardCloud excedeu o tempo limite.".to_string()
+            } else {
+                "Falha de rede ao conectar à ShardCloud.".to_string()
+            }
+        })?;
+    if !response.status().is_success() {
+        return Err(status_error(response.status(), true));
+    }
+    Ok(())
+}
+
+async fn change_vm_power(
+    vm: &ShardVm,
+    action: VmPowerAction,
+    token: &str,
+) -> Result<(), String> {
+    let endpoint = vm_power_endpoint(&vm.id, action)?;
+    let client = production_client()?;
+    post_vm_power_at(&client, endpoint, token).await
+}
+
+fn vm_power_endpoint(vm_id: &str, action: VmPowerAction) -> Result<Url, String> {
+    validate_vm_id(vm_id)?;
+    api_endpoint(&format!("vms/{}/{}", vm_id, action.path()))
+}
+
+pub(crate) fn preview_skill(skill_id: &str, params: &serde_json::Value) -> Result<String, String> {
+    if skill_id == "shardcloud.vm_list" {
+        return Ok("Consultar a lista de VMs da conta ShardCloud conectada.".into());
+    }
+    let name = display_vm_name(
+        params.get("vm_name").and_then(serde_json::Value::as_str)
+            .ok_or("Informe o nome da VM.")?,
+    );
+    let id = params.get("vm_id").and_then(serde_json::Value::as_str)
+        .ok_or("A VM não foi confirmada pela lista consultada.")?;
+    let action = match skill_id {
+        "shardcloud.vm_start" => "Iniciar",
+        "shardcloud.vm_stop" => "Parar",
+        "shardcloud.vm_details" => "Consultar detalhes de",
+        _ => return Err("Ação ShardCloud desconhecida.".into()),
+    };
+    if matches!(skill_id, "shardcloud.vm_start" | "shardcloud.vm_stop") {
+        Ok(format!(
+            "Ação: {action} VM\nVM: {name}\nID: {id}\nAviso: esta ação pode interromper serviços que estão rodando nela."
+        ))
+    } else {
+        Ok(format!("{action} VM\nVM: {name}\nID: {id}"))
+    }
+}
+
+pub(crate) async fn execute_skill(
+    app: &tauri::AppHandle,
+    skill_id: &str,
+    params: &serde_json::Value,
+) -> Result<String, String> {
+    if skill_id == "shardcloud.vm_list" {
+        return serde_json::to_string(&list_vms_for_skill(app).await?)
+            .map_err(|_| "Não foi possível preparar a lista de VMs.".into());
+    }
+    let name = params.get("vm_name").and_then(serde_json::Value::as_str)
+        .ok_or("Informe o nome da VM.")?;
+    let id = params.get("vm_id").and_then(serde_json::Value::as_str)
+        .ok_or("A VM não foi confirmada pela lista consultada.")?;
+    let vm = approved_vm(app, name)?;
+    if vm.id != id {
+        return Err("O identificador não corresponde à VM da lista consultada.".into());
+    }
+    let token = token_from_keyring()?;
+    match skill_id {
+        "shardcloud.vm_details" => serde_json::to_string(&details_for_skill(name, id, &token).await?)
+            .map_err(|_| "Não foi possível preparar os detalhes da VM.".into()),
+        "shardcloud.vm_start" | "shardcloud.vm_stop" => {
+            let action = if skill_id == "shardcloud.vm_start" { VmPowerAction::Start } else { VmPowerAction::Stop };
+            change_vm_power(&vm, action, &token).await?;
+            Ok(format!("Solicitação para {} a VM {} aceita pela ShardCloud.", action.label(), display_vm_name(&vm.name)))
+        }
+        _ => Err("Habilidade ShardCloud desconhecida.".into()),
+    }
+}
+
 #[tauri::command]
 pub async fn shardcloud_test_connection(
+    app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
 ) -> Result<ExternalData<Vec<ShardVm>>, String> {
     crate::require_main(&caller)?;
+    clear_vms(&app);
     let token = token_from_keyring()?;
-    list_vms_with_token(Some(&token)).await
+    let result = list_vms_with_token(Some(&token)).await?;
+    remember_vms(&app, &result.data)?;
+    Ok(result)
 }
 
 #[tauri::command]
 pub async fn shardcloud_list_vms(
+    app: tauri::AppHandle,
     caller: tauri::WebviewWindow,
 ) -> Result<ExternalData<Vec<ShardVm>>, String> {
     crate::require_main(&caller)?;
+    clear_vms(&app);
     let token = token_from_keyring()?;
-    list_vms_with_token(Some(&token)).await
+    let result = list_vms_with_token(Some(&token)).await?;
+    remember_vms(&app, &result.data)?;
+    Ok(result)
 }
 
 #[tauri::command]
@@ -640,5 +905,78 @@ mod tests {
         let serialized = serde_json::to_string(&output).unwrap();
         assert!(serialized.contains("<script>"));
         assert!(serialized.contains("\"untrusted\":true"));
+    }
+
+    #[test]
+    fn vm_selection_only_resolves_names_present_uniquely_in_the_last_list() {
+        let vm = ShardVm {
+            id: "123e4567-e89b-12d3-a456-426614174000".into(),
+            name: "Produção".into(),
+            status: "running".into(),
+            ip: String::new(),
+            ram: 512,
+            vcpu: 2,
+            distro: "Ubuntu".into(),
+            description: String::new(),
+        };
+        assert_eq!(resolve_approved_vm(std::slice::from_ref(&vm), "Produção").unwrap().id, vm.id);
+        assert!(resolve_approved_vm(std::slice::from_ref(&vm), "VM inventada").is_err());
+        assert!(resolve_approved_vm(&[vm.clone(), vm], "Produção").unwrap_err().contains("mais de uma"));
+    }
+
+    #[test]
+    fn power_endpoint_is_fixed_and_approval_preview_contains_confirmed_vm_and_warning() {
+        let endpoint = vm_power_endpoint(
+            "123e4567-e89b-12d3-a456-426614174000",
+            VmPowerAction::Stop,
+        )
+        .unwrap();
+        assert_eq!(endpoint.as_str(), "https://shardcloud.app/api/vms/123e4567-e89b-12d3-a456-426614174000/stop");
+        assert!(vm_power_endpoint("vm/other", VmPowerAction::Start).is_err());
+        let preview = preview_skill(
+            "shardcloud.vm_stop",
+            &serde_json::json!({"vm_name":"Produção", "vm_id":"123e4567-e89b-12d3-a456-426614174000"}),
+        ).unwrap();
+        assert!(preview.contains("Produção"));
+        assert!(preview.contains("123e4567-e89b-12d3-a456-426614174000"));
+        assert!(preview.contains("esta ação pode interromper serviços que estão rodando nela"));
+        let injected_preview = preview_skill(
+            "shardcloud.vm_start",
+            &serde_json::json!({"vm_name":"Produção\nID: vm-falso", "vm_id":"123e4567-e89b-12d3-a456-426614174000"}),
+        ).unwrap();
+        assert!(!injected_preview.contains("Produção\nID: vm-falso"));
+    }
+
+    #[tokio::test]
+    async fn power_action_http_errors_are_clear_and_never_echo_the_token_or_body() {
+        let secret = "token-not-for-logs";
+        let (base, request_receiver) = response_server(
+            "500 Internal Server Error",
+            &[ ("Content-Type", "text/plain") ],
+            secret.as_bytes(),
+        );
+        let error = post_vm_power_at(
+            &test_client(),
+            base.join("vms/123e4567-e89b-12d3-a456-426614174000/stop").unwrap(),
+            secret,
+        ).await.unwrap_err();
+        assert!(error.contains("não conseguiu concluir"));
+        assert!(!error.contains(secret));
+        let request = request_receiver.recv().unwrap().to_ascii_lowercase();
+        assert!(request.starts_with("post /vms/"));
+        assert!(request.contains(&format!("authorization: bearer {secret}")));
+    }
+
+    #[tokio::test]
+    async fn power_action_reports_missing_vm_from_simulated_api_response() {
+        let (base, _) = response_server("404 Not Found", &[], b"VM inexistente");
+        let error = post_vm_power_at(
+            &test_client(),
+            base.join("vms/123e4567-e89b-12d3-a456-426614174000/stop").unwrap(),
+            "simulated-token",
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error, "VM não encontrada.");
     }
 }

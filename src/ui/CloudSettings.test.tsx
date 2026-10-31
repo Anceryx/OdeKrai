@@ -9,10 +9,10 @@ describe('seção informativa de nuvem', () => {
     <CloudSettings initialTokenSaved initialConnected />,
   );
 
-  it('explica que a integração ShardCloud é somente leitura e informa os controles futuros', () => {
-    expect(markup).toContain('A integração com a ShardCloud nesta versão é somente para leitura');
-    expect(markup).toContain('Nenhuma ação pode alterar suas VMs');
-    expect(markup).toContain('cada ação exigirá aprovação e terá limites de gasto');
+  it('explica consultas e ações remotas limitadas da ShardCloud', () => {
+    expect(markup).toContain('permite consultar suas VMs');
+    expect(markup).toContain('iniciar ou parar uma VM da lista consultada');
+    expect(markup).toContain('exige aprovação em qualquer modo');
     expect(markup).toContain('Configuração necessária');
     expect(savedMarkup).toContain('ShardCloud');
     expect(savedMarkup).toContain('Token salvo');
@@ -38,7 +38,7 @@ describe('seção informativa de nuvem', () => {
     expect(savedMarkup).toContain('Testar conexão');
     expect(savedMarkup).toContain('Remover');
     expect(savedMarkup).not.toContain('Salvar token');
-    expect(connectedMarkup).toContain('Conectado (somente leitura)');
+    expect(connectedMarkup).toContain('Conectado');
   });
 
   it('marca consultas externas como não confiáveis sem inserir respostas como HTML', () => {

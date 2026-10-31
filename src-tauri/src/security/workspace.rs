@@ -563,6 +563,16 @@ impl Tool for Productivity {
             SimulatedAction::Productivity { skill_id, .. } if skill_id == "screen.capture" => {
                 Risk::CapturaSensivel
             }
+            SimulatedAction::Productivity { skill_id, .. }
+                if matches!(skill_id.as_str(), "shardcloud.vm_list" | "shardcloud.vm_details") =>
+            {
+                Risk::Leitura
+            }
+            SimulatedAction::Productivity { skill_id, .. }
+                if matches!(skill_id.as_str(), "shardcloud.vm_start" | "shardcloud.vm_stop") =>
+            {
+                Risk::EscritaReversivel
+            }
             SimulatedAction::Productivity { skill_id, .. } if skill_id == "code.delegate" => {
                 Risk::ExecucaoDeCodigo
             }
@@ -667,6 +677,9 @@ impl Tool for Productivity {
                 destination.display()
             ));
         }
+        if skill_id.starts_with("shardcloud.") {
+            return crate::shardcloud::preview_skill(skill_id, params);
+        }
         if skill_id == "web.fetch" {
             return crate::web_fetch::preview(
                 params["url"].as_str().ok_or("Informe uma URL HTTPS.")?,
@@ -722,6 +735,14 @@ impl Tool for Productivity {
         let SimulatedAction::Productivity { skill_id, params } = action else {
             return Box::pin(async { Err("Parâmetros incompatíveis.".into()) });
         };
+        if skill_id.starts_with("shardcloud.") {
+            let skill_id = skill_id.clone();
+            let params = params.clone();
+            let app = app.clone();
+            return Box::pin(async move {
+                crate::shardcloud::execute_skill(&app, &skill_id, &params).await
+            });
+        }
         if skill_id == "plan.propose" {
             let plan = super::skills::validate_plan_proposal(params);
             return Box::pin(async move {
@@ -1547,6 +1568,8 @@ pub(super) fn validate_action(action: &SimulatedAction) -> Result<(), String> {
         SimulatedAction::Productivity { skill_id, params } => {
             if skill_id.starts_with("files.") {
                 validate_file_skill(skill_id, params)?;
+            } else if skill_id.starts_with("shardcloud.") {
+                validate_shardcloud_skill(skill_id, params)?;
             } else if skill_id == "plan.propose" {
                 super::skills::validate_plan_proposal(params)?;
             } else if skill_id.starts_with("google.calendar.") {
@@ -1555,6 +1578,35 @@ pub(super) fn validate_action(action: &SimulatedAction) -> Result<(), String> {
                 crate::productivity::validate(skill_id, params)?;
             }
         }
+    }
+    Ok(())
+}
+
+fn validate_shardcloud_skill(id: &str, params: &serde_json::Value) -> Result<(), String> {
+    let object = params.as_object().ok_or("Parâmetros inválidos.")?;
+    if id == "shardcloud.vm_list" {
+        return if object.is_empty() {
+            Ok(())
+        } else {
+            Err("A listagem de VMs não aceita parâmetros.".into())
+        };
+    }
+    if !matches!(id, "shardcloud.vm_details" | "shardcloud.vm_start" | "shardcloud.vm_stop")
+        || object.len() != 2
+        || object.keys().any(|key| !["vm_name", "vm_id"].contains(&key.as_str()))
+    {
+        return Err("Os parâmetros da VM não correspondem à habilidade.".into());
+    }
+    let name = object
+        .get("vm_name")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("Informe o nome da VM.")?;
+    let id = object
+        .get("vm_id")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("A VM não foi confirmada pela lista consultada.")?;
+    if name.trim().is_empty() || name.chars().count() > 512 || id.len() != 36 {
+        return Err("O nome ou identificador da VM é inválido.".into());
     }
     Ok(())
 }

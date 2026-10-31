@@ -16,6 +16,7 @@ export type SkillFamily =
   | 'web'
   | 'computador'
   | 'codigo'
+  | 'nuvem'
   | 'integracoes_mcp';
 export type SkillOrigin = { kind: 'builtin' } | { kind: 'mcp'; server: string };
 export type SkillsCatalogTab = 'pessoal' | 'publico';
@@ -83,6 +84,7 @@ export const skillFamilyPresentation: Record<
     description: 'Controles e informações disponíveis neste computador.',
   },
   codigo: { name: 'Código', description: 'Execução assistida de tarefas de código.' },
+  nuvem: { name: 'Nuvem', description: 'Consulta e gerenciamento aprovado das VMs conectadas.' },
   integracoes_mcp: {
     name: 'Integrações MCP',
     description: 'Ferramentas fornecidas por servidores MCP cadastrados.',

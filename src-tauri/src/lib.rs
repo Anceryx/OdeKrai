@@ -995,6 +995,7 @@ pub fn run() -> Result<(), tauri::Error> {
         .manage(local_models::Downloads::default())
         .manage(PetPositionStore::default())
         .manage(security::SecurityState::new(true))
+        .manage(shardcloud::ShardCloudState::default())
         .manage(tray::CloseBehaviorState::default())
         .manage(tray::ShutdownState::default())
         .manage(reminders::ReminderScheduler::default())

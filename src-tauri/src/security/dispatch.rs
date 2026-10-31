@@ -96,6 +96,10 @@ pub(super) fn action_metadata(
             | "memory.propose_note" => skill_id,
             "mail.draft" => "mail.draft",
             "discord.send" => "discord.send",
+            "shardcloud.vm_list"
+            | "shardcloud.vm_details"
+            | "shardcloud.vm_start"
+            | "shardcloud.vm_stop" => skill_id,
             "code.delegate" => "code.delegate",
             "web.fetch" => "web.fetch",
             "system.open_url"
@@ -126,7 +130,10 @@ pub(super) fn action_metadata(
         },
         _ => tool.name(),
     };
-    (tool_name, tool.risk(action), workspace_action, fixed)
+    let policy_scope = workspace_action
+        || matches!(action, SimulatedAction::Productivity { skill_id, .. }
+            if matches!(skill_id.as_str(), "shardcloud.vm_list" | "shardcloud.vm_details"));
+    (tool_name, tool.risk(action), policy_scope, fixed)
 }
 
 fn is_workspace_skill(skill_id: &str) -> bool {
@@ -150,7 +157,11 @@ fn is_workspace_skill(skill_id: &str) -> bool {
 }
 
 fn require_batch_approval(action: &SimulatedAction, decision: Decision) -> Decision {
-    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "power.lock" | "power.sleep"))
+    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "shardcloud.vm_start" | "shardcloud.vm_stop"))
+        && matches!(decision, Decision::Allow(_))
+    {
+        Decision::AskUser("shardcloud_power_action_requires_approval")
+    } else if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "power.lock" | "power.sleep"))
         && matches!(decision, Decision::Allow(_))
     {
         Decision::AskUser(
@@ -172,6 +183,14 @@ fn require_batch_approval(action: &SimulatedAction, decision: Decision) -> Decis
     } else {
         decision
     }
+}
+
+fn approval_granted_and_running(
+    decision: &ApprovalDecision,
+    halted: bool,
+    cancelled: bool,
+) -> bool {
+    matches!(decision, ApprovalDecision::Aprovada) && !halted && !cancelled
 }
 
 fn discord_webhook_missing(action: &SimulatedAction, error: &str) -> bool {
@@ -436,6 +455,46 @@ mod explicit_approval_tests {
             Decision::AskUser("memory_proposal_requires_approval")
         ));
     }
+
+    #[test]
+    fn shardcloud_power_actions_always_ask_and_a_denial_cannot_execute() {
+        for skill_id in ["shardcloud.vm_start", "shardcloud.vm_stop"] {
+            let action = SimulatedAction::Productivity {
+                skill_id: skill_id.into(),
+                params: json!({"vm_name":"Produção", "vm_id":"123e4567-e89b-12d3-a456-426614174000"}),
+            };
+            let (tool, risk, inside, fixed) = action_metadata(&action);
+            assert_eq!(risk, Risk::EscritaReversivel, "{skill_id}");
+            assert!(!inside, "{skill_id}");
+            for mode in [Mode::SemprePerguntar, Mode::AprovarPorMim, Mode::ControleTotal] {
+                let decision = policy::decide(mode, risk, &Origin::User, inside, fixed, true);
+                assert!(matches!(
+                    require_batch_approval(&action, decision),
+                    Decision::AskUser(_)
+                ), "{mode:?}, {tool}");
+            }
+            assert_eq!(
+                require_batch_approval(&action, Decision::Allow("mode_total")),
+                Decision::AskUser("shardcloud_power_action_requires_approval")
+            );
+            let mut network_calls = 0;
+            if approval_granted_and_running(
+                &ApprovalDecision::Negada("user_denied".into()),
+                false,
+                false,
+            ) {
+                network_calls += 1;
+            }
+            assert_eq!(network_calls, 0, "{skill_id}");
+            assert!(!approval_granted_and_running(&ApprovalDecision::Expirada, false, false));
+            assert!(!approval_granted_and_running(&ApprovalDecision::Aprovada, true, false));
+            assert!(!approval_granted_and_running(&ApprovalDecision::Aprovada, false, true));
+            assert!(approval_granted_and_running(&ApprovalDecision::Aprovada, false, false));
+            let audit = audit_params(&action);
+            assert!(audit.contains("params_sha256"));
+            assert!(!audit.contains("token"));
+        }
+    }
 }
 
 pub(super) fn summary(action: &SimulatedAction) -> String {
@@ -462,6 +521,12 @@ pub(super) fn summary(action: &SimulatedAction) -> String {
             amount_cents,
             currency,
         } => format!("Pagamento bloqueado: {currency} {amount_cents}"),
+        SimulatedAction::Productivity { skill_id, params }
+            if matches!(skill_id.as_str(), "shardcloud.vm_start" | "shardcloud.vm_stop") =>
+        {
+            crate::shardcloud::preview_skill(skill_id, params)
+                .unwrap_or_else(|_| skill_id.clone())
+        }
         SimulatedAction::Productivity { skill_id, params } => format!(
             "{skill_id}: {}",
             params
@@ -889,7 +954,10 @@ pub(super) async fn submit_agent_action(
     let id = id();
     let params = audit_params(&action);
     let (preview, preview_image) =
-        match validate_action(&action).and_then(|_| preview_for_with_image(app, &action)) {
+        match validate_action(&action)
+            .and_then(|_| crate::shardcloud::validate_action_against_catalog(app, &action))
+            .and_then(|_| preview_for_with_image(app, &action))
+        {
             Ok(preview) => preview,
             Err(error) => {
                 let config_missing = configuration_missing_audit(&action, &error);
@@ -1185,7 +1253,9 @@ pub(super) async fn submit_agent_action(
     let _ = app.emit("approval-updated", ());
     let latency = created_at.elapsed().as_millis() as u64;
     match result {
-        ApprovalDecision::Aprovada if !state.is_halted() && !cancel.is_cancelled() => {
+        decision @ ApprovalDecision::Aprovada
+            if approval_granted_and_running(&decision, state.is_halted(), cancel.is_cancelled()) =>
+        {
             if let SimulatedAction::Productivity { skill_id, params } = &action {
                 if skill_id == "web.fetch" || skill_id == "system.open_url" {
                     let domain = if skill_id == "system.open_url" {

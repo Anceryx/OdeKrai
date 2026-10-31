@@ -39,6 +39,7 @@ const familyLabels: Record<SkillFamily, string> = {
   web: 'Web',
   computador: 'Computador',
   codigo: 'Código',
+  nuvem: 'Nuvem',
   integracoes_mcp: 'Integrações MCP',
 };
 

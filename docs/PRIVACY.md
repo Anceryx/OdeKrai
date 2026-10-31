@@ -8,15 +8,18 @@ Ao conversar, o texto enviado pelo usuário é encaminhado ao provedor seleciona
 
 A integração de credenciais depende do aplicativo nativo Windows. A prévia web não encaminha chamadas de IA.
 
-ShardCloud está disponível somente para consultas de leitura. Salvar o token não faz uma chamada de
-rede. O token é enviado pelo cabeçalho `Authorization: Bearer` ao domínio fixo `shardcloud.app`
-somente quando o usuário solicita uma consulta. Ele fica no Gerenciador de Credenciais do Windows, não é salvo no SQLite,
-não aparece novamente na interface e não entra em logs, mensagens de erro ou contexto de conversa.
-As consultas podem retornar nomes, descrições, endereços IP, estado e métricas das VMs; esses dados
-são mostrados como conteúdo externo não confiável e ficam apenas no estado temporário da tela. A
-ShardCloud recebe o token, a rota consultada e o endereço IP normal da conexão. O OdeKrai não envia
-mensagens, conversas, arquivos, cookies ou outros dados pessoais nessa integração. Não há comandos
-para iniciar, parar, criar, alterar ou excluir VMs.
+ShardCloud oferece consultas de leitura e, pelo agente, apenas as ações de iniciar e parar uma VM.
+Salvar o token não faz uma chamada de rede. Ele é enviado pelo cabeçalho `Authorization: Bearer` ao
+domínio fixo `shardcloud.app` quando o usuário pede uma consulta ou aprova uma ação de iniciar/parar.
+O token fica no Gerenciador de Credenciais do Windows, não é salvo no SQLite, não aparece novamente
+na interface e não entra em logs, auditoria, mensagens de erro ou contexto de conversa. Nomes,
+descrições, endereços IP, estados e métricas retornados são dados externos não confiáveis e ficam
+temporariamente em memória para exibição e para limitar a seleção às VMs listadas pela própria
+credencial. O modelo fornece somente o nome; o Rust confirma nome e ID e mostra ambos na aprovação.
+Parar pode interromper serviços em execução. A auditoria registra a habilidade, decisão e resultado
+sem o token. A ShardCloud recebe a rota consultada e o endereço IP normal da conexão. O OdeKrai não
+envia mensagens, conversas, arquivos, cookies ou outros dados pessoais nessa integração. Não há
+comandos para criar, excluir, redimensionar, reinstalar ou executar comandos dentro de VMs.
 
 Quando “Verificar atualizações automaticamente” está ligado (padrão) ou o usuário escolhe “Verificar agora”, o app faz no máximo uma consulta a cada 24 horas com `GET https://api.github.com/repos/oliveiradev1/OdeKrai/releases/latest`, sem corpo. Os cabeçalhos definidos pelo app são `Accept: application/vnd.github+json`, `X-GitHub-Api-Version: 2026-03-10` e `User-Agent: OdeKrai/<versão>`. Não são enviados token, cookie, nome, apelido, configuração, arquivos, identificador do dispositivo ou outro dado pessoal. Como em qualquer conexão à internet, o GitHub vê o endereço IP de origem e os metadados normais de rede da requisição. O OdeKrai não baixa nem executa o instalador; o botão “Ver e baixar” apenas abre a página oficial da release no navegador padrão.
 

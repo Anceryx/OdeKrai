@@ -212,8 +212,8 @@ export function CloudSettings({
     <div className="settings-panel settings-section cloud-settings">
       <h2 id="cloud-settings-heading">Nuvem</h2>
       <p>
-        A integração com a ShardCloud nesta versão é somente para leitura. Nenhuma ação pode alterar
-        suas VMs.
+        A integração permite consultar suas VMs. O agente também pode iniciar ou parar uma VM da
+        lista consultada, sempre depois da aprovação na janela nativa.
       </p>
       <p className="cloud-settings-notice">
         Nenhuma consulta de rede ocorre ao salvar o token. Ele fica no Gerenciador de Credenciais do
@@ -224,7 +224,7 @@ export function CloudSettings({
         <div className="cloud-shardcloud-title">
           <h3 id="cloud-shardcloud-heading">ShardCloud</h3>
           {connected ? (
-            <span className="cloud-connected-label">Conectado (somente leitura)</span>
+            <span className="cloud-connected-label">Conectado</span>
           ) : tokenSaved ? (
             <span className="cloud-saved-label">Token salvo</span>
           ) : (
@@ -388,8 +388,8 @@ export function CloudSettings({
       </section>
 
       <p className="cloud-settings-notice">
-        Quando recursos de execução remota forem adicionados, cada ação exigirá aprovação e terá
-        limites de gasto.
+        Iniciar ou parar uma VM exige aprovação em qualquer modo. A prévia mostra o nome e o ID
+        conferidos da VM; parar pode interromper serviços em execução.
       </p>
       <CloudProviderList title="Nuvens brasileiras" services={CLOUD_SERVICES.brazilian} />
       <CloudProviderList title="Nuvens internacionais" services={CLOUD_SERVICES.international} />

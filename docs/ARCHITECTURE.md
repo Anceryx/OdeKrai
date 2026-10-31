@@ -7,20 +7,27 @@ estão disponíveis. As habilidades e decisões permanecem no registro e no moto
 
 O catálogo de provedores em `src-tauri/resources/provider-catalog.json` alimenta os metadados do frontend e do Rust. O Rust valida host e caminho, acessa credenciais e implementa listagem documentada de modelos. As preferências guardam configurações por `providerId`; perfil e histórico usam SQLite local. Avatar é processado no Rust e servido como data URL apenas para a interface principal.
 
-## ShardCloud somente leitura
+## ShardCloud com ações limitadas e aprovação
 
 `src-tauri/src/shardcloud.rs` mantém a base HTTPS fixa, usa `Authorization: Bearer`, não segue
 redirecionamentos e limita tempo e tamanho das respostas. O token usa o serviço do Gerenciador de
-Credenciais `site.anceryx.odekrai.shardcloud`; não passa por SQLite. Os comandos Tauri expõem apenas
-consultas GET de VMs, detalhes, séries temporais e distribuições. A UI recebe campos limitados e os
-identifica como dados externos não confiáveis.
+Credenciais `site.anceryx.odekrai.shardcloud`; não passa por SQLite. A integração oferece consultas
+GET de VMs, detalhes, séries temporais e distribuições. As habilidades nativas `shardcloud.vm_list`,
+`shardcloud.vm_details`, `shardcloud.vm_start` e `shardcloud.vm_stop` passam pelo dispatcher comum.
+O Rust mantém em memória a última lista obtida com a credencial local; o modelo informa apenas o
+nome, e o Rust confirma o nome/ID antes de montar a ação. Iniciar e parar têm risco de escrita
+reversível e sempre exigem aprovação; a prévia contém nome, ID e aviso de interrupção. Não há
+execução de comandos dentro da VM. Auditoria registra a habilidade e seu resultado sem token.
+Resultados da ShardCloud são identificados como dados externos não confiáveis.
 
 A referência oficial confirma o token Bearer, a base `https://shardcloud.app/api` e `GET /vms` na
 [introdução](https://docs.shardcloud.app/api-reference/introduction) e em [List your VMs](https://docs.shardcloud.app/api-reference/vms/list-your-vms).
 O índice oficial lista também as páginas para detalhes, métricas e distribuições, mas as páginas
-individuais não puderam ser abertas neste ambiente. Os caminhos `/vms/{id}`, `/vms/{id}/timeseries`
-e `/vms/distros` foram conferidos no [CLI oficial da ShardCloud](https://github.com/shard-cloud/cli/blob/main/internal/httpclient/api_vm.go);
-os respectivos detalhes dessas rotas na referência web ficam **NÃO VERIFICADOS**.
+individuais não puderam ser abertas neste ambiente. Os caminhos `GET /vms/{id}`,
+`GET /vms/{id}/timeseries`, `GET /vms/distros`, `POST /vms/{id}/start` e `POST /vms/{id}/stop`
+foram conferidos no [CLI oficial da ShardCloud](https://github.com/shard-cloud/cli/blob/main/internal/httpclient/api_vm.go);
+os detalhes dessas rotas na referência web ficam **NÃO VERIFICADOS**. Não são usados outros
+endpoints de escrita.
 
 `src/ui/design-tokens.css` centraliza as cores, a tipografia, o espaçamento, os raios e as sombras da interface. `src/ui/DesignSystem.tsx` oferece componentes compartilhados para botões, cartões, avisos, campos, seletores, alternâncias, opções selecionáveis e cabeçalhos. A interface aplica esses padrões nas telas principais; a conferência visual em tamanhos e escalas de Windows continua manual.
 

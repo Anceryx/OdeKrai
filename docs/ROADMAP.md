@@ -11,8 +11,8 @@ Cada fase depende de validação no Windows real antes de ser declarada pronta.
 
 ## Execução e hospedagem
 
-A execução hospedada em nuvem continua planejada e não está disponível nesta versão. A integração
-ShardCloud permite somente consultar VMs, detalhes, métricas e distribuições; ela não executa
-habilidades remotamente nem altera recursos. Os outros provedores listados na interface continuam
-planejados. Uma futura execução remota deverá pedir aprovação para cada ação e aplicar limites de
-gasto.
+A execução hospedada de habilidades em nuvem continua planejada e não está disponível nesta versão.
+A integração ShardCloud consulta VMs, detalhes, métricas e distribuições; o agente também pode
+iniciar ou parar VMs obtidas pela lista da conta, sempre com aprovação nativa. Ela não executa
+comandos dentro das VMs. Os outros provedores listados na interface continuam planejados. Uma futura
+execução hospedada de habilidades deverá pedir aprovação para cada ação e aplicar limites de gasto.
