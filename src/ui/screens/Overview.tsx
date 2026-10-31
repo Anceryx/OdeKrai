@@ -25,11 +25,13 @@ export function Overview({
   conversations,
   checklist,
   pendingApprovalCount,
+  skillsLoadError,
   onStartConversation,
   onSendMessage,
   onResumeConversation,
   onResolveChecklistItem,
   onOpenApprovals,
+  onRetrySkills,
 }: {
   draft: string;
   setDraft: (value: string) => void;
@@ -44,11 +46,13 @@ export function Overview({
   conversations: ConversationSummary[];
   checklist: HomeChecklistItem[];
   pendingApprovalCount: number;
+  skillsLoadError?: string;
   onStartConversation: () => void;
   onSendMessage: (text: string) => Promise<boolean>;
   onResumeConversation: (id: string) => void;
   onResolveChecklistItem: (item: HomeChecklistItem) => void;
   onOpenApprovals: () => void;
+  onRetrySkills?: () => void;
 }) {
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const recentConversations = conversations.slice(0, 3);
@@ -66,6 +70,14 @@ export function Overview({
 
   return (
     <main className="page overview-page">
+      {skillsLoadError && (
+        <div className="error-banner" role="alert">
+          <p>{skillsLoadError}</p>
+          <button type="button" className="secondary-button" onClick={onRetrySkills}>
+            Tentar de novo
+          </button>
+        </div>
+      )}
       {pendingApprovalCount > 0 && (
         <button
           className="home-approval-banner"

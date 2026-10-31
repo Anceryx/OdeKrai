@@ -241,6 +241,8 @@ function MainApp() {
   const [activityAuditUnavailable, setActivityAuditUnavailable] = useState(false);
   const activityAuditLoadedAt = useRef(0);
   const [homeSkills, setHomeSkills] = useState<CatalogSkill[] | null>(null);
+  const [homeSkillsLoadError, setHomeSkillsLoadError] = useState('');
+  const [homeContextRetry, setHomeContextRetry] = useState(0);
   const [todayEvents, setTodayEvents] = useState<HomeEvent[]>([]);
   const [scheduledEvents, setScheduledEvents] = useState<HomeEvent[]>([]);
   const [reminderCount, setReminderCount] = useState(0);
@@ -490,6 +492,7 @@ function MainApp() {
         const skills = await invoke<CatalogSkill[]>('get_skills');
         if (disposed) return;
         setHomeSkills(skills);
+        setHomeSkillsLoadError('');
         const active = skills.filter((skill) => skill.enabled && skill.status === 'installed');
         const canReadCalendar = active.some(
           (skill) => skill.id === 'calendar.list_events' && skill.family === 'agenda_lembretes',
@@ -534,8 +537,10 @@ function MainApp() {
         homeContextLoadedAt.current = Date.now();
       } catch {
         if (!disposed) {
-          setHomeSkills([]);
-          homeContextLoadedAt.current = Date.now();
+          setHomeSkills(null);
+          setHomeSkillsLoadError(
+            'Não foi possível carregar as habilidades para atualizar o Início.',
+          );
         }
       }
     };
@@ -554,7 +559,7 @@ function MainApp() {
       stopSkillsUpdated?.();
       window.removeEventListener('focus', refreshOnFocus);
     };
-  }, [section, activityPanelOpen]);
+  }, [section, activityPanelOpen, homeContextRetry]);
 
   useEffect(() => {
     if (!activityPanelOpen || !isTauri() || homeSkills === null) {
@@ -2002,6 +2007,7 @@ function MainApp() {
                   conversations={conversations.slice(0, 3)}
                   checklist={homeChecklist}
                   pendingApprovalCount={pendingApprovalCount}
+                  skillsLoadError={homeSkillsLoadError}
                   onStartConversation={startHomeConversation}
                   onSendMessage={sendHomeFirstMessage}
                   onResumeConversation={openConversation}
@@ -2011,6 +2017,7 @@ function MainApp() {
                       setToast('Não foi possível abrir a janela de aprovação.'),
                     )
                   }
+                  onRetrySkills={() => setHomeContextRetry((retry) => retry + 1)}
                 />
               )}
               {section === 'providers' && (

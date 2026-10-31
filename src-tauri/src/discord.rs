@@ -80,14 +80,27 @@ pub fn discord_list(
 
 pub fn discord_is_configured(app: &tauri::AppHandle) -> Result<bool, String> {
     let db = crate::security::database(app)?;
+    discord_is_configured_in_db(&db)
+}
+
+pub(crate) fn discord_is_configured_in_db(db: &rusqlite::Connection) -> Result<bool, String> {
     let mut stmt = db
         .prepare("SELECT id FROM discord_webhooks")
-        .map_err(|_| "Não foi possível verificar a configuração do Discord.".to_string())?;
+        .map_err(|error| {
+            log::warn!("Falha ao consultar discord_webhooks ao verificar a configuração: {error}");
+            "Não foi possível verificar a configuração do Discord.".to_string()
+        })?;
     let ids = stmt
         .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|_| "Não foi possível verificar a configuração do Discord.".to_string())?
+        .map_err(|error| {
+            log::warn!("Falha ao ler registros de discord_webhooks ao verificar a configuração: {error}");
+            "Não foi possível verificar a configuração do Discord.".to_string()
+        })?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| "Não foi possível verificar a configuração do Discord.".to_string())?;
+        .map_err(|error| {
+            log::warn!("Falha ao coletar registros de discord_webhooks ao verificar a configuração: {error}");
+            "Não foi possível verificar a configuração do Discord.".to_string()
+        })?;
     Ok(ids.into_iter().any(|id| {
         credential(&id)
             .and_then(|entry| entry.get_password().map_err(|_| "indisponível".to_string()))

@@ -177,6 +177,27 @@ describe('catálogo de habilidades', () => {
     expect(markup).not.toContain('Captura de tela: indisponível');
     expect(markup).toContain('Abrir Privacidade e permissões');
     expect(markup.match(/class="skills-family-card"/g)).toHaveLength(2);
+    expect(markup).toContain('3 habilidades encontradas');
+    expect(markup).toContain('1 família ativa');
+  });
+
+  it('mostra erro e ação de nova tentativa quando o carregamento falha, sem exibir catálogo vazio', () => {
+    const markup = renderToStaticMarkup(
+      <SkillsCatalogView
+        skills={[]}
+        loadError="Não foi possível carregar as habilidades. Banco indisponível."
+        onRetry={noOperation}
+        onFamilyToggle={noOperation}
+        onSkillToggle={noOperation}
+        onOverrideToggle={noOperation}
+      />,
+    );
+
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain('Banco indisponível.');
+    expect(markup).toContain('Tentar de novo');
+    expect(markup).not.toContain('Nenhuma habilidade está registrada nesta versão.');
+    expect(markup).not.toContain('famílias ativas');
   });
 
   it('mostra busca por teclado, status, risco e um interruptor por família', () => {

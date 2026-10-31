@@ -24,6 +24,8 @@ type SkillsCatalogViewProps = {
   loading?: boolean;
   busy?: boolean;
   error?: string;
+  loadError?: string;
+  onRetry?: () => void;
   initialTab?: SkillsCatalogTab;
   initialFamily?: SkillFamily;
   onOpenPrivacy?: () => void;
@@ -68,6 +70,8 @@ export function SkillsCatalogView({
   loading = false,
   busy = false,
   error = '',
+  loadError = '',
+  onRetry,
   initialTab = 'pessoal',
   initialFamily,
   onFamilyToggle,
@@ -123,12 +127,21 @@ export function SkillsCatalogView({
         </div>
       )}
 
+      {loadError && !loading && (
+        <div className="error-banner" role="alert">
+          <p>{loadError}</p>
+          <Button type="button" onClick={onRetry} disabled={!onRetry}>
+            Tentar de novo
+          </Button>
+        </div>
+      )}
+
       {loading ? (
         <div className="skills-catalog-loading" role="status" aria-live="polite">
           <span className="skills-loading-indicator" aria-hidden="true" />
           Carregando habilidades…
         </div>
-      ) : (
+      ) : loadError ? null : (
         <>
           <section className="skills-installed" aria-labelledby="skills-installed-heading">
             <div className="skills-catalog-section-heading">
@@ -646,6 +659,7 @@ export function SkillsScreen({
 }) {
   const [skills, setSkills] = useState<CatalogSkill[]>([]);
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [googleStatus, setGoogleStatus] = useState<GoogleOAuthStatus | null>(null);
@@ -657,7 +671,8 @@ export function SkillsScreen({
 
   const refresh = useCallback(async (silent = false) => {
     if (!isTauri()) {
-      setError('As habilidades só podem ser carregadas no aplicativo OdeKrai.');
+      setSkills([]);
+      setLoadError('As habilidades só podem ser carregadas no aplicativo OdeKrai.');
       setLoading(false);
       return;
     }
@@ -682,9 +697,11 @@ export function SkillsScreen({
         setGoogleStatus(null);
         setPrerequisites((current) => ({ ...current, googleConnected: null }));
       }
+      setLoadError('');
       setError('');
     } catch (cause) {
-      setError(String(cause));
+      setSkills([]);
+      setLoadError(`Não foi possível carregar as habilidades. ${String(cause)}`);
     } finally {
       setLoading(false);
     }
@@ -712,6 +729,8 @@ export function SkillsScreen({
       loading={loading}
       busy={busy}
       error={error}
+      loadError={loadError}
+      onRetry={() => void refresh()}
       onOpenPrivacy={onOpenPrivacy}
       googleConnection={
         googleStatus ? (

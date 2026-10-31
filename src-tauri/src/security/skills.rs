@@ -1191,8 +1191,18 @@ pub fn get_skills(
     caller: tauri::WebviewWindow,
 ) -> Result<Vec<SkillView>, String> {
     crate::require_main(&caller)?;
-    let discord_configured = crate::discord::discord_is_configured(&app)?;
-    registry()
+    // O catálogo continua útil mesmo se uma configuração opcional estiver indisponível.
+    // O banco aplica o schema idempotente ao abrir; estas leituras são tratadas como
+    // valores conservadores (desativados/não configurados) quando falharem.
+    let db = match database(&app) {
+        Ok(db) => Some(db),
+        Err(error) => {
+            log::warn!("Não foi possível ler o banco ao montar o catálogo de habilidades: {error}");
+            None
+        }
+    };
+    let (skills, discord_configured) = catalog_registry(db.as_ref());
+    skills
         .into_iter()
         .map(|skill| {
             let example = action_example(skill.id);
@@ -1207,8 +1217,39 @@ pub fn get_skills(
                 }
                 params
             };
-            let stored_enabled = is_skill_enabled(&app, skill.id)?;
+            let stored_enabled = db
+                .as_ref()
+                .and_then(|db| {
+                    db.query_row(
+                        "SELECT enabled FROM skill_settings WHERE skill_id=?1",
+                        [skill.id],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .optional()
+                    .map(|value| value.unwrap_or(0) != 0)
+                    .map_err(|error| {
+                        log::warn!("Não foi possível ler o estado da habilidade {} no catálogo; tratada como desativada: {error}", skill.id);
+                    })
+                    .ok()
+                })
+                .unwrap_or(false);
             let enabled = skill_exposed_to_agent(skill.id, stored_enabled, discord_configured);
+            let more_permissive = db
+                .as_ref()
+                .and_then(|db| {
+                    db.query_row(
+                        "SELECT more_permissive FROM tool_overrides WHERE tool=?1",
+                        [skill.id],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .optional()
+                    .map(|value| value.unwrap_or(0) != 0)
+                    .map_err(|error| {
+                        log::warn!("Não foi possível ler a exceção da habilidade {} no catálogo; tratada como desativada: {error}", skill.id);
+                    })
+                    .ok()
+                })
+                .unwrap_or(false);
             Ok(SkillView {
                 id: skill.id.into(),
                 name: skill.name.into(),
@@ -1216,7 +1257,7 @@ pub fn get_skills(
                 risk: skill.risk(&params)?,
                 result_trust: skill.result_trust,
                 enabled,
-                more_permissive: super::override_enabled(&app, skill.id)?,
+                more_permissive,
                 fixed_blocked: matches!(skill.id, "simulated.payment" | "discord.send"),
                 category: skill_category(skill.id).into(),
                 status: if !skill_available(skill.id) {
@@ -1247,6 +1288,22 @@ pub fn get_skills(
             })
         })
         .collect()
+}
+
+fn catalog_registry(db: Option<&rusqlite::Connection>) -> (Vec<Skill>, bool) {
+    let configured = db
+        .as_ref()
+        .and_then(|db| match crate::discord::discord_is_configured_in_db(db) {
+            Ok(configured) => Some(configured),
+            Err(error) => {
+                log::warn!(
+                    "Não foi possível ler a configuração do Discord no catálogo de habilidades; tratado como não configurado: {error}"
+                );
+                None
+            }
+        })
+        .unwrap_or(false);
+    (registry(), configured)
 }
 
 #[tauri::command]
@@ -1562,6 +1619,25 @@ fn protected_absolute_path(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn discord_table_missing_does_not_remove_registered_skills() {
+        let db = rusqlite::Connection::open_in_memory().unwrap();
+        let expected_count = registry().len();
+
+        // Reproduz a leitura no estado em que discord_webhooks ainda não existe.
+        let sqlite_error = match db.prepare("SELECT id FROM discord_webhooks") {
+            Ok(_) => panic!("A tabela deveria estar ausente neste teste."),
+            Err(error) => error,
+        };
+        assert_eq!(sqlite_error.to_string(), "no such table: discord_webhooks");
+        assert!(crate::discord::discord_is_configured_in_db(&db).is_err());
+        let (skills, discord_configured) = catalog_registry(Some(&db));
+
+        assert!(!discord_configured);
+        assert_eq!(skills.len(), expected_count);
+        assert!(skills.iter().any(|skill| skill.id == "discord.send"));
+    }
 
     #[test]
     fn registered_skills_have_catalog_metadata_and_each_family_is_populated() {
