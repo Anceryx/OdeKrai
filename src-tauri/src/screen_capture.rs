@@ -14,8 +14,7 @@ const MAX_DIMENSION: u32 = 1280;
 const MAX_APPROVAL_THUMBNAIL_BYTES: usize = 16 * 1024;
 
 static PREPARED_AGENT_CAPTURES: OnceLock<Mutex<HashMap<String, Vec<u8>>>> = OnceLock::new();
-static CAPTURE_ID_COUNTER: std::sync::atomic::AtomicU64 =
-    std::sync::atomic::AtomicU64::new(1);
+static CAPTURE_ID_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 pub(crate) fn new_agent_capture_id() -> String {
     let timestamp = std::time::SystemTime::now()
@@ -51,7 +50,10 @@ pub(crate) fn prepare_agent_capture(capture_id: &str) -> Result<String, String> 
         .lock()
         .map_err(|_| "Não foi possível preparar a prévia da captura.".to_string())?
         .insert(capture_id.to_owned(), jpeg);
-    Ok(format!("data:image/jpeg;base64,{}", STANDARD.encode(thumbnail)))
+    Ok(format!(
+        "data:image/jpeg;base64,{}",
+        STANDARD.encode(thumbnail)
+    ))
 }
 
 fn approval_thumbnail(jpeg: &[u8]) -> Result<Vec<u8>, String> {
@@ -85,7 +87,11 @@ pub(crate) fn save_prepared_agent_capture(
         .create_new(true)
         .open(destination)
         .map_err(|_| "Não foi possível criar o arquivo de captura na pasta de trabalho.")?;
-    if file.write_all(&bytes).and_then(|()| file.sync_all()).is_err() {
+    if file
+        .write_all(&bytes)
+        .and_then(|()| file.sync_all())
+        .is_err()
+    {
         drop(file);
         let _ = std::fs::remove_file(destination);
         return Err("Não foi possível salvar a captura aprovada.".into());

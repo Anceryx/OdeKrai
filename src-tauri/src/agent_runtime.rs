@@ -505,10 +505,7 @@ impl AgentBackend for RuntimeBackend<'_> {
                     | "workspace.write_file" => {
                         call.args.get("path").and_then(serde_json::Value::as_str)
                     }
-                    "screen.capture" => call
-                        .args
-                        .get("path")
-                        .and_then(serde_json::Value::as_str),
+                    "screen.capture" => call.args.get("path").and_then(serde_json::Value::as_str),
                     "calendar.create_event" => {
                         call.args.get("path").and_then(serde_json::Value::as_str)
                     }

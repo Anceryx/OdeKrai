@@ -755,11 +755,12 @@ impl Tool for Productivity {
                 });
             }
             return Box::pin(async move {
-                let saved = crate::screen_capture::save_prepared_agent_capture(
-                    &capture_id,
-                    &destination,
-                )?;
-                Ok(format!("Captura salva na pasta de trabalho: {}", saved.display()))
+                let saved =
+                    crate::screen_capture::save_prepared_agent_capture(&capture_id, &destination)?;
+                Ok(format!(
+                    "Captura salva na pasta de trabalho: {}",
+                    saved.display()
+                ))
             });
         }
         if skill_id == "web.fetch" {

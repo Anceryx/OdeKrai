@@ -255,17 +255,20 @@ mod tests {
             Mode::AprovarPorMim,
             Mode::ControleTotal,
         ] {
-            assert!(matches!(
-                decide(
-                    mode,
-                    Risk::ComunicacaoExterna,
-                    &Origin::User,
-                    false,
-                    None,
-                    true,
+            assert!(
+                matches!(
+                    decide(
+                        mode,
+                        Risk::ComunicacaoExterna,
+                        &Origin::User,
+                        false,
+                        None,
+                        true,
+                    ),
+                    Decision::AskUser(_)
                 ),
-                Decision::AskUser(_)
-            ), "mode={mode:?}");
+                "mode={mode:?}"
+            );
         }
     }
 
@@ -383,14 +386,7 @@ mod tests {
             Mode::ControleTotal,
         ] {
             assert_eq!(
-                decide(
-                    mode,
-                    Risk::CapturaSensivel,
-                    &Origin::User,
-                    true,
-                    None,
-                    true,
-                ),
+                decide(mode, Risk::CapturaSensivel, &Origin::User, true, None, true,),
                 Decision::AskUser("sensitive_capture_requires_approval")
             );
             assert_eq!(

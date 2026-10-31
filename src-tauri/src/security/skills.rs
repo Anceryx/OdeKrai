@@ -1709,8 +1709,13 @@ mod tests {
             .find(|skill| skill.id == "screen.capture")
             .expect("captura precisa constar no registro");
         assert_eq!(skill.family, SkillFamily::Computador);
-        assert_eq!(skill.risk(&json!({"path":"captura.jpg"})).unwrap(), Risk::CapturaSensivel);
-        assert!(skill.model_description.contains("Nunca envie a imagem ao provedor"));
+        assert_eq!(
+            skill.risk(&json!({"path":"captura.jpg"})).unwrap(),
+            Risk::CapturaSensivel
+        );
+        assert!(skill
+            .model_description
+            .contains("Nunca envie a imagem ao provedor"));
         assert!(parse_action(skill.id, &json!({"path":"../fora.jpg"})).is_err());
         assert!(parse_action(skill.id, &json!({"path":"captura.png"})).is_err());
     }

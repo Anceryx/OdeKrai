@@ -102,7 +102,10 @@ fn reserve_check(connection: &Connection, now: i64) -> Result<bool, String> {
         return Ok(false);
     }
     connection
-        .execute("UPDATE update_check_state SET last_attempt_at = ?1 WHERE id = 1", [now])
+        .execute(
+            "UPDATE update_check_state SET last_attempt_at = ?1 WHERE id = 1",
+            [now],
+        )
         .map_err(|_| "Não foi possível atualizar o histórico de atualizações.".to_string())?;
     connection
         .execute_batch("COMMIT")
@@ -164,10 +167,11 @@ fn save_result(connection: &Connection, result: &UpdateCheckResult) -> Result<()
 
 fn save_failure(connection: &Connection) -> Result<(), String> {
     connection
-        .execute("UPDATE update_check_state SET last_check_succeeded = 0 WHERE id = 1", [])
-        .map_err(|_| {
-            "Não foi possível salvar o estado da consulta de atualizações.".to_string()
-        })?;
+        .execute(
+            "UPDATE update_check_state SET last_check_succeeded = 0 WHERE id = 1",
+            [],
+        )
+        .map_err(|_| "Não foi possível salvar o estado da consulta de atualizações.".to_string())?;
     Ok(())
 }
 
@@ -181,7 +185,9 @@ fn make_client(version: &str) -> Result<Client, String> {
 }
 
 fn release_url_is_valid(raw: &str, tag: &str) -> bool {
-    let Ok(url) = Url::parse(raw) else { return false };
+    let Ok(url) = Url::parse(raw) else {
+        return false;
+    };
     url.scheme() == "https"
         && url.host_str() == Some("github.com")
         && url.username().is_empty()
@@ -222,13 +228,19 @@ async fn fetch_latest(
         .await
         .map_err(|_| "Falha de rede ao consultar atualizações.".to_string())?;
     if response.status() != StatusCode::OK {
-        return Err(format!("GitHub respondeu com HTTP {}.", response.status().as_u16()));
+        return Err(format!(
+            "GitHub respondeu com HTTP {}.",
+            response.status().as_u16()
+        ));
     }
     let release: ReleaseResponse = response
         .json()
         .await
         .map_err(|_| "Resposta inválida ao consultar atualizações.".to_string())?;
-    let available_raw = release.tag_name.strip_prefix('v').unwrap_or(&release.tag_name);
+    let available_raw = release
+        .tag_name
+        .strip_prefix('v')
+        .unwrap_or(&release.tag_name);
     let available = Version::parse(available_raw)
         .map_err(|_| "A versão publicada não segue o formato semver.".to_string())?;
     if !release_url_is_valid(&release.html_url, &release.tag_name) {
@@ -371,17 +383,14 @@ mod tests {
                 .as_deref(),
             Some("0.16.0-beta.1")
         );
-        let older_prerelease_url = "https://github.com/oliveiradev1/OdeKrai/releases/tag/v0.16.0-rc.1";
+        let older_prerelease_url =
+            "https://github.com/oliveiradev1/OdeKrai/releases/tag/v0.16.0-rc.1";
         assert_eq!(
-            fetch_json_for_current(
-                "v0.16.0-rc.1",
-                older_prerelease_url,
-                "0.16.0-beta.2"
-            )
-            .await
-            .unwrap()
-            .available_version
-            .as_deref(),
+            fetch_json_for_current("v0.16.0-rc.1", older_prerelease_url, "0.16.0-beta.2")
+                .await
+                .unwrap()
+                .available_version
+                .as_deref(),
             Some("0.16.0-rc.1")
         );
         assert_eq!(
@@ -404,14 +413,18 @@ mod tests {
 
     #[tokio::test]
     async fn recusa_url_de_release_fora_do_repositorio_oficial() {
-        assert!(fetch_json("v0.16.0", "https://evil.example/release").await.is_err());
+        assert!(fetch_json("v0.16.0", "https://evil.example/release")
+            .await
+            .is_err());
     }
 
     #[tokio::test]
     async fn falha_de_rede_e_limite_de_24_horas_nao_precisam_da_rede_real() {
         let client = make_client("0.15.0").unwrap();
         let disconnected_endpoint = mock_disconnect().await;
-        assert!(fetch_latest(&client, &disconnected_endpoint, "0.15.0").await.is_err());
+        assert!(fetch_latest(&client, &disconnected_endpoint, "0.15.0")
+            .await
+            .is_err());
         let connection = Connection::open_in_memory().unwrap();
         initialize_database(&connection).unwrap();
         assert!(reserve_check(&connection, 100_000).unwrap());

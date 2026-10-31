@@ -186,8 +186,7 @@ fn configuration_missing_audit(
     action: &SimulatedAction,
     error: &str,
 ) -> Option<(&'static str, &'static str)> {
-    discord_webhook_missing(action, error)
-        .then_some(("configuration", "discord_webhook_missing"))
+    discord_webhook_missing(action, error).then_some(("configuration", "discord_webhook_missing"))
 }
 
 fn undo_descriptor_for_action(
@@ -360,7 +359,10 @@ mod explicit_approval_tests {
             configuration_missing_audit(&action, crate::discord::WEBHOOK_NOT_REGISTERED),
             Some(("configuration", "discord_webhook_missing"))
         );
-        assert!(!discord_webhook_missing(&action, "Ação bloqueada pela política."));
+        assert!(!discord_webhook_missing(
+            &action,
+            "Ação bloqueada pela política."
+        ));
     }
 
     #[test]
@@ -375,19 +377,15 @@ mod explicit_approval_tests {
             Mode::AprovarPorMim,
             Mode::ControleTotal,
         ] {
-            let policy_decision = policy::decide(
-                mode,
-                risk,
-                &Origin::User,
-                inside,
-                fixed,
-                true,
-            );
+            let policy_decision = policy::decide(mode, risk, &Origin::User, inside, fixed, true);
             assert!(matches!(&policy_decision, Decision::AskUser(_)), "{mode:?}");
-            assert!(matches!(
-                require_batch_approval(&action, policy_decision),
-                Decision::AskUser(_)
-            ), "{mode:?}, tool={tool}");
+            assert!(
+                matches!(
+                    require_batch_approval(&action, policy_decision),
+                    Decision::AskUser(_)
+                ),
+                "{mode:?}, tool={tool}"
+            );
         }
     }
 
@@ -840,10 +838,12 @@ pub(super) async fn submit_agent_action(
     on_output: &mut (dyn FnMut(String) + Send),
 ) -> Result<ActionResult, String> {
     let _capture_cleanup = match &action {
-        SimulatedAction::Productivity { skill_id, params } if skill_id == "screen.capture" => params
-            .get("_capture_id")
-            .and_then(serde_json::Value::as_str)
-            .map(|id| crate::screen_capture::PreparedCaptureCleanup::for_id(id.to_owned())),
+        SimulatedAction::Productivity { skill_id, params } if skill_id == "screen.capture" => {
+            params
+                .get("_capture_id")
+                .and_then(serde_json::Value::as_str)
+                .map(|id| crate::screen_capture::PreparedCaptureCleanup::for_id(id.to_owned()))
+        }
         _ => None,
     };
     let domain_requires_approval = match &action {
@@ -888,52 +888,46 @@ pub(super) async fn submit_agent_action(
     let fixed = enforce_power_lock_origin(&action, &origin, tainted, fixed);
     let id = id();
     let params = audit_params(&action);
-    let (preview, preview_image) = match validate_action(&action)
-        .and_then(|_| preview_for_with_image(app, &action))
-    {
-        Ok(preview) => preview,
-        Err(error) => {
-            let config_missing = configuration_missing_audit(&action, &error);
-            let (decision, rule, status, message) = if config_missing.is_some() {
-                (
-                    "configuration",
-                    "discord_webhook_missing",
-                    "configuration_pending",
-                    "Falta cadastrar um webhook do Discord.".to_string(),
-                )
-            } else {
-                (
-                    "deny",
-                    "target_validation_failed",
-                    "denied",
-                    error.clone(),
-                )
-            };
-            record(
-                app,
-                state,
-                &id,
-                tool,
-                risk,
-                &origin,
-                decision,
-                rule,
-                "not_required",
-                0,
-                params,
-                status,
-                Some(error.clone()),
-            )?;
-            return Ok(ActionResult {
-                id,
-                status: status.into(),
-                message,
-                result: None,
-                undo_descriptor: None,
-                confirmation_required: false,
-            });
-        }
-    };
+    let (preview, preview_image) =
+        match validate_action(&action).and_then(|_| preview_for_with_image(app, &action)) {
+            Ok(preview) => preview,
+            Err(error) => {
+                let config_missing = configuration_missing_audit(&action, &error);
+                let (decision, rule, status, message) = if config_missing.is_some() {
+                    (
+                        "configuration",
+                        "discord_webhook_missing",
+                        "configuration_pending",
+                        "Falta cadastrar um webhook do Discord.".to_string(),
+                    )
+                } else {
+                    ("deny", "target_validation_failed", "denied", error.clone())
+                };
+                record(
+                    app,
+                    state,
+                    &id,
+                    tool,
+                    risk,
+                    &origin,
+                    decision,
+                    rule,
+                    "not_required",
+                    0,
+                    params,
+                    status,
+                    Some(error.clone()),
+                )?;
+                return Ok(ActionResult {
+                    id,
+                    status: status.into(),
+                    message,
+                    result: None,
+                    undo_descriptor: None,
+                    confirmation_required: false,
+                });
+            }
+        };
     let decision = require_batch_approval(
         &action,
         policy::decide_with_taint(
@@ -1477,7 +1471,8 @@ pub(super) fn get_full_approval_preview_inner(
     if !display_hash_matches(&item.action, &item.digest, &display_hash) {
         return Err("Os parâmetros mudaram; a prévia foi bloqueada.".into());
     }
-    let preview = if matches!(&item.action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "screen.capture") {
+    let preview = if matches!(&item.action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "screen.capture")
+    {
         item.preview.clone()
     } else {
         preview_for(&app, &item.action)?
