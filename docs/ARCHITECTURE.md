@@ -152,6 +152,8 @@ O atalho opcional do comando rápido é persistido em `permission_settings` e fi
 
 Resultados externos passam por `core/markdown.ts`, que transforma uma gramática Markdown limitada em nós tipados e rejeita esquemas de URL não permitidos; o React renderiza os valores como texto e não usa `dangerouslySetInnerHTML`. Artefatos do cartão passam por `isSafeArtifactPath` no frontend e pelos comandos `system.open_path`/`system.reveal_in_folder` no Rust, que validam extensões e pastas permitidas antes do plugin opener. Essa checagem na UI é conveniência; a autorização efetiva é nativa.
 
+Os links da seção Nuvem vêm de `src/core/cloud-links.json`, que também define a lista exata de domínios HTTPS autorizados. A UI intercepta o clique e chama `openCloudLink`; o helper verifica o protocolo e domínio, e o comando Rust `open_cloud_link` repete a validação antes de abrir no navegador padrão. As permissões do opener na capability principal espelham esses domínios e têm teste de paridade com o manifesto. Os links não navegam dentro do WebView.
+
 Os testes de `AgentControls`, `ActivitySidePanel`, `command-palette`, `markdown`, `Modal` e `Overview` cobrem as respectivas garantias de interface. A inspeção final de tabulação, contraste e apresentação ainda requer o executável Windows; o roteiro está em [`WINDOWS-MANUAL-VALIDATION.md`](WINDOWS-MANUAL-VALIDATION.md).
 
 ## Inicialização do painel

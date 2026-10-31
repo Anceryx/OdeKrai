@@ -44,7 +44,15 @@
         { "url": "https://signin.aws.amazon.com/**" },
         { "url": "https://docs.aws.amazon.com/**" },
         { "url": "https://console.cloud.google.com/**" },
-        { "url": "https://docs.cloud.google.com/**" }
+        { "url": "https://docs.cloud.google.com/**" },
+        { "url": "https://magalu.cloud/**" },
+        { "url": "https://www.locaweb.com.br/**" },
+        { "url": "https://uolhost.uol.com.br/**" },
+        { "url": "https://aws.amazon.com/**" },
+        { "url": "https://cloud.google.com/**" },
+        { "url": "https://azure.microsoft.com/**" },
+        { "url": "https://www.oracle.com/**" },
+        { "url": "https://shardcloud.app/**" }
       ]
     }
   ]

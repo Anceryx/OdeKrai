@@ -1,6 +1,26 @@
+use serde::Deserialize;
 use tauri::{AppHandle, WebviewWindow};
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
+
+const CLOUD_LINKS_MANIFEST: &str = include_str!("../../src/core/cloud-links.json");
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CloudLinksManifest {
+    allowed_domains: Vec<String>,
+    categories: Vec<CloudLinkCategory>,
+}
+
+#[derive(Deserialize)]
+struct CloudLinkCategory {
+    services: Vec<CloudLinkService>,
+}
+
+#[derive(Deserialize)]
+struct CloudLinkService {
+    url: String,
+}
 
 pub fn validate_external_url(value: &str) -> Result<String, &'static str> {
     if value.is_empty()
@@ -94,6 +114,54 @@ pub fn open_external_link(
         .map_err(|_| "Não foi possível abrir o navegador padrão.".to_string())
 }
 
+fn validate_cloud_link(value: &str) -> Result<String, String> {
+    let validated = validate_external_url(value).map_err(str::to_string)?;
+    let parsed = Url::parse(&validated).map_err(|_| "O endereço do link é inválido.")?;
+    if parsed.scheme() != "https" || parsed.port_or_known_default() != Some(443) {
+        return Err("Os links da Nuvem precisam usar HTTPS sem porta alternativa.".into());
+    }
+    let manifest: CloudLinksManifest = serde_json::from_str(CLOUD_LINKS_MANIFEST)
+        .map_err(|_| "A lista de domínios autorizados da Nuvem está inválida.".to_string())?;
+    let invalid_manifest_url = manifest
+        .categories
+        .iter()
+        .flat_map(|category| &category.services)
+        .any(|service| match Url::parse(&service.url) {
+            Ok(service_url) => {
+                service_url.scheme() != "https"
+                    || !manifest
+                        .allowed_domains
+                        .iter()
+                        .any(|domain| service_url.host_str() == Some(domain.as_str()))
+            }
+            Err(_) => true,
+        });
+    if invalid_manifest_url {
+        return Err("A lista de domínios autorizados da Nuvem está inválida.".into());
+    }
+    if !manifest
+        .allowed_domains
+        .iter()
+        .any(|domain| parsed.host_str() == Some(domain.as_str()))
+    {
+        return Err("Este domínio não está na lista autorizada de links da Nuvem.".into());
+    }
+    Ok(validated)
+}
+
+#[tauri::command]
+pub fn open_cloud_link(
+    app: AppHandle,
+    caller: WebviewWindow,
+    url: String,
+) -> Result<(), String> {
+    crate::require_main(&caller)?;
+    let validated = validate_cloud_link(&url)?;
+    app.opener()
+        .open_url(validated, None::<&str>)
+        .map_err(|_| "Não foi possível abrir o link da Nuvem no navegador padrão.".to_string())
+}
+
 #[tauri::command]
 pub fn open_update_release(
     app: AppHandle,
@@ -127,7 +195,86 @@ fn validate_update_release_url(value: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_external_url, validate_update_release_url};
+    use super::{
+        validate_cloud_link, validate_external_url, validate_update_release_url,
+        CLOUD_LINKS_MANIFEST,
+    };
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct TestManifest {
+        allowed_domains: Vec<String>,
+        categories: Vec<TestCategory>,
+    }
+
+    #[derive(Deserialize)]
+    struct TestCategory {
+        services: Vec<TestService>,
+    }
+
+    #[derive(Deserialize)]
+    struct TestService {
+        url: String,
+    }
+
+    #[test]
+    fn cloud_links_require_https_and_an_exact_domain_from_the_embedded_list() {
+        assert_eq!(
+            validate_cloud_link("https://shardcloud.app/pt-br/dash/vps").unwrap(),
+            "https://shardcloud.app/pt-br/dash/vps"
+        );
+        assert!(validate_cloud_link("http://shardcloud.app/pt-br/dash/vps")
+            .unwrap_err()
+            .contains("HTTPS"));
+        assert!(validate_cloud_link("https://shardcloud.app.evil.example/")
+            .unwrap_err()
+            .contains("não está na lista autorizada"));
+        assert!(validate_cloud_link("https://example.com/")
+            .unwrap_err()
+            .contains("não está na lista autorizada"));
+    }
+
+    #[test]
+    fn cloud_manifest_urls_are_https_and_match_the_embedded_allowed_domain_list() {
+        let manifest: TestManifest = serde_json::from_str(CLOUD_LINKS_MANIFEST).unwrap();
+        let services = manifest
+            .categories
+            .iter()
+            .flat_map(|category| &category.services)
+            .collect::<Vec<_>>();
+        assert_eq!(services.len(), 8);
+        for service in services {
+            let url = url::Url::parse(&service.url).unwrap();
+            assert_eq!(url.scheme(), "https");
+            assert!(manifest
+                .allowed_domains
+                .iter()
+                .any(|domain| url.host_str() == Some(domain.as_str())));
+        }
+
+        let capability: serde_json::Value = serde_json::from_str(include_str!(
+            "../capabilities/default.json"
+        ))
+        .unwrap();
+        let permission = capability["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|permission| permission["identifier"] == "opener:allow-open-url")
+            .unwrap();
+        let scoped_urls = permission["allow"].as_array().unwrap();
+        for domain in &manifest.allowed_domains {
+            let expected = format!("https://{domain}/**");
+            assert!(scoped_urls
+                .iter()
+                .any(|entry| entry["url"].as_str() == Some(expected.as_str())));
+        }
+        assert!(!scoped_urls
+            .iter()
+            .any(|entry| entry["url"].as_str() == Some("https://**")));
+    }
+
 
     #[test]
     fn accepts_only_http_https_and_mailto_links_without_credentials_or_controls() {

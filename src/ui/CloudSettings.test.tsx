@@ -21,6 +21,8 @@ describe('seção informativa de nuvem', () => {
   it('apresenta as duas listas e marca todos os serviços apenas como planejados', () => {
     expect(markup).toContain('Nuvens brasileiras');
     expect(markup).toContain('Nuvens internacionais');
+    expect(markup).toContain('Hospedagem com API');
+    expect(markup).toContain('ShardCloud');
     expect(markup).toContain('Magalu Cloud');
     expect(markup).toContain('Locaweb');
     expect(markup).toContain('UOL Host');
@@ -28,7 +30,8 @@ describe('seção informativa de nuvem', () => {
     expect(markup).toContain('Google Cloud');
     expect(markup).toContain('Microsoft Azure');
     expect(markup).toContain('Oracle Cloud');
-    expect(markup.match(/Planejado/g)).toHaveLength(7);
+    expect(markup.match(/Planejado/g)).toHaveLength(8);
+    expect(markup).not.toContain('target="_blank"');
     expect(markup).not.toMatch(/compatível|disponível como integração/i);
   });
 
@@ -48,7 +51,7 @@ describe('seção informativa de nuvem', () => {
 
   it('usa links oficiais sem parâmetros de rastreamento e não apresenta botão de conexão', () => {
     const hrefs = [...markup.matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
-    expect(hrefs).toHaveLength(7);
+    expect(hrefs).toHaveLength(8);
     for (const href of hrefs) {
       const url = new URL(href);
       expect(url.protocol).toBe('https:');

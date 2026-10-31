@@ -1036,6 +1036,7 @@ pub fn run() -> Result<(), tauri::Error> {
             agent_runtime::set_agent_limits,
             get_build_info,
             external_links::open_external_link,
+            external_links::open_cloud_link,
             external_links::open_update_release,
             updates::check_for_update,
             shardcloud::save_shardcloud_token,

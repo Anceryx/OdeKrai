@@ -1,19 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
-
-const CLOUD_SERVICES = {
-  brazilian: [
-    { name: 'Magalu Cloud', url: 'https://magalu.cloud/' },
-    { name: 'Locaweb', url: 'https://www.locaweb.com.br/cloud/' },
-    { name: 'UOL Host', url: 'https://uolhost.uol.com.br/cloud-computing' },
-  ],
-  international: [
-    { name: 'Amazon Web Services', url: 'https://aws.amazon.com/' },
-    { name: 'Google Cloud', url: 'https://cloud.google.com/' },
-    { name: 'Microsoft Azure', url: 'https://azure.microsoft.com/' },
-    { name: 'Oracle Cloud', url: 'https://www.oracle.com/cloud/' },
-  ],
-} as const;
+import { CLOUD_LINK_CATEGORIES, openCloudLink } from '../core/cloud-links';
 
 type ExternalData<T> = {
   sourceLabel: string;
@@ -84,6 +71,14 @@ export function CloudSettings({
   const [distros, setDistros] = useState<ShardDistro[] | null>(null);
   const [budgetCents, setBudgetCents] = useState<number | null>(initialBudgetCents);
   const [budgetInput, setBudgetInput] = useState(formatBudget(initialBudgetCents));
+
+  function openCloudProvider(url: string) {
+    void openCloudLink(url, (validatedUrl) =>
+      invoke<void>('open_cloud_link', { url: validatedUrl }),
+    ).catch((reason: unknown) => {
+      setError(reason instanceof Error ? reason.message : safeUiError(reason));
+    });
+  }
 
   useEffect(() => {
     if (!isTauri()) {
@@ -487,8 +482,14 @@ export function CloudSettings({
         Iniciar ou parar uma VM exige aprovação em qualquer modo. A prévia mostra o nome e o ID
         conferidos da VM; parar pode interromper serviços em execução.
       </p>
-      <CloudProviderList title="Nuvens brasileiras" services={CLOUD_SERVICES.brazilian} />
-      <CloudProviderList title="Nuvens internacionais" services={CLOUD_SERVICES.international} />
+      {CLOUD_LINK_CATEGORIES.map((category) => (
+        <CloudProviderList
+          key={category.title}
+          title={category.title}
+          services={category.services}
+          onOpen={openCloudProvider}
+        />
+      ))}
     </div>
   );
 }
@@ -501,9 +502,11 @@ function safeUiError(reason: unknown): string {
 function CloudProviderList({
   title,
   services,
+  onOpen,
 }: {
   title: string;
   services: readonly { name: string; url: string }[];
+  onOpen: (url: string) => void;
 }) {
   return (
     <section className="cloud-provider-list" aria-label={title}>
@@ -511,7 +514,13 @@ function CloudProviderList({
       <ul>
         {services.map((service) => (
           <li key={service.name}>
-            <a href={service.url} target="_blank" rel="noreferrer">
+            <a
+              href={service.url}
+              onClick={(event) => {
+                event.preventDefault();
+                onOpen(service.url);
+              }}
+            >
               {service.name}
             </a>
             <span className="cloud-planned-label">Planejado</span>
