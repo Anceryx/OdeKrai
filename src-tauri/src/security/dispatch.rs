@@ -77,7 +77,7 @@ pub(super) fn action_metadata(
     };
     let tool_name = match action {
         SimulatedAction::Productivity { skill_id, .. } => match skill_id.as_str() {
-            "plan.propose" => "plan.propose",
+            "plan.propose" | "screen.capture" => skill_id,
             "files.write" | "files.append" | "files.restore" | "files.mkdir" | "files.copy"
             | "files.move" | "files.rename" | "files.delete" | "files.apply_plan" => skill_id,
             "calendar.create_event" => "calendar.create_event",
@@ -135,6 +135,7 @@ fn is_workspace_skill(skill_id: &str) -> bool {
             skill_id,
             // A proposta não acessa pasta; o contexto permite apenas sua leitura inofensiva.
             "plan.propose"
+                | "screen.capture"
                 | "calendar.create_event"
                 | "doc.create_markdown"
                 | "doc.create_text"
@@ -608,6 +609,40 @@ pub(super) fn preview_for(
     tool_for(&action).preview(&action, &workspace)
 }
 
+pub(super) fn preview_for_with_image(
+    app: &tauri::AppHandle,
+    action: &SimulatedAction,
+) -> Result<(String, Option<String>), String> {
+    let SimulatedAction::Productivity { skill_id, params } = action else {
+        return preview_for(app, action).map(|text| (text, None));
+    };
+    if skill_id != "screen.capture" {
+        return preview_for(app, action).map(|text| (text, None));
+    }
+
+    let path = params
+        .get("path")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("Informe o nome do arquivo de captura.")?;
+    let capture_id = params
+        .get("_capture_id")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("A captura temporária não tem um identificador válido.")?;
+    let (workspace, _) = super::skills::resolve_action_target(app, action, true)?;
+    let destination = super::workspace::safe_target(&workspace, path)?;
+    if destination.exists() {
+        return Err("Já existe um arquivo com esse nome na pasta de trabalho.".into());
+    }
+    let image = crate::screen_capture::prepare_agent_capture(capture_id)?;
+    Ok((
+        format!(
+            "Prévia reduzida da tela virtual inteira. O arquivo JPEG só será criado após aprovação em:\n{}",
+            destination.display()
+        ),
+        Some(image),
+    ))
+}
+
 pub(super) fn append_audit(
     app: &tauri::AppHandle,
     state: &SecurityState,
@@ -804,6 +839,13 @@ pub(super) async fn submit_agent_action(
     on_approval: &mut (dyn FnMut(String, String, u64) + Send),
     on_output: &mut (dyn FnMut(String) + Send),
 ) -> Result<ActionResult, String> {
+    let _capture_cleanup = match &action {
+        SimulatedAction::Productivity { skill_id, params } if skill_id == "screen.capture" => params
+            .get("_capture_id")
+            .and_then(serde_json::Value::as_str)
+            .map(|id| crate::screen_capture::PreparedCaptureCleanup::for_id(id.to_owned())),
+        _ => None,
+    };
     let domain_requires_approval = match &action {
         SimulatedAction::Productivity { skill_id, params }
             if skill_id == "web.fetch" || skill_id == "system.open_url" =>
@@ -846,7 +888,9 @@ pub(super) async fn submit_agent_action(
     let fixed = enforce_power_lock_origin(&action, &origin, tainted, fixed);
     let id = id();
     let params = audit_params(&action);
-    let preview = match validate_action(&action).and_then(|_| preview_for(app, &action)) {
+    let (preview, preview_image) = match validate_action(&action)
+        .and_then(|_| preview_for_with_image(app, &action))
+    {
         Ok(preview) => preview,
         Err(error) => {
             let config_missing = configuration_missing_audit(&action, &error);
@@ -1057,6 +1101,7 @@ pub(super) async fn submit_agent_action(
                 risk,
                 summary: summary(&action),
                 preview,
+                preview_image,
                 digest: digest.clone(),
                 expires: created_at + approval_ttl,
                 expires_at,
@@ -1403,6 +1448,7 @@ pub(super) async fn get_pending_approval_inner(
         summary: item.summary.clone(),
         full_preview: item.preview.chars().count() > 4_000,
         preview: clipped(&item.preview, 4_000),
+        preview_image: item.preview_image.clone(),
         expires_at: item.expires_at,
         display_hash: item.digest.clone(),
     }))
@@ -1431,7 +1477,11 @@ pub(super) fn get_full_approval_preview_inner(
     if !display_hash_matches(&item.action, &item.digest, &display_hash) {
         return Err("Os parâmetros mudaram; a prévia foi bloqueada.".into());
     }
-    let preview = preview_for(&app, &item.action)?;
+    let preview = if matches!(&item.action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "screen.capture") {
+        item.preview.clone()
+    } else {
+        preview_for(&app, &item.action)?
+    };
     if preview.len() > 16 * 1024 {
         return Err("A prévia excede o limite de 16 KiB.".into());
     }

@@ -48,6 +48,7 @@ type Pending = {
   origin: string;
   summary: string;
   preview: string;
+  previewImage: string | null;
   fullPreview: boolean;
   expiresAt: number;
   displayHash: string;
@@ -79,6 +80,7 @@ const risks: { id: RiskLevel; title: string }[] = [
   { id: 'comunicacao_externa', title: 'Comunicação externa' },
   { id: 'destrutivo_financeiro', title: 'Destrutivo ou financeiro' },
   { id: 'execucao_de_codigo', title: 'Execução de código (alto)' },
+  { id: 'captura_sensivel', title: 'Captura sensível' },
 ];
 const tools = [
   ['workspace.read_file', 'Ler arquivo em pasta permitida'],
@@ -95,6 +97,7 @@ function toolLabel(tool: string): string {
 function decision(mode: Mode, risk: RiskLevel): string {
   if (risk === 'leitura') return 'Permitir em pastas permitidas';
   if (risk === 'execucao_de_codigo') return 'Sempre pedir aprovação';
+  if (risk === 'captura_sensivel') return 'Sempre pedir aprovação';
   if (mode === 'sempre_perguntar') return 'Pedir aprovação';
   if (mode === 'aprovar_por_mim')
     return risk === 'escrita_reversivel' ? 'Permitir em pastas permitidas' : 'Pedir aprovação';
@@ -698,6 +701,13 @@ export function ApprovalWindow() {
               <span>{remaining}s restantes · expira e é negada automaticamente</span>
             </header>
             <pre>{full ? completePreview : pending.preview}</pre>
+            {pending.previewImage && (
+              <img
+                className="approval-preview-image"
+                src={pending.previewImage}
+                alt="Prévia reduzida da captura que será salva na pasta de trabalho após aprovação"
+              />
+            )}
             {pending.fullPreview && (
               <button
                 className="text-button"

@@ -560,6 +560,9 @@ impl Tool for Productivity {
             SimulatedAction::Productivity { skill_id, .. } if skill_id == "plan.propose" => {
                 Risk::Leitura
             }
+            SimulatedAction::Productivity { skill_id, .. } if skill_id == "screen.capture" => {
+                Risk::CapturaSensivel
+            }
             SimulatedAction::Productivity { skill_id, .. } if skill_id == "code.delegate" => {
                 Risk::ExecucaoDeCodigo
             }
@@ -651,6 +654,19 @@ impl Tool for Productivity {
                 plan.title
             ));
         }
+        if skill_id == "screen.capture" {
+            let path = params["path"]
+                .as_str()
+                .ok_or("Informe o nome do arquivo de captura.")?;
+            let destination = safe_target(root, path)?;
+            if destination.exists() {
+                return Err("Já existe um arquivo com esse nome na pasta de trabalho.".into());
+            }
+            return Ok(format!(
+                "Captura local da tela virtual inteira em: {}",
+                destination.display()
+            ));
+        }
         if skill_id == "web.fetch" {
             return crate::web_fetch::preview(
                 params["url"].as_str().ok_or("Informe uma URL HTTPS.")?,
@@ -712,6 +728,38 @@ impl Tool for Productivity {
                 let plan = plan?;
                 serde_json::to_string(&plan)
                     .map_err(|_| "Não foi possível preparar o plano informativo.".into())
+            });
+        }
+        if skill_id == "screen.capture" {
+            let path = match params["path"].as_str() {
+                Some(path) => path.to_owned(),
+                None => {
+                    return Box::pin(async { Err("Informe o nome do arquivo de captura.".into()) })
+                }
+            };
+            let capture_id = match params["_capture_id"].as_str() {
+                Some(id) => id.to_owned(),
+                None => {
+                    return Box::pin(async {
+                        Err("A captura temporária expirou; tire um novo print.".into())
+                    })
+                }
+            };
+            let destination = match safe_target(root, &path) {
+                Ok(destination) => destination,
+                Err(error) => return Box::pin(async move { Err(error) }),
+            };
+            if destination.exists() {
+                return Box::pin(async {
+                    Err("Já existe um arquivo com esse nome na pasta de trabalho.".into())
+                });
+            }
+            return Box::pin(async move {
+                let saved = crate::screen_capture::save_prepared_agent_capture(
+                    &capture_id,
+                    &destination,
+                )?;
+                Ok(format!("Captura salva na pasta de trabalho: {}", saved.display()))
             });
         }
         if skill_id == "web.fetch" {

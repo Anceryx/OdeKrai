@@ -5,7 +5,8 @@ export type SkillRisk =
   | 'escrita_reversivel'
   | 'comunicacao_externa'
   | 'destrutivo_financeiro'
-  | 'execucao_de_codigo';
+  | 'execucao_de_codigo'
+  | 'captura_sensivel';
 export type SkillFamily =
   | 'arquivos'
   | 'abrir_aplicativos'
@@ -103,6 +104,7 @@ const riskRank: Record<SkillRisk, number> = {
   comunicacao_externa: 2,
   execucao_de_codigo: 3,
   destrutivo_financeiro: 4,
+  captura_sensivel: 5,
 };
 
 export async function setSkillEnabledCommand(

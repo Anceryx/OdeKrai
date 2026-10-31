@@ -1016,7 +1016,7 @@ function MainApp() {
   }
 
   function sendHomeFirstMessage(text: string) {
-    return sendMessage(text, false, undefined, {
+    return sendMessage(text, false, {
       newConversation: true,
       agentEnabled: agentAvailability.available,
     });
@@ -1025,7 +1025,6 @@ function MainApp() {
   async function sendMessage(
     rawText: string,
     reuseLastUserMessage = false,
-    imageBase64?: string,
     options: {
       newConversation?: boolean;
       agentEnabled?: boolean;
@@ -1042,10 +1041,6 @@ function MainApp() {
         `Modo agente indisponível: ${agentAvailability.reason ?? 'verifique as configurações do agente.'}`,
       );
       setLastFailedPrompt('');
-      return false;
-    }
-    if (imageBase64 && (!useAgent || !agentAvailability.available)) {
-      setError('Ative o agente antes de enviar uma imagem para análise.');
       return false;
     }
     if (!isTauri()) {
@@ -1263,7 +1258,6 @@ function MainApp() {
         const answer = await invoke<string>('agent_run', {
           conversationId: activeId,
           message: text,
-          imageBase64: imageBase64 ?? null,
           dailyTokenLimit: settings.dailyTokenLimit,
           onEvent,
         });
@@ -1389,7 +1383,7 @@ function MainApp() {
           cause.toLocaleLowerCase('pt-BR').includes('cancel'));
       if (!stopped) {
         setMessages(next);
-        setLastFailedPrompt(imageBase64 ? '' : text);
+        setLastFailedPrompt(text);
         setError(
           typeof cause === 'string'
             ? cause
@@ -1421,7 +1415,7 @@ function MainApp() {
   quickRequestHandler.current = (request) => {
     let summary = '';
     void (async () => {
-      const success = await sendMessage(request.text, false, undefined, {
+      const success = await sendMessage(request.text, false, {
         newConversation: true,
         agentEnabled: agentAvailability.available,
         conversationId: request.conversationId,
@@ -2002,7 +1996,6 @@ function MainApp() {
                   ),
                 )
               }
-              onAnalyzeCapture={(prompt, imageBase64) => sendMessage(prompt, false, imageBase64)}
               onToggleAgent={(enabled) => void setConversationAgentMode(enabled)}
               onStopAgent={cancelRequest}
               onConfigureAgent={() => {

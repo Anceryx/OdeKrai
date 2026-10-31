@@ -12,7 +12,6 @@ import { initials, type ProfileData } from '../Profile';
 import { ResizeHandle } from '../ResizeHandle';
 import { providerById } from '../../core/providers';
 import { AgentActionCard, AgentControls, type AgentActionCardData } from '../AgentControls';
-import { ScreenCapture } from '../ScreenCapture';
 import { supportsTranscription, transcribeConfirmedRecording } from '../../core/transcription';
 import { getLocalSpeechReader, type SpeechState } from '../../core/speech';
 import { MessageComposer, shouldSubmitMessageOnEnter } from '../MessageComposer';
@@ -107,7 +106,6 @@ export function ConversationsScreen({
   onToggleAgent,
   onStopAgent,
   onConfigureAgent,
-  onAnalyzeCapture,
   microphoneEnabled,
   onMicrophonePreferenceChange,
   readRepliesAutomatically,
@@ -161,7 +159,6 @@ export function ConversationsScreen({
   onToggleAgent: (enabled: boolean) => void;
   onStopAgent: () => void;
   onConfigureAgent: () => void;
-  onAnalyzeCapture: (prompt: string, imageBase64: string) => Promise<boolean>;
   microphoneEnabled: boolean;
   onMicrophonePreferenceChange: (enabled: boolean) => void | Promise<void>;
   readRepliesAutomatically: boolean;
@@ -980,17 +977,7 @@ export function ConversationsScreen({
                 </div>
               )}
               <span className="chat-composer-helper">Enter envia · Shift + Enter quebra linha</span>
-              <div className="chat-composer-actions">
-                <ScreenCapture
-                  providerId={providerId}
-                  providerModel={providerModel}
-                  agentEnabled={agentEnabled}
-                  agentAvailable={!agentUnavailableReason}
-                  disabled={busy}
-                  onAnalyze={onAnalyzeCapture}
-                />
-                {sendButton}
-              </div>
+              <div className="chat-composer-actions">{sendButton}</div>
             </div>
           )}
         >

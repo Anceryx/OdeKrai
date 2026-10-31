@@ -99,7 +99,6 @@ describe('ConversationsScreen', () => {
         onToggleAgent={() => undefined}
         onStopAgent={() => undefined}
         onConfigureAgent={() => undefined}
-        onAnalyzeCapture={async () => false}
       />,
     );
     expect(markup).toContain('Nova conversa');
@@ -107,6 +106,7 @@ describe('ConversationsScreen', () => {
     expect(markup).toContain('class="messages-area"');
     expect(markup).toContain('class="composer"');
     expect(markup).toContain('class="chat-composer-actions"');
+    expect(markup).not.toContain('Capturar tela');
     expect(markup).toContain('aria-label="Gravar áudio"');
     expect(markup).not.toContain('disabled="" aria-label="Gravar áudio"');
     expect(markup).toContain('svg');
@@ -184,7 +184,6 @@ describe('ConversationsScreen', () => {
         onToggleAgent={() => undefined}
         onStopAgent={() => undefined}
         onConfigureAgent={() => undefined}
-        onAnalyzeCapture={async () => false}
       />,
     );
     expect(markup).toContain('Modelo usado nesta conversa');
@@ -242,7 +241,6 @@ describe('ConversationsScreen', () => {
         onToggleAgent={() => undefined}
         onStopAgent={() => undefined}
         onConfigureAgent={() => undefined}
-        onAnalyzeCapture={async () => false}
       />,
     );
     expect(markup).toContain('conversation-sidebar-collapsed');
