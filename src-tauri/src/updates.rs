@@ -223,6 +223,7 @@ async fn fetch_latest(
     let response = client
         .get(endpoint)
         .header(header::ACCEPT, "application/vnd.github+json")
+        .header(header::USER_AGENT, format!("OdeKrai/{current}"))
         .header("X-GitHub-Api-Version", "2026-03-10")
         .send()
         .await
