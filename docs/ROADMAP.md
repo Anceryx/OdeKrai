@@ -8,3 +8,10 @@
 6. **Distribuição:** CI, testes Windows, instalador assinado quando houver certificado e documentação de atualização.
 
 Cada fase depende de validação no Windows real antes de ser declarada pronta.
+
+## Execução e hospedagem
+
+A execução hospedada em nuvem é planejada e não está disponível nesta versão. O aplicativo não
+conecta contas de nuvem nem executa habilidades remotamente. Uma implementação futura deverá pedir
+aprovação para cada ação remota e aplicar limites de gasto; provedores listados na interface são
+apenas referências planejadas, sem promessa de compatibilidade.

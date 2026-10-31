@@ -35,6 +35,7 @@ const SecurityCenter = lazy(() =>
   import('./SecurityCenter').then((module) => ({ default: module.SecurityCenter })),
 );
 import type { AuditEntry } from './SecurityCenter';
+import { CloudSettings } from './CloudSettings';
 
 export function SettingsModal({
   open,
@@ -194,6 +195,8 @@ export function SettingsModal({
             sharedAudit={sharedAudit}
           />
         );
+      case 'nuvem':
+        return <CloudSettings />;
       case 'habilidades':
         return <SkillsSettingsSummary onOpenPage={() => onOpenPage('skills')} />;
       case 'conectores':

@@ -9,6 +9,7 @@ export const SETTINGS_MENU = [
   { id: 'conectores', title: 'Conectores de IA' },
   { id: 'privacidade', title: 'Privacidade e permissões' },
   { id: 'atividade', title: 'Atividade' },
+  { id: 'nuvem', title: 'Nuvem' },
   { id: 'sobre', title: 'Sobre' },
 ] as const satisfies readonly { id: SettingsSection; title: string }[];
 
@@ -181,6 +182,12 @@ export const SETTINGS_INDEX: readonly SettingsIndexEntry[] = [
     keywords: ['auditoria', 'eventos', 'log'],
     section: 'atividade',
     anchor: 'activity-log',
+  },
+  {
+    title: 'Execução na nuvem (planejada)',
+    keywords: ['nuvem', 'cloud', 'hospedagem', 'execução remota', 'provedores planejados'],
+    section: 'nuvem',
+    anchor: 'cloud-settings-heading',
   },
   {
     title: 'Informações do aplicativo',
