@@ -1082,6 +1082,7 @@ impl SkillTurnOffer {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn state_for(&self, skill_id: &str) -> Option<SkillOfferState> {
         self.entries
             .iter()
