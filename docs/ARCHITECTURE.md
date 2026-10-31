@@ -75,7 +75,7 @@ o ícone do aplicativo por padrão, com uma preferência para usar o mascote. As
 renderizador Markdown que cria elementos React a partir de texto, sem interpretar HTML. Links só
 aceitam `http` e `https`.
 
-A janela `pet` usa transparência sem região Win32 e não ignora eventos do ponteiro. Os cantos transparentes continuam pertencendo à janela e podem receber cliques; arrasto, foco, DPI e monitores múltiplos exigem validação visual no Windows.
+A janela `pet` usa transparência sem região Win32, decorações ou sombra nativa; HTML, body e root permanecem transparentes também no modo Desempenho. No modo Livre, a casca não pinta fundo nem sombra de caixa, enquanto a elipse de sombra desenhada pelo sprite permanece. A alteração remove o retângulo visual, sem mudar o hit testing: a janela não ignora eventos do ponteiro, então áreas transparentes ainda pertencem ao retângulo nativo e podem interceptar cliques. O botão do mascote continua sendo a área interativa intencional. Arrasto, foco, DPI, monitores múltiplos, aparência e cliques exigem validação visual no Windows.
 
 ## Navegação e configurações
 

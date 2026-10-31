@@ -3297,8 +3297,10 @@ body.island-window-body {
 body.island-window-body #root {
   width: 100%;
   height: 100%;
+  background: transparent !important;
 }
-html.island-window-html {
+html.island-window-html,
+html.island-window-html body.island-window-body {
   background: transparent !important;
 }
 .floating-island {
@@ -3346,6 +3348,10 @@ html.island-window-html {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+html[data-performance='on'] .free-mode .island-shell {
+  background: transparent !important;
+  box-shadow: none !important;
 }
 .free-mode .island-shell:before,
 .free-mode .island-drag-handle,
@@ -6469,8 +6475,9 @@ html[data-performance='on'] .security-state.total {
   background-color: var(--color-surface-raised) !important;
 }
 html.island-window-html[data-performance='on'],
-html.island-window-html[data-performance='on'] body.island-window-body {
-  background: var(--color-background) !important;
+html.island-window-html[data-performance='on'] body.island-window-body,
+html.island-window-html[data-performance='on'] body.island-window-body #root {
+  background: transparent !important;
 }
 html[data-performance='on'] .animated-gradient,
 html[data-performance='on'] [data-animated-gradient] {
@@ -6567,6 +6574,9 @@ html[data-performance='on'] .pet-overlay * {
   border-radius: 50%;
   background: #0009;
   filter: blur(4px);
+}
+html[data-performance='on'] .free-mode .pet-shadow {
+  filter: blur(4px) !important;
 }
 .pet-overlay {
   position: absolute;

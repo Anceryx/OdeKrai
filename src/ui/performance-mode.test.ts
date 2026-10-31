@@ -17,8 +17,10 @@ describe('aplicação do modo Desempenho na interface', () => {
     expect(styles).toContain("html[data-performance='on'] [data-translucent]");
   });
 
-  it('torna opaca a janela do pet e recebe o estado calculado na janela principal', () => {
-    expect(styles).toContain("html.island-window-html[data-performance='on']");
+  it('mantém transparente o documento da janela do pet e recebe o estado calculado', () => {
+    expect(styles).toMatch(
+      /html\.island-window-html\[data-performance='on'\][\s\S]*?background: transparent !important/,
+    );
     expect(styles).toContain("html[data-performance='on'] .island-shell");
     expect(islandWindow).toContain("listen<PerformanceModeStatus>('performance-mode-updated'");
     expect(islandWindow).toContain("dataset.performance = payload.enabled ? 'on' : 'off'");
