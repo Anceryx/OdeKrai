@@ -161,7 +161,14 @@ fn require_batch_approval(action: &SimulatedAction, decision: Decision) -> Decis
     if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "shardcloud.vm_start" | "shardcloud.vm_stop" | "shardcloud.vm_exec"))
         && matches!(decision, Decision::Allow(_))
     {
-        Decision::AskUser(if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "shardcloud.vm_exec") { "shardcloud_vm_exec_requires_approval" } else { "shardcloud_power_action_requires_approval" })
+        Decision::AskUser(
+            if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "shardcloud.vm_exec")
+            {
+                "shardcloud_vm_exec_requires_approval"
+            } else {
+                "shardcloud_power_action_requires_approval"
+            },
+        )
     } else if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "power.lock" | "power.sleep"))
         && matches!(decision, Decision::Allow(_))
     {
@@ -459,31 +466,62 @@ mod explicit_approval_tests {
 
     #[test]
     fn shardcloud_power_actions_always_ask_and_a_denial_cannot_execute() {
-        for skill_id in ["shardcloud.vm_start", "shardcloud.vm_stop", "shardcloud.vm_exec"] {
+        for skill_id in [
+            "shardcloud.vm_start",
+            "shardcloud.vm_stop",
+            "shardcloud.vm_exec",
+        ] {
             let action = SimulatedAction::Productivity {
                 skill_id: skill_id.into(),
                 params: json!({"vm_name":"Produção", "vm_id":"123e4567-e89b-12d3-a456-426614174000", "commands":["uname -a"]}),
             };
             let (tool, risk, inside, fixed) = action_metadata(&action);
-            assert_eq!(risk, if skill_id == "shardcloud.vm_exec" { Risk::ExecucaoDeCodigo } else { Risk::EscritaReversivel }, "{skill_id}");
+            assert_eq!(
+                risk,
+                if skill_id == "shardcloud.vm_exec" {
+                    Risk::ExecucaoDeCodigo
+                } else {
+                    Risk::EscritaReversivel
+                },
+                "{skill_id}"
+            );
             assert!(!inside, "{skill_id}");
-            for mode in [Mode::SemprePerguntar, Mode::AprovarPorMim, Mode::ControleTotal] {
+            for mode in [
+                Mode::SemprePerguntar,
+                Mode::AprovarPorMim,
+                Mode::ControleTotal,
+            ] {
                 let decision = policy::decide(mode, risk, &Origin::User, inside, fixed, true);
-                assert!(matches!(
-                    require_batch_approval(&action, decision),
-                    Decision::AskUser(_)
-                ), "{mode:?}, {tool}");
+                assert!(
+                    matches!(
+                        require_batch_approval(&action, decision),
+                        Decision::AskUser(_)
+                    ),
+                    "{mode:?}, {tool}"
+                );
             }
             if skill_id == "shardcloud.vm_exec" {
                 let external = Origin::ExternalContent("página externa".into());
                 assert!(matches!(
-                    policy::decide_with_taint(Mode::ControleTotal, risk, &external, inside, fixed, true, true),
+                    policy::decide_with_taint(
+                        Mode::ControleTotal,
+                        risk,
+                        &external,
+                        inside,
+                        fixed,
+                        true,
+                        true
+                    ),
                     Decision::AskUser(_)
                 ));
             }
             assert_eq!(
                 require_batch_approval(&action, Decision::Allow("mode_total")),
-                Decision::AskUser(if skill_id == "shardcloud.vm_exec" { "shardcloud_vm_exec_requires_approval" } else { "shardcloud_power_action_requires_approval" })
+                Decision::AskUser(if skill_id == "shardcloud.vm_exec" {
+                    "shardcloud_vm_exec_requires_approval"
+                } else {
+                    "shardcloud_power_action_requires_approval"
+                })
             );
             let mut network_calls = 0;
             if approval_granted_and_running(
@@ -497,11 +535,31 @@ mod explicit_approval_tests {
                 network_calls += 1;
             }
             assert_eq!(network_calls, 0, "{skill_id}");
-            assert!(!approval_granted_and_running(&ApprovalDecision::Expirada, false, false));
-            assert!(!approval_granted_and_running(&ApprovalDecision::Cancelada, false, false));
-            assert!(!approval_granted_and_running(&ApprovalDecision::Aprovada, true, false));
-            assert!(!approval_granted_and_running(&ApprovalDecision::Aprovada, false, true));
-            assert!(approval_granted_and_running(&ApprovalDecision::Aprovada, false, false));
+            assert!(!approval_granted_and_running(
+                &ApprovalDecision::Expirada,
+                false,
+                false
+            ));
+            assert!(!approval_granted_and_running(
+                &ApprovalDecision::Cancelada,
+                false,
+                false
+            ));
+            assert!(!approval_granted_and_running(
+                &ApprovalDecision::Aprovada,
+                true,
+                false
+            ));
+            assert!(!approval_granted_and_running(
+                &ApprovalDecision::Aprovada,
+                false,
+                true
+            ));
+            assert!(approval_granted_and_running(
+                &ApprovalDecision::Aprovada,
+                false,
+                false
+            ));
             let audit = audit_params(&action);
             assert!(audit.contains("params_sha256"));
             assert!(!audit.contains("token"));
@@ -534,14 +592,22 @@ pub(super) fn summary(action: &SimulatedAction) -> String {
             currency,
         } => format!("Pagamento bloqueado: {currency} {amount_cents}"),
         SimulatedAction::Productivity { skill_id, params }
-            if matches!(skill_id.as_str(), "shardcloud.vm_start" | "shardcloud.vm_stop") =>
+            if matches!(
+                skill_id.as_str(),
+                "shardcloud.vm_start" | "shardcloud.vm_stop"
+            ) =>
         {
-            crate::shardcloud::preview_skill(skill_id, params)
-                .unwrap_or_else(|_| skill_id.clone())
+            crate::shardcloud::preview_skill(skill_id, params).unwrap_or_else(|_| skill_id.clone())
         }
         SimulatedAction::Productivity { skill_id, params } if skill_id == "shardcloud.vm_exec" => {
-            let count = params.get("commands").and_then(serde_json::Value::as_array).map_or(0, Vec::len);
-            let name = params.get("vm_name").and_then(serde_json::Value::as_str).unwrap_or("VM");
+            let count = params
+                .get("commands")
+                .and_then(serde_json::Value::as_array)
+                .map_or(0, Vec::len);
+            let name = params
+                .get("vm_name")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("VM");
             format!("Executar {count} comando(s) na VM {}", clipped(name, 120))
         }
         SimulatedAction::Productivity { skill_id, params } => format!(
@@ -970,49 +1036,48 @@ pub(super) async fn submit_agent_action(
     let fixed = enforce_power_lock_origin(&action, &origin, tainted, fixed);
     let id = id();
     let params = audit_params(&action);
-    let (preview, preview_image) =
-        match validate_action(&action)
-            .and_then(|_| crate::shardcloud::validate_action_against_catalog(app, &action))
-            .and_then(|_| preview_for_with_image(app, &action))
-        {
-            Ok(preview) => preview,
-            Err(error) => {
-                let config_missing = configuration_missing_audit(&action, &error);
-                let (decision, rule, status, message) = if config_missing.is_some() {
-                    (
-                        "configuration",
-                        "discord_webhook_missing",
-                        "configuration_pending",
-                        "Falta cadastrar um webhook do Discord.".to_string(),
-                    )
-                } else {
-                    ("deny", "target_validation_failed", "denied", error.clone())
-                };
-                record(
-                    app,
-                    state,
-                    &id,
-                    tool,
-                    risk,
-                    &origin,
-                    decision,
-                    rule,
-                    "not_required",
-                    0,
-                    params,
-                    status,
-                    Some(error.clone()),
-                )?;
-                return Ok(ActionResult {
-                    id,
-                    status: status.into(),
-                    message,
-                    result: None,
-                    undo_descriptor: None,
-                    confirmation_required: false,
-                });
-            }
-        };
+    let (preview, preview_image) = match validate_action(&action)
+        .and_then(|_| crate::shardcloud::validate_action_against_catalog(app, &action))
+        .and_then(|_| preview_for_with_image(app, &action))
+    {
+        Ok(preview) => preview,
+        Err(error) => {
+            let config_missing = configuration_missing_audit(&action, &error);
+            let (decision, rule, status, message) = if config_missing.is_some() {
+                (
+                    "configuration",
+                    "discord_webhook_missing",
+                    "configuration_pending",
+                    "Falta cadastrar um webhook do Discord.".to_string(),
+                )
+            } else {
+                ("deny", "target_validation_failed", "denied", error.clone())
+            };
+            record(
+                app,
+                state,
+                &id,
+                tool,
+                risk,
+                &origin,
+                decision,
+                rule,
+                "not_required",
+                0,
+                params,
+                status,
+                Some(error.clone()),
+            )?;
+            return Ok(ActionResult {
+                id,
+                status: status.into(),
+                message,
+                result: None,
+                undo_descriptor: None,
+                confirmation_required: false,
+            });
+        }
+    };
     let decision = require_batch_approval(
         &action,
         policy::decide_with_taint(
@@ -1271,7 +1336,11 @@ pub(super) async fn submit_agent_action(
     let latency = created_at.elapsed().as_millis() as u64;
     match result {
         decision @ ApprovalDecision::Aprovada
-            if approval_granted_and_running(&decision, state.is_halted(), cancel.is_cancelled()) =>
+            if approval_granted_and_running(
+                &decision,
+                state.is_halted(),
+                cancel.is_cancelled(),
+            ) =>
         {
             if let SimulatedAction::Productivity { skill_id, params } = &action {
                 if skill_id == "web.fetch" || skill_id == "system.open_url" {

@@ -150,11 +150,7 @@ fn validate_cloud_link(value: &str) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn open_cloud_link(
-    app: AppHandle,
-    caller: WebviewWindow,
-    url: String,
-) -> Result<(), String> {
+pub fn open_cloud_link(app: AppHandle, caller: WebviewWindow, url: String) -> Result<(), String> {
     crate::require_main(&caller)?;
     let validated = validate_cloud_link(&url)?;
     app.opener()
@@ -253,10 +249,8 @@ mod tests {
                 .any(|domain| url.host_str() == Some(domain.as_str())));
         }
 
-        let capability: serde_json::Value = serde_json::from_str(include_str!(
-            "../capabilities/default.json"
-        ))
-        .unwrap();
+        let capability: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
         let permission = capability["permissions"]
             .as_array()
             .unwrap()
@@ -274,7 +268,6 @@ mod tests {
             .iter()
             .any(|entry| entry["url"].as_str() == Some("https://**")));
     }
-
 
     #[test]
     fn accepts_only_http_https_and_mailto_links_without_credentials_or_controls() {

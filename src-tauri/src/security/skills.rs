@@ -183,9 +183,7 @@ impl Skill {
         match self.id {
             "shardcloud.vm_list" | "shardcloud.vm_details" => return Ok(Risk::Leitura),
             "shardcloud.vm_exec" => return Ok(Risk::ExecucaoDeCodigo),
-            "shardcloud.vm_start" | "shardcloud.vm_stop" => {
-                return Ok(Risk::EscritaReversivel)
-            }
+            "shardcloud.vm_start" | "shardcloud.vm_stop" => return Ok(Risk::EscritaReversivel),
             _ => {}
         }
         let action = parse_action(self.id, params)?;
@@ -828,7 +826,7 @@ fn action_example(id: &str) -> SimulatedAction {
                 skill_id: id.into(),
                 params: json!({"vm_name":"VM de teste", "vm_id":"123e4567-e89b-12d3-a456-426614174000"}),
             }
-        },
+        }
         "shardcloud.vm_exec" => SimulatedAction::Productivity {
             skill_id: id.into(),
             params: json!({"vm_name":"VM de teste", "vm_id":"123e4567-e89b-12d3-a456-426614174000", "commands":["uname -a"]}),
@@ -1975,7 +1973,10 @@ mod tests {
             let skill = skills.iter().find(|skill| skill.id == id).expect(id);
             assert_eq!(skill.family, SkillFamily::Nuvem);
             assert_eq!(skill.result_trust, ResultTrust::Untrusted);
-            assert!(!skill.schema["properties"].as_object().unwrap().contains_key("vm_id"));
+            assert!(!skill.schema["properties"]
+                .as_object()
+                .unwrap()
+                .contains_key("vm_id"));
             let expected = if matches!(id, "shardcloud.vm_list" | "shardcloud.vm_details") {
                 Risk::Leitura
             } else {
@@ -1988,10 +1989,18 @@ mod tests {
 
     #[test]
     fn shardcloud_exec_is_registered_with_rust_fixed_timeout_and_untrusted_output() {
-        let skill = registry().into_iter().find(|skill| skill.id == "shardcloud.vm_exec").expect("exec remoto registrado");
+        let skill = registry()
+            .into_iter()
+            .find(|skill| skill.id == "shardcloud.vm_exec")
+            .expect("exec remoto registrado");
         assert_eq!(skill.family, SkillFamily::Nuvem);
         assert_eq!(skill.result_trust, ResultTrust::Untrusted);
-        assert_eq!(skill.risk(&json!({"vm_name":"VM", "commands":["id"]})).unwrap(), Risk::ExecucaoDeCodigo);
+        assert_eq!(
+            skill
+                .risk(&json!({"vm_name":"VM", "commands":["id"]}))
+                .unwrap(),
+            Risk::ExecucaoDeCodigo
+        );
         assert_eq!(skill.schema["properties"]["commands"]["maxItems"], 10);
         assert!(skill.schema["properties"].get("timeout_sec").is_none());
         assert!(skill.schema["properties"].get("vm_id").is_none());
