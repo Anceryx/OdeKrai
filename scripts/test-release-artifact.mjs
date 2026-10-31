@@ -15,17 +15,40 @@ try {
   await rm(allowedRoot, { recursive: true, force: true });
 }
 
+const releaseRoot = await mkdtemp(path.join(os.tmpdir(), 'odekrai-release-good-'));
+try {
+  await writeFile(path.join(releaseRoot, 'OdeKrai_0.15.0_x64-setup.exe'), 'installer');
+  await writeFile(path.join(releaseRoot, 'SHA256SUMS.txt'), 'hash  OdeKrai_0.15.0_x64-setup.exe\n');
+  assert.deepEqual(await findForbiddenArtifacts([releaseRoot], { mode: 'release' }), []);
+} finally {
+  await rm(releaseRoot, { recursive: true, force: true });
+}
+
+const rejectedReleaseRoot = await mkdtemp(path.join(os.tmpdir(), 'odekrai-release-bad-'));
+try {
+  await writeFile(path.join(rejectedReleaseRoot, 'odekrai.exe'), 'loose build executable');
+  await writeFile(path.join(rejectedReleaseRoot, 'SHA256SUMS.txt'), 'hash  odekrai.exe\n');
+  await writeFile(path.join(rejectedReleaseRoot, 'LEIA-ME.txt'), 'not allowed in a release');
+  const violations = await findForbiddenArtifacts([rejectedReleaseRoot], { mode: 'release' });
+  assert.ok(violations.some((item) => item.includes('instalador NSIS')));
+  assert.ok(violations.some((item) => item.includes('executável')));
+} finally {
+  await rm(rejectedReleaseRoot, { recursive: true, force: true });
+}
+
 const rejectedRoot = await mkdtemp(path.join(os.tmpdir(), 'odekrai-artifact-bad-'));
 try {
   await mkdir(path.join(rejectedRoot, 'assets-src'));
   await writeFile(path.join(rejectedRoot, 'model.glb'), 'binary');
   await writeFile(path.join(rejectedRoot, 'model.FBX'), 'binary');
   await writeFile(path.join(rejectedRoot, 'model.obj'), 'text');
+  await writeFile(path.join(rejectedRoot, 'random.exe'), 'test executable');
   const violations = await findForbiddenArtifacts([rejectedRoot]);
   assert.ok(violations.some((item) => item.includes('assets-src')));
   assert.ok(violations.some((item) => item.endsWith('model.glb')));
   assert.ok(violations.some((item) => item.endsWith('model.FBX')));
   assert.ok(violations.some((item) => item.endsWith('model.obj')));
+  assert.ok(violations.some((item) => item.includes('random.exe')));
 } finally {
   await rm(rejectedRoot, { recursive: true, force: true });
 }

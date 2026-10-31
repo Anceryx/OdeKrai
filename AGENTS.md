@@ -74,6 +74,14 @@ Consulte `docs/IMPLEMENTATION-STATUS.md` e `docs/ROADMAP.md` antes de planejar.
   (nome, origem, URL, licença, edições).
 - Sem caminhos absolutos, `..` ou URLs remotas em manifestos de assets.
 
+## Artefatos de release Windows
+
+Uma release pública pode anexar somente o instalador NSIS gerado pelo Tauri
+(`OdeKrai_<versão>_x64-setup.exe`) e `SHA256SUMS.txt`. Esse instalador não é assinado; o Windows
+SmartScreen exibirá um aviso. O `odekrai.exe` avulso do build de diagnóstico/teste não é instalador
+e não pode ser anexado à release. GLB, FBX, OBJ e `assets-src` continuam proibidos em qualquer
+artefato. Esta versão não oferece atualização automática. Não commitar binários ao repositório.
+
 ## Convenções
 
 - TypeScript estrito; sem `any` sem justificativa. Prettier (`.prettierrc.json`) e `.editorconfig`.
