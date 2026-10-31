@@ -63,6 +63,7 @@ pub fn decide(
     }
     let base = match (mode, risk, inside_workspace) {
         (_, Risk::ExecucaoDeCodigo, _) => Decision::AskUser("code_execution_requires_approval"),
+        (_, Risk::CapturaSensivel, _) => Decision::AskUser("sensitive_capture_requires_approval"),
         (_, Risk::Leitura, true) => Decision::Allow("workspace_read"),
         (_, Risk::Leitura, false) => Decision::Deny("outside_workspace"),
         (Mode::SemprePerguntar, _, _) => Decision::AskUser("mode_always_ask"),
@@ -387,6 +388,17 @@ mod tests {
         ] {
             assert_eq!(
                 decide(mode, Risk::CapturaSensivel, &Origin::User, true, None, true,),
+                Decision::AskUser("sensitive_capture_requires_approval")
+            );
+            assert_eq!(
+                decide(
+                    mode,
+                    Risk::CapturaSensivel,
+                    &Origin::User,
+                    false,
+                    None,
+                    true,
+                ),
                 Decision::AskUser("sensitive_capture_requires_approval")
             );
             assert_eq!(
