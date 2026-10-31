@@ -573,6 +573,9 @@ impl Tool for Productivity {
             {
                 Risk::EscritaReversivel
             }
+            SimulatedAction::Productivity { skill_id, .. } if skill_id == "shardcloud.vm_exec" => {
+                Risk::ExecucaoDeCodigo
+            }
             SimulatedAction::Productivity { skill_id, .. } if skill_id == "code.delegate" => {
                 Risk::ExecucaoDeCodigo
             }
@@ -739,8 +742,9 @@ impl Tool for Productivity {
             let skill_id = skill_id.clone();
             let params = params.clone();
             let app = app.clone();
+            let cancel = cancel.clone();
             return Box::pin(async move {
-                crate::shardcloud::execute_skill(&app, &skill_id, &params).await
+                crate::shardcloud::execute_skill(&app, &skill_id, &params, &cancel).await
             });
         }
         if skill_id == "plan.propose" {
@@ -1590,6 +1594,19 @@ fn validate_shardcloud_skill(id: &str, params: &serde_json::Value) -> Result<(),
         } else {
             Err("A listagem de VMs não aceita parâmetros.".into())
         };
+    }
+    if id == "shardcloud.vm_exec" {
+        if object.len() != 3 || object.keys().any(|key| !["vm_name", "vm_id", "commands"].contains(&key.as_str())) {
+            return Err("Os parâmetros da execução remota não correspondem à habilidade.".into());
+        }
+        let name = object.get("vm_name").and_then(serde_json::Value::as_str).ok_or("Informe o nome da VM.")?;
+        let id = object.get("vm_id").and_then(serde_json::Value::as_str).ok_or("A VM não foi confirmada pela lista consultada.")?;
+        if name.trim().is_empty() || name.chars().count() > 512 || id.len() != 36 {
+            return Err("O nome ou identificador da VM é inválido.".into());
+        }
+        let commands = object.get("commands").and_then(serde_json::Value::as_array).ok_or("Informe os comandos.")?;
+        let commands = commands.iter().map(|value| value.as_str().map(str::to_owned).ok_or_else(|| "Cada comando deve ser texto.".to_string())).collect::<Result<Vec<_>, _>>()?;
+        return crate::shardcloud::validate_exec_commands(&commands);
     }
     if !matches!(id, "shardcloud.vm_details" | "shardcloud.vm_start" | "shardcloud.vm_stop")
         || object.len() != 2

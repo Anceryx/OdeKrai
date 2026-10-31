@@ -17,17 +17,31 @@ GET de VMs, detalhes, séries temporais e distribuições. As habilidades nativa
 O Rust mantém em memória a última lista obtida com a credencial local; o modelo informa apenas o
 nome, e o Rust confirma o nome/ID antes de montar a ação. Iniciar e parar têm risco de escrita
 reversível e sempre exigem aprovação; a prévia contém nome, ID e aviso de interrupção. Não há
-execução de comandos dentro da VM. Auditoria registra a habilidade e seu resultado sem token.
-Resultados da ShardCloud são identificados como dados externos não confiáveis.
+execução interativa de comandos dentro da VM. Auditoria registra a habilidade e seu resultado sem token.
+`shardcloud.vm_exec` aceita até 10 comandos sequenciais, com diretório `/` e limite imutável de 30
+segundos por comando definidos no Rust. A VM precisa constar na última lista consultada. O Rust
+bloqueia padrões destrutivos e alterações a arquivos do próprio agente antes de exibir a prévia;
+depois disso, a janela nativa sempre pede aprovação, em todos os modos. A prévia inclui VM, ID,
+comando completo, diretório e timeout. A saída SSE tem limite de 64 KiB, é rotulada como saída de
+comando não confiável e não é interpretada. Não há terminal interativo. Resultados da ShardCloud
+são identificados como dados externos não confiáveis.
 
 A referência oficial confirma o token Bearer, a base `https://shardcloud.app/api` e `GET /vms` na
 [introdução](https://docs.shardcloud.app/api-reference/introduction) e em [List your VMs](https://docs.shardcloud.app/api-reference/vms/list-your-vms).
 O índice oficial lista também as páginas para detalhes, métricas e distribuições, mas as páginas
 individuais não puderam ser abertas neste ambiente. Os caminhos `GET /vms/{id}`,
-`GET /vms/{id}/timeseries`, `GET /vms/distros`, `POST /vms/{id}/start` e `POST /vms/{id}/stop`
+`GET /vms/{id}/timeseries`, `GET /vms/distros`, `POST /vms/{id}/start`, `POST /vms/{id}/stop` e
+`POST /vms/{id}/exec`
 foram conferidos no [CLI oficial da ShardCloud](https://github.com/shard-cloud/cli/blob/main/internal/httpclient/api_vm.go);
 os detalhes dessas rotas na referência web ficam **NÃO VERIFICADOS**. Não são usados outros
-endpoints de escrita.
+endpoints de escrita. O CLI oficial declara o corpo `cwd` + `commands[]` (`cmd`, `args`, `cwd` e
+`timeout_sec`) e eventos SSE JSON com índice, saída, código de saída e flags de conclusão/timeout
+([tipos do CLI](https://github.com/shard-cloud/cli/blob/main/internal/httpclient/types.go)). O formato
+do OpenAPI oficial para execução permanece **NÃO VERIFICADO** neste ambiente: a página direta do
+OpenAPI não pôde ser aberta. O índice oficial da documentação descreve o stream SSE, execução em
+ordem, limite de até 50 comandos por solicitação e heartbeat de 10 segundos
+([índice oficial](https://docs.shardcloud.app/llms.txt)); o limite mais restrito de 10 comandos é do
+OdeKrai.
 
 `src/ui/design-tokens.css` centraliza as cores, a tipografia, o espaçamento, os raios e as sombras da interface. `src/ui/DesignSystem.tsx` oferece componentes compartilhados para botões, cartões, avisos, campos, seletores, alternâncias, opções selecionáveis e cabeçalhos. A interface aplica esses padrões nas telas principais; a conferência visual em tamanhos e escalas de Windows continua manual.
 

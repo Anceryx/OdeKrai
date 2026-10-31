@@ -99,7 +99,8 @@ pub(super) fn action_metadata(
             "shardcloud.vm_list"
             | "shardcloud.vm_details"
             | "shardcloud.vm_start"
-            | "shardcloud.vm_stop" => skill_id,
+            | "shardcloud.vm_stop"
+            | "shardcloud.vm_exec" => skill_id,
             "code.delegate" => "code.delegate",
             "web.fetch" => "web.fetch",
             "system.open_url"
@@ -157,10 +158,10 @@ fn is_workspace_skill(skill_id: &str) -> bool {
 }
 
 fn require_batch_approval(action: &SimulatedAction, decision: Decision) -> Decision {
-    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "shardcloud.vm_start" | "shardcloud.vm_stop"))
+    if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "shardcloud.vm_start" | "shardcloud.vm_stop" | "shardcloud.vm_exec"))
         && matches!(decision, Decision::Allow(_))
     {
-        Decision::AskUser("shardcloud_power_action_requires_approval")
+        Decision::AskUser(if matches!(action, SimulatedAction::Productivity { skill_id, .. } if skill_id == "shardcloud.vm_exec") { "shardcloud_vm_exec_requires_approval" } else { "shardcloud_power_action_requires_approval" })
     } else if matches!(action, SimulatedAction::Productivity { skill_id, .. } if matches!(skill_id.as_str(), "power.lock" | "power.sleep"))
         && matches!(decision, Decision::Allow(_))
     {
@@ -458,13 +459,13 @@ mod explicit_approval_tests {
 
     #[test]
     fn shardcloud_power_actions_always_ask_and_a_denial_cannot_execute() {
-        for skill_id in ["shardcloud.vm_start", "shardcloud.vm_stop"] {
+        for skill_id in ["shardcloud.vm_start", "shardcloud.vm_stop", "shardcloud.vm_exec"] {
             let action = SimulatedAction::Productivity {
                 skill_id: skill_id.into(),
-                params: json!({"vm_name":"Produção", "vm_id":"123e4567-e89b-12d3-a456-426614174000"}),
+                params: json!({"vm_name":"Produção", "vm_id":"123e4567-e89b-12d3-a456-426614174000", "commands":["uname -a"]}),
             };
             let (tool, risk, inside, fixed) = action_metadata(&action);
-            assert_eq!(risk, Risk::EscritaReversivel, "{skill_id}");
+            assert_eq!(risk, if skill_id == "shardcloud.vm_exec" { Risk::ExecucaoDeCodigo } else { Risk::EscritaReversivel }, "{skill_id}");
             assert!(!inside, "{skill_id}");
             for mode in [Mode::SemprePerguntar, Mode::AprovarPorMim, Mode::ControleTotal] {
                 let decision = policy::decide(mode, risk, &Origin::User, inside, fixed, true);
@@ -473,9 +474,16 @@ mod explicit_approval_tests {
                     Decision::AskUser(_)
                 ), "{mode:?}, {tool}");
             }
+            if skill_id == "shardcloud.vm_exec" {
+                let external = Origin::ExternalContent("página externa".into());
+                assert!(matches!(
+                    policy::decide_with_taint(Mode::ControleTotal, risk, &external, inside, fixed, true, true),
+                    Decision::AskUser(_)
+                ));
+            }
             assert_eq!(
                 require_batch_approval(&action, Decision::Allow("mode_total")),
-                Decision::AskUser("shardcloud_power_action_requires_approval")
+                Decision::AskUser(if skill_id == "shardcloud.vm_exec" { "shardcloud_vm_exec_requires_approval" } else { "shardcloud_power_action_requires_approval" })
             );
             let mut network_calls = 0;
             if approval_granted_and_running(
@@ -485,8 +493,12 @@ mod explicit_approval_tests {
             ) {
                 network_calls += 1;
             }
+            if approval_granted_and_running(&ApprovalDecision::Cancelada, false, false) {
+                network_calls += 1;
+            }
             assert_eq!(network_calls, 0, "{skill_id}");
             assert!(!approval_granted_and_running(&ApprovalDecision::Expirada, false, false));
+            assert!(!approval_granted_and_running(&ApprovalDecision::Cancelada, false, false));
             assert!(!approval_granted_and_running(&ApprovalDecision::Aprovada, true, false));
             assert!(!approval_granted_and_running(&ApprovalDecision::Aprovada, false, true));
             assert!(approval_granted_and_running(&ApprovalDecision::Aprovada, false, false));
@@ -526,6 +538,11 @@ pub(super) fn summary(action: &SimulatedAction) -> String {
         {
             crate::shardcloud::preview_skill(skill_id, params)
                 .unwrap_or_else(|_| skill_id.clone())
+        }
+        SimulatedAction::Productivity { skill_id, params } if skill_id == "shardcloud.vm_exec" => {
+            let count = params.get("commands").and_then(serde_json::Value::as_array).map_or(0, Vec::len);
+            let name = params.get("vm_name").and_then(serde_json::Value::as_str).unwrap_or("VM");
+            format!("Executar {count} comando(s) na VM {}", clipped(name, 120))
         }
         SimulatedAction::Productivity { skill_id, params } => format!(
             "{skill_id}: {}",
