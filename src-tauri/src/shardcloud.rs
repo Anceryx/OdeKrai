@@ -669,78 +669,74 @@ pub(crate) fn validate_exec_commands(commands: &[String]) -> Result<(), String> 
 fn blocked_exec_command(command: &str) -> bool {
     let normalized = command
         .to_ascii_lowercase()
-        .replace('\'', "")
-        .replace('"', "")
-        .replace('`', "")
+        .replace(['\'', '"', '`'], "")
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
-    let root_delete = normalized
-        .split(|character| matches!(character, ';' | '&' | '|'))
-        .any(|segment| {
-            if segment.contains("--no-preserve-root")
-                || (segment.contains("find /")
-                    && (segment.contains(" -delete") || segment.contains("-exec rm")))
-            {
-                return true;
+    let root_delete = normalized.split([';', '&', '|']).any(|segment| {
+        if segment.contains("--no-preserve-root")
+            || (segment.contains("find /")
+                && (segment.contains(" -delete") || segment.contains("-exec rm")))
+        {
+            return true;
+        }
+        let tokens = segment.split_whitespace().collect::<Vec<_>>();
+        let Some(rm) = tokens.iter().position(|token| *token == "rm") else {
+            return false;
+        };
+        let mut recursive = false;
+        let mut force = false;
+        let mut options = true;
+        let mut targets = Vec::new();
+        for token in tokens.iter().skip(rm + 1) {
+            if options && *token == "--" {
+                options = false;
+            } else if options && token.starts_with('-') {
+                recursive |=
+                    *token == "--recursive" || token.chars().skip(1).any(|flag| flag == 'r');
+                force |= *token == "--force" || token.chars().skip(1).any(|flag| flag == 'f');
+            } else {
+                options = false;
+                targets.push(*token);
             }
-            let tokens = segment.split_whitespace().collect::<Vec<_>>();
-            let Some(rm) = tokens.iter().position(|token| *token == "rm") else {
-                return false;
-            };
-            let mut recursive = false;
-            let mut force = false;
-            let mut options = true;
-            let mut targets = Vec::new();
-            for token in tokens.iter().skip(rm + 1) {
-                if options && *token == "--" {
-                    options = false;
-                } else if options && token.starts_with('-') {
-                    recursive |=
-                        *token == "--recursive" || token.chars().skip(1).any(|flag| flag == 'r');
-                    force |= *token == "--force" || token.chars().skip(1).any(|flag| flag == 'f');
-                } else {
-                    options = false;
-                    targets.push(*token);
-                }
-            }
-            let system_target = targets.iter().any(|target| {
-                matches!(
+        }
+        let system_target = targets.iter().any(|target| {
+            matches!(
+                *target,
+                "/" | "/*"
+                    | "/."
+                    | "."
+                    | "./*"
+                    | "*"
+                    | "/etc"
+                    | "/usr"
+                    | "/var"
+                    | "/root"
+                    | "/boot"
+                    | "/bin"
+                    | "/sbin"
+                    | "/lib"
+                    | "/lib64"
+                    | "/opt"
+                    | "/srv"
+                    | "/mnt"
+                    | "/media"
+            ) || target.trim_end_matches('/').is_empty()
+                || matches!(
                     *target,
-                    "/" | "/*"
-                        | "/."
-                        | "."
-                        | "./*"
-                        | "*"
-                        | "/etc"
-                        | "/usr"
-                        | "/var"
-                        | "/root"
-                        | "/boot"
-                        | "/bin"
-                        | "/sbin"
-                        | "/lib"
-                        | "/lib64"
-                        | "/opt"
-                        | "/srv"
-                        | "/mnt"
-                        | "/media"
-                ) || target.trim_end_matches('/').is_empty()
-                    || matches!(
-                        *target,
-                        "$pwd" | "${pwd}" | "$(pwd)" | "$(echo /)" | "$(printf /)"
-                    )
-                    || target.starts_with("/./")
-                    || target.split('/').any(|component| component == "..")
-                    || [
-                        "/etc/", "/usr/", "/var/", "/root/", "/boot/", "/bin/", "/sbin/", "/lib/",
-                        "/opt/", "/srv/",
-                    ]
-                    .iter()
-                    .any(|prefix| target.starts_with(prefix))
-            });
-            recursive && force && system_target
+                    "$pwd" | "${pwd}" | "$(pwd)" | "$(echo /)" | "$(printf /)"
+                )
+                || target.starts_with("/./")
+                || target.split('/').any(|component| component == "..")
+                || [
+                    "/etc/", "/usr/", "/var/", "/root/", "/boot/", "/bin/", "/sbin/", "/lib/",
+                    "/opt/", "/srv/",
+                ]
+                .iter()
+                .any(|prefix| target.starts_with(prefix))
         });
+        recursive && force && system_target
+    });
     let disk_destroy = [
         "mkfs",
         "wipefs",
